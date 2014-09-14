@@ -29,7 +29,6 @@ struct context
 {
     struct syspoll* poller;
     int listenfd;
-    const char* sockname;
     struct xfer** xfers;
     int nxfers;
     int max_xfers;
@@ -83,16 +82,15 @@ static bool process_events(struct context* ctx,
 static bool context_construct(struct context* ctx,
                               int poll_timeout,
                               int listenfd,
-                              const char* sockname,
                               int maxfds);
 
 static void context_destruct(struct context* ctx);
 
-bool srv_run(const int listenfd, const char* sockname, const int maxfds)
+bool srv_run(const int listenfd, const int maxfds)
 {
     struct context ctx;
 
-    if (!context_construct(&ctx, 1000, listenfd, sockname, maxfds))
+    if (!context_construct(&ctx, 1000, listenfd, maxfds))
         return false;
 
     if (!syspoll_register(ctx.poller,
@@ -235,13 +233,11 @@ static enum prot_stat process_request(struct context* ctx,
 static bool context_construct(struct context* ctx,
                               const int poll_timeout,
                               const int listenfd,
-                              const char* sockname,
                               const int maxfds)
 {
     *ctx = (struct context) {
         .poller = syspoll_new(poll_timeout, maxfds),
         .listenfd = listenfd,
-        .sockname = sockname,
         .xfers = calloc((size_t)maxfds, sizeof(struct xfer*)),
         .max_xfers = maxfds
     };

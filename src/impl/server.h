@@ -3,6 +3,6 @@
 
 #include <stdbool.h>
 
-bool srv_run(const int listenfd, const char* sockname, int maxfds);
+bool srv_run(const int listenfd, int maxfds);
 
 #endif

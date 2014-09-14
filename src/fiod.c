@@ -65,7 +65,7 @@ pid_t fiod_spawn(const char* name, const char* root, const int maxfiles)
 
     printf("%s: starting event loop\n", __func__);
 
-    const bool success = srv_run(listenfd, name, maxfiles);
+    const bool success = srv_run(listenfd, maxfiles);
 
     printf("%s: event loop done\n", __func__);
 
