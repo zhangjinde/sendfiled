@@ -6,7 +6,7 @@
 #include "../attributes.h"
 #include "process.h"
 
-void proc_common_init(int pid UNUSED, const char* root)
+void proc_common_init(const char* root, const int highest_fd)
 {
     struct rlimit rl;
 
@@ -19,6 +19,6 @@ void proc_common_init(int pid UNUSED, const char* root)
     /* Close all open file descriptors */
     if (rl.rlim_max == RLIM_INFINITY)
         rl.rlim_max = 1024;
-    for (int i = 3; i < (int)rl.rlim_max; i++)
+    for (int i = highest_fd + 1; i < (int)rl.rlim_max; i++)
         close(i);
 }

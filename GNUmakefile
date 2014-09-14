@@ -12,10 +12,12 @@ header_search_dirs := \
 	-isystem/usr/local/llvm342/include \
 	-isystem/usr/local/llvm342/include/c++/v1 \
 
-#warnflags := -Weverything -Wno-documentation
-warnflags := -Wall
+warnflags := -Weverything \
+-Wno-documentation \
+-Wno-global-constructors \
+-Wno-c++98-compat \
 
-CFLAGS := -std=c99 -g -O0 $(warnflags) -fPIC -fvisibility=hidden $(header_search_dirs)
+CFLAGS := -std=c11 -g -O0 $(warnflags) -fPIC -fvisibility=hidden $(header_search_dirs)
 CXXFLAGS := -std=c++11 -stdlib=libc++ -g -O0 $(warnflags) -fPIC -fvisibility=hidden $(header_search_dirs)
 
 DOXYGEN ?= doxygen
@@ -33,17 +35,27 @@ vpath %.odg $(docdir)/img
 vpath %.png $(htmldir)/img
 
 src_c:=\
-eventloop.c \
 fiod.c \
+file_io.c\
+file_io_linux.c\
+fiod_linux.c \
 process.c \
+protocol.c \
+server.c\
+syspoll_linux.c \
+unix_sockets.c \
+unix_sockets_linux.c \
 
 src_test:=\
 test_fiod.cpp\
+test_utils.cpp\
 
 src_all := $(src_c) $(src_test)
 
 obj_c:=$(src_c:%=$(builddir)/%.o)
 obj_test:=$(src_test:%=$(builddir)/%.o)
+
+$(builddir)/fiod_linux.c.o: CFLAGS += -D_GNU_SOURCE
 
 $(builddir)/test_%.cpp.o: CXXFLAGS += -Wno-error
 
@@ -55,10 +67,10 @@ ifneq ($(MAKECMDGOALS), clean)
 endif
 
 $(builddir)/%.c.d: %.c
-	$(CC) $(CFLAGS) -MM -MT "$(builddir)/$*.o $(builddir)/$*.d" $< > $@
+	$(CC) $(CFLAGS) -MM -MT "$(builddir)/$*.c.o $(builddir)/$*.c.d" $< > $@
 
 $(builddir)/%.cpp.d: %.cpp
-	$(CXX) $(CXXFLAGS) -MM -MT "$(builddir)/$*.o $(builddir)/$*.d" $< > $@
+	$(CXX) $(CXXFLAGS) -MM -MT "$(builddir)/$*.cpp.o $(builddir)/$*.cpp.d" $< > $@
 
 $(builddir)/%.c.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
@@ -86,11 +98,11 @@ test: $(builddir)/$(test_target) $(builddir)/$(target)
 	@echo "-----------------------------"
 	@- $< $(GTEST_FLAGS) --gtest_filter=$(GTEST_FILTER)
 
+archive_name := $(projectname)_`date +%Y-%m-%d_%H%M%S`
 .PHONY: bu
 bu:
 	git gc --quiet
-	tarsnap --exclude $(builddir) --exclude $(htmldir) -cf \
-	$(projectname)_`date +%Y-%m-%d_%H%M%S` .
+	tarsnap --exclude $(builddir) --exclude $(htmldir) -cf $(archive_name) .
 
 %.png: %.odg
 	$(LODRAW) --headless --convert-to png  --outdir $(htmldir)/img $<
@@ -105,3 +117,12 @@ doc: $(doc_img_src:%.odg=%.png)
 exports: $(builddir)/$(target_so)
 	nm -gC --defined-only $<
 
+.PHONY: memcheck
+memcheck: $(builddir)/$(test_target) $(builddir)/$(target)
+	valgrind \
+	--track-origins=yes \
+	--tool=memcheck \
+	--leak-check=full \
+	--show-reachable=yes \
+	--read-var-info=yes \
+	--track-fds=yes $< --gtest_filter=$(GTEST_FILTER)

@@ -1,12 +1,60 @@
 #include <gtest/gtest.h>
 
+#include "impl/test_utils.hpp"
+
 #include "fiod.h"
+#include "impl/protocol.h"
 
 TEST(Fiod, xxx)
 {
-    const int pid = fiod_spawn(".");
+    const std::string srvname {"testing123"};
 
-    EXPECT_GT(pid, 0);
+    const pid_t pid = fiod_spawn(srvname.c_str(), "/tmp", 10);
 
-    EXPECT_EQ(0, fiod_shutdown(pid));
+    ASSERT_GT(pid, 0);
+
+    const int fd = fiod_connect(srvname.c_str());
+    if (fd == -1)
+        std::printf("XXX errno: %s\n", strerror(errno));
+
+    std::printf("Connected; fd: %d\n", fd);
+
+    const std::string file_contents {"1234567890"};
+    test::TmpFile file(file_contents);
+
+    int pfd[2];
+    ASSERT_NE(-1, pipe(pfd));
+
+    const int pipefd = fiod_send(fd, file.name().c_str(), pfd[1], 0, 0);
+    close(pfd[1]);
+
+    if (pipefd == -1)
+        std::printf("XXX errno: %s\n", strerror(errno));
+
+    uint8_t buf[1024];
+    ssize_t nstat = read(pipefd, buf, sizeof(buf));
+    ASSERT_EQ(18, nstat);
+
+    // TODO: use the public response-parsing functions instead
+    EXPECT_EQ(PROT_CMD_STAT, buf[0]);
+    EXPECT_EQ(PROT_STAT_XFER, buf[1]);
+    std::uint64_t file_size {};
+    std::uint64_t file_off {};
+    memcpy(&file_size, buf + 2, 8);
+    memcpy(&file_off, buf + 2 + 8, 8);
+    EXPECT_EQ(file_contents.size(), file_size);
+    EXPECT_EQ(file_contents.size(), file_off);
+
+    ssize_t nfile = read(pfd[0], buf, sizeof(buf));
+    if (nfile == -1) {
+        printf("LLLLerrno: %s\n", strerror(errno));
+    }
+    ASSERT_EQ(file_contents.size(), nfile);
+    const std::string recvd_file((const char*)buf, file_contents.size());
+    EXPECT_EQ(file_contents, recvd_file);
+
+    const int status = fiod_shutdown(pid);
+
+    EXPECT_TRUE(WIFEXITED(status));
+    EXPECT_EQ(EXIT_SUCCESS, WEXITSTATUS(status));
 }
