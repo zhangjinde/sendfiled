@@ -333,16 +333,16 @@ static bool process_file_op(struct context* ctx, struct xfer* xfer)
     switch (xfer->cmd) {
     case PROT_CMD_READ:
     case PROT_CMD_SEND: {
-        const ssize_t n = file_splice(&xfer->file, xfer->dest_fd);
+        const ssize_t nwritten = file_splice(&xfer->file, xfer->dest_fd);
 
         PRINT_XFER(xfer);
 
-        if (n < 0) {
+        if (nwritten < 0) {
             if (errno_is_fatal(errno)) {
                 send_error(xfer->stat_fd, PROT_STAT_XXX);
                 return false;
             }
-        } else if (n == 0) {
+        } else if (nwritten == 0) {
             return false;
         } else {
             /* Report the transfer via the status descriptor */
@@ -363,7 +363,7 @@ static bool process_file_op(struct context* ctx, struct xfer* xfer)
             }
         }
 
-        return (n > 0);
+        return (nwritten > 0);
     }
 
     case PROT_CMD_STAT:
