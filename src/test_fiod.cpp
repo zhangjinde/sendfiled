@@ -31,8 +31,21 @@ TEST(Fiod, xxx)
     if (pipefd == -1)
         std::printf("XXX errno: %s\n", strerror(errno));
 
-    uint8_t buf [PROT_XFER_STAT_SIZE];
-    ssize_t nstat = read(pipefd, buf, PROT_XFER_STAT_SIZE);
+    uint8_t buf [PROT_PDU_MAXSIZE];
+
+    // ACK
+    ssize_t nstat = read(pipefd, buf, PROT_ACK_SIZE);
+    ASSERT_EQ(PROT_ACK_SIZE, nstat);
+
+    struct prot_ack ack;
+    ASSERT_TRUE(prot_unmarshal_ack(&ack, buf));
+    EXPECT_EQ(PROT_CMD_ACK, ack.cmd);
+    EXPECT_EQ(PROT_STAT_OK, ack.stat);
+    EXPECT_EQ(8, ack.body_len);
+    EXPECT_EQ(file_contents.size(), ack.file_size);
+
+    // Transfer status update
+    nstat = read(pipefd, buf, PROT_XFER_STAT_SIZE);
     ASSERT_EQ(PROT_XFER_STAT_SIZE, nstat);
 
     struct prot_xfer_stat stat;

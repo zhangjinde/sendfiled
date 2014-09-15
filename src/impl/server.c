@@ -48,19 +48,23 @@ static bool process_file_op(struct xfer* xfer);
 
 static void context_destruct(struct context* ctx);
 
-static bool add_read_xfer(struct context* ctx,
-                          const char* filename,
-                          int dest_fd);
+static size_t add_read_xfer(struct context* ctx,
+                            const char* filename,
+                            int dest_fd);
 
-static bool add_send_xfer(struct context* ctx,
-                          const char* filename,
-                          int stat_fd,
-                          int dest_fd);
+static size_t add_send_xfer(struct context* ctx,
+                            const char* filename,
+                            int stat_fd,
+                            int dest_fd);
 
 static bool send_stat(int fd,
                       enum prot_stat stat,
                       size_t file_size,
                       off_t file_offset);
+
+static bool send_ack(int fd, size_t file_size);
+
+static bool send_nack(int fd, enum prot_stat stat);
 
 static bool send_xfer_stat(const struct xfer* x, enum prot_stat stat);
 
@@ -96,6 +100,7 @@ bool srv_run(const int listenfd, const int maxfds)
     if (!syspoll_register(ctx.poller,
                           ctx.listenfd,
                           &ctx.listenfd,
+                          /* FIXME: WRITE makes no sense for listen socket  */
                           SYSPOLL_READ | SYSPOLL_WRITE)) {
         goto fail;
     }
@@ -234,30 +239,34 @@ static bool process_request(struct context* ctx,
 
     if ((pdu.cmd == PROT_CMD_READ || pdu.cmd == PROT_CMD_SEND) &&
         ctx->nxfers == ctx->max_xfers) {
-        send_stat(ctx->listenfd, PROT_STAT_CAPACITY, 0, 0);
+        send_nack(ctx->listenfd, PROT_STAT_CAPACITY);
         return false;
     }
 
     switch (pdu.cmd) {
-    case PROT_CMD_READ:
-        if (!add_read_xfer(ctx, fname, fds[0]))
+    case PROT_CMD_READ: {
+        const size_t fsize = add_read_xfer(ctx, fname, fds[0]);
+        if (fsize == 0)
             goto xfer_fail;
-        break;
+        send_ack(fds[0], fsize);
+    } break;
 
-    case PROT_CMD_SEND:
-        if (!add_send_xfer(ctx, fname, fds[0], fds[1]))
+    case PROT_CMD_SEND: {
+        const size_t fsize = add_send_xfer(ctx, fname, fds[0], fds[1]);
+        if (fsize == 0)
             goto xfer_fail;
-        break;
+        send_ack(fds[0], fsize);
+    } break;
 
     default:
-        send_stat(ctx->listenfd, PROT_STAT_UNKNOWN_CMD, 0, 0);
+        send_nack(ctx->listenfd, PROT_STAT_UNKNOWN_CMD);
         return false;
     }
 
     return true;
 
  xfer_fail:
-    send_stat(ctx->listenfd, PROT_STAT_XXX, 0, 0);
+    send_nack(ctx->listenfd, PROT_STAT_XXX);
     return false;
 }
 
@@ -379,27 +388,31 @@ static bool add_xfer(struct context* ctx,
     return false;
 }
 
-static bool add_read_xfer(struct context* ctx,
-                          const char* filename,
-                          const int dest_fd)
+static size_t add_read_xfer(struct context* ctx,
+                            const char* filename,
+                            const int dest_fd)
 {
     struct file file;
     if (!file_open_read(&file, filename))
         return false;
 
-    return add_xfer(ctx, PROT_CMD_READ, &file, dest_fd, dest_fd);
+    return (add_xfer(ctx, PROT_CMD_READ, &file, dest_fd, dest_fd) ?
+            file.size :
+            0);
 }
 
-static bool add_send_xfer(struct context* ctx,
-                          const char* filename,
-                          const int stat_fd,
-                          const int dest_fd)
+static size_t add_send_xfer(struct context* ctx,
+                            const char* filename,
+                            const int stat_fd,
+                            const int dest_fd)
 {
     struct file file;
     if (!file_open_read(&file, filename))
         return false;
 
-    return add_xfer(ctx, PROT_CMD_SEND, &file, stat_fd, dest_fd);
+    return (add_xfer(ctx, PROT_CMD_SEND, &file, stat_fd, dest_fd) ?
+            file.size :
+            0);
 }
 
 static void delete_xfer(struct xfer* x)
@@ -420,6 +433,30 @@ static bool send_stat(const int fd, const enum prot_stat stat,
     const ssize_t n = write(fd, pdu.data, sizeof(pdu.data));
 
     assert (n == -1 || n == sizeof(pdu));
+
+    return (n != -1);
+}
+
+static bool send_ack(int fd, size_t file_size)
+{
+    struct prot_ack_m pdu;
+    prot_marshal_ack(&pdu, file_size);
+
+    const ssize_t n = write(fd, pdu.data, PROT_ACK_SIZE);
+
+    assert (n == -1 || n == PROT_ACK_SIZE);
+
+    return (n != -1);
+}
+
+static bool send_nack(int fd, enum prot_stat stat)
+{
+    struct prot_ack_m pdu;
+    prot_marshal_nack(&pdu, stat);
+
+    const ssize_t n = write(fd, pdu.data, PROT_ACK_SIZE);
+
+    assert (n == -1 || n == PROT_ACK_SIZE);
 
     return (n != -1);
 }

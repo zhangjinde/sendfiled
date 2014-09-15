@@ -46,17 +46,34 @@ bool prot_marshal_send(struct prot_request_m* req,
     return true;
 }
 
-ssize_t prot_marshal_stat(struct prot_xfer_stat_m* pdu, enum prot_stat stat,
-                          const size_t file_size, const size_t new_file_offset)
+void prot_marshal_ack(struct prot_ack_m* pdu, const uint64_t file_size)
+{
+    uint8_t* p = marshal_hdr(pdu->data, PROT_CMD_ACK, PROT_STAT_OK, 8);
+    memcpy(p, &file_size, 8);
+}
+
+void prot_marshal_nack(struct prot_ack_m* pdu, const enum prot_stat stat)
+{
+    uint8_t* p = marshal_hdr(pdu->data, PROT_CMD_ACK, stat, 8);
+
+    const uint64_t file_size = 0;
+    memcpy(p, &file_size, 8);
+}
+
+void prot_marshal_stat(struct prot_xfer_stat_m* pdu,
+                       enum prot_stat stat,
+                       const size_t file_size, const size_t new_file_offset)
 {
     uint8_t* p = marshal_hdr(pdu->data, PROT_CMD_STAT, stat, 16);
 
     memcpy(p, &file_size, 8);
-    p += 8;
-    memcpy(p, &new_file_offset, 8);
-    p += 8;
+    memcpy(p + 8, &new_file_offset, 8);
+}
 
-    return (p - pdu->data);
+void prot_marshal_data(struct prot_file_data_m* pdu, uint64_t file_size)
+{
+    uint8_t* p = marshal_hdr(pdu->data, PROT_CMD_DATA, PROT_STAT_OK, 8);
+    memcpy(p, &file_size, 8);
 }
 
 static const uint8_t* unmarshal_hdr(struct prot_hdr* hdr, const void* buf)
@@ -110,6 +127,18 @@ bool prot_unmarshal_xfer_stat(struct prot_xfer_stat* pdu, const void* buf)
 
     memcpy(&pdu->file_size, p, 8);
     memcpy(&pdu->new_file_offset, p + 8, 8);
+
+    return true;
+}
+
+bool prot_unmarshal_data(struct prot_file_data* pdu, const void* buf)
+{
+    const uint8_t* p = unmarshal_hdr((struct prot_hdr*)pdu, buf);
+
+    if (pdu->body_len != 8)
+        return false;
+
+    memcpy(&pdu->chunk_size, p, 8);
 
     return true;
 }
