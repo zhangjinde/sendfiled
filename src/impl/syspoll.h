@@ -7,8 +7,9 @@
 #pragma GCC diagnostic ignored "-Wpadded"
 
 enum {
-    SYSPOLL_READ = 1,
-    SYSPOLL_WRITE = 2
+    SYSPOLL_ERROR = 1,
+    SYSPOLL_READ = 2,
+    SYSPOLL_WRITE = 4
 };
 
 struct syspoll;

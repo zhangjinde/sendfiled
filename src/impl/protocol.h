@@ -16,9 +16,16 @@ enum prot_cmd {
 };
 
 enum prot_stat {
+    /* Used in undecided cases */
     PROT_STAT_XXX,
+    /* Success */
     PROT_STAT_OK,
+    PROT_STAT_UNKNOWN_CMD,
+    /* File operation capacity reached */
+    PROT_STAT_CAPACITY,
+    /* Transfer status report */
     PROT_STAT_XFER,
+    /* File not found */
     PROT_STAT_NOTFOUND
 };
 

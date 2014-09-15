@@ -44,7 +44,7 @@ static void print_xfer(const struct xfer* x);
 
 static bool errno_is_fatal(const int err);
 
-static bool process_file_op(struct context* ctx, struct xfer* xfer);
+static bool process_file_op(struct xfer* xfer);
 
 static void context_destruct(struct context* ctx);
 
@@ -109,9 +109,15 @@ bool srv_run(const int listenfd, const int maxfds)
     for (int i = 0; i < 3; i++) {
         const int n = syspoll_poll(ctx.poller);
 
-        if (!process_events(&ctx, n, recvbuf, PROT_PDU_MAXSIZE))
+        if (!process_events(&ctx, n, recvbuf, PROT_PDU_MAXSIZE)) {
+            fprintf(stderr,
+                    "%s: fatal error during event processing; exiting\n",
+                    __func__);
             break;
+        }
     }
+
+    printf("%s: terminating\n", __func__);
 
     free(recvbuf);
     context_destruct(&ctx);
@@ -123,9 +129,12 @@ bool srv_run(const int listenfd, const int maxfds)
     return false;
 }
 
-static bool recv_and_process_requests(struct context* ctx,
-                                      uint8_t* buf,
-                                      size_t buf_size);
+static bool handle_listenfd(struct context* ctx,
+                            int events,
+                            uint8_t* buf,
+                            size_t buf_size);
+
+static bool xfer_complete(const struct xfer* x);
 
 static bool process_events(struct context* ctx,
                            const int nevents,
@@ -134,21 +143,26 @@ static bool process_events(struct context* ctx,
     for (int i = 0; i < nevents; i++) {
         struct syspoll_resrc resrc = syspoll_get(ctx->poller, i);
 
-        if (*(int*)resrc.udata == ctx->listenfd) {  /* The request socket */
-            if (resrc.events & SYSPOLL_READ) {
-                if (!recv_and_process_requests(ctx, buf, buf_size)) {
-                    fprintf(stderr,
-                            "%s: fatal error on listen socket; exiting\n",
-                            __func__);
-                    return false;
-                }
+        if (*(int*)resrc.udata == ctx->listenfd) {
+            if (!handle_listenfd(ctx, resrc.events, buf, buf_size)) {
+                fprintf(stderr, "%s: fatal error on listen socket\n", __func__);
+                return false;
             }
 
-        } else {  /* One of the responses (file transfers) */
+        } else {
             struct xfer* const xfer = (struct xfer*)resrc.udata;
 
-            if (!process_file_op(ctx, xfer)) {
-                /* Fatal error */
+            if (resrc.events & SYSPOLL_ERROR) {
+                fprintf(stderr,
+                        "%s: fatal error on"
+                        " xfer {statfd: %d; destfd: %d}; terminating it\n",
+                        __func__, xfer->stat_fd, xfer->dest_fd);
+
+                send_xfer_stat(xfer, PROT_STAT_XXX);
+                remove_xfer(ctx, xfer);
+
+            } else if (!process_file_op(xfer) || xfer_complete(xfer)) {
+                printf("%s: file operation complete; removing\n", __func__);
                 remove_xfer(ctx, xfer);
             }
         }
@@ -157,42 +171,51 @@ static bool process_events(struct context* ctx,
     return true;
 }
 
-static enum prot_stat process_request(struct context* ctx,
-                                      const void* buf, const size_t size,
-                                      int* fds, const size_t nfds);
+static bool process_request(struct context* ctx,
+                            const void* buf, const size_t size,
+                            int* fds, const size_t nfds);
 
-static bool recv_and_process_requests(struct context* ctx,
-                                      uint8_t* buf,
-                                      const size_t buf_size)
+static bool handle_listenfd(struct context* ctx,
+                            const int events,
+                            uint8_t* buf,
+                            const size_t buf_size)
 {
-    int recvd_fds[2] = {-1, -1};
-    size_t nfds = 2;
+    if (events & SYSPOLL_READ) {
+        int recvd_fds[2];
+        size_t nfds;
 
-    for (;;) {
-        const ssize_t nread = us_recv(ctx->listenfd,
-                                      buf, buf_size,
-                                      recvd_fds, &nfds);
+        for (;;) {
+            nfds = 2;
 
-        if (nread < 0) {
-            return !errno_is_fatal(errno);
-        } else {
-            /* Recv of zero makes no sense on a UDP (connectionless) socket */
-            assert (nread > 0);
+            const ssize_t nread = us_recv(ctx->listenfd,
+                                          buf, buf_size,
+                                          recvd_fds, &nfds);
 
-            const enum prot_stat stat = process_request(ctx,
-                                                        buf, (size_t)nread,
-                                                        recvd_fds, nfds);
-            if (stat != PROT_STAT_OK) {
-                puts("REQUEST FAILED");
-                send_stat(ctx->listenfd, stat, 0, 0);
+            if (nread < 0) {
+                return !errno_is_fatal(errno);
+            } else {
+                /* Recv of zero makes no sense on a UDP (connectionless)
+                   socket */
+                assert (nread > 0);
+
+                if (!process_request(ctx,
+                                     buf, (size_t)nread,
+                                     recvd_fds, nfds)) {
+                    puts("BAD REQUEST");
+                }
             }
         }
     }
+
+    /* if (events & SYSPOLL_WRITE) { */
+    /* } */
+
+    return true;
 }
 
-static enum prot_stat process_request(struct context* ctx,
-                                      const void* buf, const size_t size,
-                                      int* fds, const size_t nfds UNUSED)
+static bool process_request(struct context* ctx,
+                            const void* buf, const size_t size,
+                            int* fds, const size_t nfds UNUSED)
 {
     struct prot_pdu pdu;
 
@@ -206,26 +229,70 @@ static enum prot_stat process_request(struct context* ctx,
            size, pdu.cmd, pdu.stat, pdu.filename_len, fname,
            fds[0], fds[1]);
 
+    if ((pdu.cmd == PROT_CMD_READ || pdu.cmd == PROT_CMD_SEND) &&
+        ctx->nxfers == ctx->max_xfers) {
+        send_stat(ctx->listenfd, PROT_STAT_CAPACITY, 0, 0);
+        return false;
+    }
+
     switch (pdu.cmd) {
     case PROT_CMD_READ:
-        if (ctx->nxfers == ctx->max_xfers)
-            return PROT_STAT_XXX;
-
-        return (add_read_xfer(ctx, fname, fds[0]) ?
-                PROT_STAT_OK :
-                PROT_STAT_XXX);
+        if (!add_read_xfer(ctx, fname, fds[0]))
+            goto xfer_fail;
+        break;
 
     case PROT_CMD_SEND:
-        if (ctx->nxfers == ctx->max_xfers)
-            return PROT_STAT_XXX;
-
-        return (add_send_xfer(ctx, fname, fds[0], fds[1]) ?
-                PROT_STAT_OK :
-                PROT_STAT_XXX);
+        if (!add_send_xfer(ctx, fname, fds[0], fds[1]))
+            goto xfer_fail;
+        break;
 
     default:
-        return PROT_STAT_XXX;
+        send_stat(ctx->listenfd, PROT_STAT_UNKNOWN_CMD, 0, 0);
+        return false;
     }
+
+    return true;
+
+ xfer_fail:
+    send_stat(ctx->listenfd, PROT_STAT_XXX, 0, 0);
+    return false;
+}
+
+static bool process_file_op(struct xfer* xfer)
+{
+    switch (xfer->cmd) {
+    case PROT_CMD_READ:
+    case PROT_CMD_SEND: {
+        const ssize_t nwritten = file_splice(&xfer->file, xfer->dest_fd);
+
+        PRINT_XFER(xfer);
+
+        if (nwritten < 0) {
+            if (errno_is_fatal(errno)) {
+                send_xfer_stat(xfer, PROT_STAT_XXX);
+                return false;
+            }
+            return true;
+        } else if (nwritten == 0) {
+            /* FIXME Not sure how to deal with this properly */
+            return false;
+        } else {
+            if (!send_xfer_stat(xfer, PROT_STAT_XFER) && errno_is_fatal(errno)) {
+                /* TODO Handle fatal error on send of status report */
+            }
+            return true;
+        }
+    }
+
+    case PROT_CMD_STAT:
+        /* Not a file operation */
+        abort();
+
+    case PROT_CMD_CANCEL:
+        break;
+    }
+
+    return false;
 }
 
 /* --------------- (Uninteresting) Internal implementations ------------- */
@@ -272,49 +339,6 @@ static bool xfer_complete(const struct xfer* x)
 static bool errno_is_fatal(const int err)
 {
     return (err != EWOULDBLOCK && err != EAGAIN);
-}
-
-static bool process_file_op(struct context* ctx, struct xfer* xfer)
-{
-    switch (xfer->cmd) {
-    case PROT_CMD_READ:
-    case PROT_CMD_SEND: {
-        const ssize_t nwritten = file_splice(&xfer->file, xfer->dest_fd);
-
-        PRINT_XFER(xfer);
-
-        if (nwritten < 0) {
-            if (errno_is_fatal(errno)) {
-                send_xfer_stat(xfer, PROT_STAT_XXX);
-                return false;
-            }
-        } else if (nwritten == 0) {
-            return false;
-        } else {
-            /* Report the transfer via the status descriptor */
-            if (!send_xfer_stat(xfer, PROT_STAT_XFER)) {
-                if (errno_is_fatal(errno)) {
-                    /* TODO Handle fatal error */
-                }
-            }
-
-            if (xfer_complete(xfer)) {
-                remove_xfer(ctx, xfer);
-            }
-        }
-
-        return (nwritten > 0);
-    }
-
-    case PROT_CMD_STAT:
-        /* Not a file operation */
-        abort();
-
-    case PROT_CMD_CANCEL:
-        break;
-    }
-
-    return false;
 }
 
 static bool add_xfer(struct context* ctx,

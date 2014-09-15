@@ -17,7 +17,7 @@ warnflags := -Weverything \
 -Wno-global-constructors \
 -Wno-c++98-compat \
 
-CFLAGS := -std=c11 -g -O0 $(warnflags) -fPIC -fvisibility=hidden $(header_search_dirs)
+CFLAGS := -std=c99 -g -O0 $(warnflags) -fPIC -fvisibility=hidden $(header_search_dirs)
 CXXFLAGS := -std=c++11 -stdlib=libc++ -g -O0 $(warnflags) -fPIC -fvisibility=hidden $(header_search_dirs)
 
 DOXYGEN ?= doxygen

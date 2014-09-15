@@ -112,6 +112,8 @@ struct syspoll_resrc syspoll_get(struct syspoll* this, int eventnum)
 {
     int events = 0;
 
+    if (this->events[eventnum].events & EPOLLERR)
+        events |= SYSPOLL_ERROR;
     if (this->events[eventnum].events & EPOLLIN)
         events |= SYSPOLL_READ;
     if (this->events[eventnum].events & EPOLLOUT)
