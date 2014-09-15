@@ -38,6 +38,10 @@ struct context
 
 static void print_xfer(const struct xfer* x);
 
+#define MIN_(a, b) ((a) < (b) ? (a) : (b))
+
+#define MAX_(a, b) ((a) > (b) ? (a) : (b))
+
 #define PRINT_XFER(x)                           \
     printf("%s: ", __func__);                   \
     print_xfer(x)
@@ -57,16 +61,11 @@ static size_t add_send_xfer(struct context* ctx,
                             int stat_fd,
                             int dest_fd);
 
-static bool send_stat(int fd,
-                      enum prot_stat stat,
-                      size_t file_size,
-                      off_t file_offset);
+static bool send_data_hdr(int stat_fd, const size_t file_size);
 
 static bool send_ack(int fd, size_t file_size);
 
 static bool send_nack(int fd, enum prot_stat stat);
-
-static bool send_xfer_stat(const struct xfer* x, enum prot_stat stat);
 
 /*
   Removing, e.g., xfer 'b':
@@ -162,8 +161,6 @@ static bool process_events(struct context* ctx,
                         "%s: fatal error on"
                         " xfer {statfd: %d; destfd: %d}; terminating it\n",
                         __func__, xfer->stat_fd, xfer->dest_fd);
-
-                send_xfer_stat(xfer, PROT_STAT_XXX);
                 remove_xfer(ctx, xfer);
 
             } else if (!process_file_op(xfer) || xfer_complete(xfer)) {
@@ -207,6 +204,11 @@ static bool handle_listenfd(struct context* ctx,
                                      buf, (size_t)nread,
                                      recvd_fds, nfds)) {
                     puts("BAD REQUEST");
+                    if (nfds > 0) {
+                        close(recvd_fds[0]);
+                        if (nfds == 2)
+                            close(recvd_fds[1]);
+                    }
                 }
             }
         }
@@ -222,7 +224,7 @@ static bool process_request(struct context* ctx,
                             const void* buf, const size_t size,
                             int* fds, const size_t nfds UNUSED)
 {
-    struct prot_pdu pdu;
+    struct prot_request pdu;
     if (!prot_unmarshal_request(&pdu, buf)) {
         fprintf(stderr, "%s: received malformed request PDU\n", __func__);
         /* TODO: send NACK */
@@ -239,7 +241,6 @@ static bool process_request(struct context* ctx,
 
     if ((pdu.cmd == PROT_CMD_READ || pdu.cmd == PROT_CMD_SEND) &&
         ctx->nxfers == ctx->max_xfers) {
-        send_nack(ctx->listenfd, PROT_STAT_CAPACITY);
         return false;
     }
 
@@ -247,27 +248,22 @@ static bool process_request(struct context* ctx,
     case PROT_CMD_READ: {
         const size_t fsize = add_read_xfer(ctx, fname, fds[0]);
         if (fsize == 0)
-            goto xfer_fail;
+            return false;
         send_ack(fds[0], fsize);
     } break;
 
     case PROT_CMD_SEND: {
         const size_t fsize = add_send_xfer(ctx, fname, fds[0], fds[1]);
         if (fsize == 0)
-            goto xfer_fail;
+            return false;
         send_ack(fds[0], fsize);
     } break;
 
     default:
-        send_nack(ctx->listenfd, PROT_STAT_UNKNOWN_CMD);
         return false;
     }
 
     return true;
-
- xfer_fail:
-    send_nack(ctx->listenfd, PROT_STAT_XXX);
-    return false;
 }
 
 static bool process_file_op(struct xfer* xfer)
@@ -275,30 +271,24 @@ static bool process_file_op(struct xfer* xfer)
     switch (xfer->cmd) {
     case PROT_CMD_READ:
     case PROT_CMD_SEND: {
+        const size_t nbytes = MIN_(xfer->file.size, (size_t)xfer->file.blksize);
+
+        if (!send_data_hdr(xfer->stat_fd, nbytes))
+            return false;
+
         const ssize_t nwritten = file_splice(&xfer->file, xfer->dest_fd);
 
         PRINT_XFER(xfer);
 
         if (nwritten < 0) {
-            if (errno_is_fatal(errno)) {
-                send_xfer_stat(xfer, PROT_STAT_XXX);
-                return false;
-            }
-            return true;
+            return !errno_is_fatal(errno);
         } else if (nwritten == 0) {
             /* FIXME Not sure how to deal with this properly */
             return false;
         } else {
-            if (!send_xfer_stat(xfer, PROT_STAT_XFER) && errno_is_fatal(errno)) {
-                /* TODO Handle fatal error on send of status report */
-            }
             return true;
         }
     }
-
-    case PROT_CMD_STAT:
-        /* Not a file operation */
-        abort();
 
     case PROT_CMD_CANCEL:
         break;
@@ -350,7 +340,19 @@ static bool xfer_complete(const struct xfer* x)
 
 static bool errno_is_fatal(const int err)
 {
-    return (err != EWOULDBLOCK && err != EAGAIN);
+    switch (err) {
+    case EWOULDBLOCK:
+#if (EWOULDBLOCK != EAGAIN)
+    case EAGAIN:
+#endif
+    case ENFILE:
+    case ENOBUFS:
+    case ENOLCK:
+    case ENOSPC:
+        return false;
+    default:
+        return true;
+    }
 }
 
 static bool add_xfer(struct context* ctx,
@@ -424,15 +426,14 @@ static void delete_xfer(struct xfer* x)
     free(x);
 }
 
-static bool send_stat(const int fd, const enum prot_stat stat,
-                      const size_t file_size, const off_t file_offset)
+static bool send_data_hdr(const int stat_fd, const size_t file_size)
 {
-    struct prot_xfer_stat_m pdu;
-    prot_marshal_stat(&pdu, stat, file_size, (size_t)file_offset);
+    struct prot_chunk_hdr_m pdu;
+    prot_marshal_chunk_hdr(&pdu, file_size);
 
-    const ssize_t n = write(fd, pdu.data, sizeof(pdu.data));
+    const ssize_t n = write(stat_fd, pdu.data, sizeof(pdu.data));
 
-    assert (n == -1 || n == sizeof(pdu));
+    assert (n == -1 || n == sizeof(pdu.data));
 
     return (n != -1);
 }
@@ -459,11 +460,6 @@ static bool send_nack(int fd, enum prot_stat stat)
     assert (n == -1 || n == PROT_ACK_SIZE);
 
     return (n != -1);
-}
-
-static bool send_xfer_stat(const struct xfer* x, const enum prot_stat stat)
-{
-    return send_stat(x->stat_fd, stat, x->file.size, file_offset(&x->file));
 }
 
 /*

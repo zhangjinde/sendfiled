@@ -7,6 +7,15 @@
 
 #include "protocol.h"
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpadded"
+
+struct prot_hdr {
+    PROT_HDR_FIELDS;
+};
+
+#pragma GCC diagnostic pop
+
 static uint8_t* marshal_hdr(void* buf,
                             const enum prot_cmd cmd,
                             const enum prot_stat stat,
@@ -60,17 +69,7 @@ void prot_marshal_nack(struct prot_ack_m* pdu, const enum prot_stat stat)
     memcpy(p, &file_size, 8);
 }
 
-void prot_marshal_stat(struct prot_xfer_stat_m* pdu,
-                       enum prot_stat stat,
-                       const size_t file_size, const size_t new_file_offset)
-{
-    uint8_t* p = marshal_hdr(pdu->data, PROT_CMD_STAT, stat, 16);
-
-    memcpy(p, &file_size, 8);
-    memcpy(p + 8, &new_file_offset, 8);
-}
-
-void prot_marshal_data(struct prot_file_data_m* pdu, uint64_t file_size)
+void prot_marshal_chunk_hdr(struct prot_chunk_hdr_m* pdu, uint64_t file_size)
 {
     uint8_t* p = marshal_hdr(pdu->data, PROT_CMD_DATA, PROT_STAT_OK, 8);
     memcpy(p, &file_size, 8);
@@ -93,7 +92,7 @@ static const uint8_t* unmarshal_hdr(struct prot_hdr* hdr, const void* buf)
     return p;
 }
 
-bool prot_unmarshal_request(struct prot_pdu* pdu, const void* buf)
+bool prot_unmarshal_request(struct prot_request* pdu, const void* buf)
 {
     const uint8_t* p = unmarshal_hdr((struct prot_hdr*)pdu, buf);
 
@@ -118,20 +117,7 @@ bool prot_unmarshal_ack(struct prot_ack* pdu, const void* buf)
     return true;
 }
 
-bool prot_unmarshal_xfer_stat(struct prot_xfer_stat* pdu, const void* buf)
-{
-    const uint8_t* p = unmarshal_hdr((struct prot_hdr*)pdu, buf);
-
-    if (pdu->body_len != 16)
-        return false;
-
-    memcpy(&pdu->file_size, p, 8);
-    memcpy(&pdu->new_file_offset, p + 8, 8);
-
-    return true;
-}
-
-bool prot_unmarshal_data(struct prot_file_data* pdu, const void* buf)
+bool prot_unmarshal_chunk_hdr(struct prot_chunk_hdr* pdu, const void* buf)
 {
     const uint8_t* p = unmarshal_hdr((struct prot_hdr*)pdu, buf);
 

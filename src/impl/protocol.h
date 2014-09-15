@@ -11,8 +11,7 @@ enum prot_cmd {
     PROT_CMD_READ,
     PROT_CMD_SEND,
     PROT_CMD_ACK,
-    PROT_CMD_STAT,
-    /* Chunk of a file */
+    /* Header preceding a chunk of file data */
     PROT_CMD_DATA,
     /* Cancel transfer */
     PROT_CMD_CANCEL
@@ -37,24 +36,20 @@ enum prot_stat {
 #define PROT_HDR_SIZE 10        /* cmd{1} + stat{1} + len{8} */
 #define PROT_REQ_MAXSIZE (PROT_HDR_SIZE + PROT_FILENAME_MAX)
 #define PROT_ACK_SIZE (PROT_HDR_SIZE + 8)
-#define PROT_XFER_STAT_SIZE (PROT_HDR_SIZE + 8 + 8)
+#define PROT_DATA_FRAME_SIZE (PROT_HDR_SIZE + 8)
 #define PROT_PDU_MAXSIZE PROT_REQ_MAXSIZE
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpadded"
+
+/* ---------------- Unmarshaled PDUs --------------- */
 
 #define PROT_HDR_FIELDS                         \
     uint8_t cmd;                                \
     uint8_t stat;                               \
     uint64_t body_len
 
-/* ---------------- Unmarshaled PDUs --------------- */
-
-struct prot_hdr {
-    PROT_HDR_FIELDS;
-};
-
-struct prot_pdu {
+struct prot_request {
     PROT_HDR_FIELDS;
     const char* filename;
 };
@@ -64,13 +59,7 @@ struct prot_ack {
     uint64_t file_size;
 };
 
-struct prot_xfer_stat {
-    PROT_HDR_FIELDS;
-    uint64_t file_size;
-    uint64_t new_file_offset;
-};
-
-struct prot_file_data {
+struct prot_chunk_hdr {
     PROT_HDR_FIELDS;
     uint64_t chunk_size;
 };
@@ -89,13 +78,8 @@ struct prot_ack_m {
     uint8_t data [PROT_HDR_SIZE + 8];
 };
 
-/* A marshaled transfer status PDU */
-struct prot_xfer_stat_m {
-    uint8_t data [PROT_XFER_STAT_SIZE];
-};
-
 /* A marshaled file data chunk */
-struct prot_file_data_m {
+struct prot_chunk_hdr_m {
     uint8_t data [PROT_HDR_SIZE + 8];
 };
 
@@ -111,20 +95,14 @@ extern "C" {
 
     void prot_marshal_nack(struct prot_ack_m* pdu, enum prot_stat stat);
 
-    void prot_marshal_stat(struct prot_xfer_stat_m* pdu,
-                           enum prot_stat stat,
-                           size_t file_size, size_t new_file_offset);
+    void prot_marshal_chunk_hdr(struct prot_chunk_hdr_m* pdu,
+                                uint64_t file_size);
 
-    void prot_marshal_data(struct prot_file_data_m* pdu,
-                           uint64_t file_size);
-
-    bool prot_unmarshal_request(struct prot_pdu*, const void* buf);
+    bool prot_unmarshal_request(struct prot_request*, const void* buf);
 
     bool prot_unmarshal_ack(struct prot_ack* pdu, const void* buf);
 
-    bool prot_unmarshal_xfer_stat(struct prot_xfer_stat* pdu, const void* buf);
-
-    bool prot_unmarshal_data(struct prot_file_data* pdu, const void* buf);
+    bool prot_unmarshal_chunk_hdr(struct prot_chunk_hdr* pdu, const void* buf);
 
 #ifdef __cplusplus
 }
