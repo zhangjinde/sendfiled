@@ -7,92 +7,109 @@
 
 #include "protocol.h"
 
-static bool marshal(struct prot_pdu* pdu,
-                    const int cmd,
-                    const int stat,
-                    const char* filename)
+static uint8_t* marshal_hdr(void* buf,
+                            const enum prot_cmd cmd,
+                            const enum prot_stat stat,
+                            const uint64_t len)
 {
-    const size_t namelen = (filename ?
-                            strnlen(filename, PROT_FILENAME_MAX + 1) :
-                            0);
+    uint8_t* p = buf;
+
+    *p++ = cmd;
+    *p++ = stat;
+    memcpy(p, &len, 8);
+
+    return (p + 8);
+}
+
+bool prot_marshal_send(struct prot_request_m* req,
+                       const char* filename)
+{
+    const uint64_t namelen = (filename ?
+                              strnlen(filename, PROT_FILENAME_MAX + 1) :
+                              0);
 
     if (namelen == PROT_FILENAME_MAX + 1) {
         errno = ENAMETOOLONG;
         return false;
     }
 
-    *pdu = (struct prot_pdu) {
-        .cmd = (uint8_t)cmd,
-        .stat = (uint8_t)stat,
-        .filename_len = (uint16_t)namelen,
-        .filename = filename,
+    marshal_hdr(req->hdr, PROT_CMD_SEND, PROT_STAT_OK, namelen);
 
-        .iovs = {
-            (struct iovec) {
-                .iov_base = pdu,
-                .iov_len = (offsetof(struct prot_pdu, filename_len) + 2)
-            },
-            (struct iovec) {
-                .iov_base = (void*)filename,
-                .iov_len = namelen
-            }
-        }
-    };
+    req->filename = filename;
+
+    req->iovs[0].iov_base = req->hdr;
+    req->iovs[0].iov_len = PROT_HDR_SIZE;
+
+    req->iovs[1].iov_base = (void*)req->filename;
+    req->iovs[1].iov_len = namelen;
 
     return true;
 }
 
-bool prot_marshal_send(struct prot_pdu* pdu, const char* filename)
-{
-    return marshal(pdu, PROT_CMD_SEND, PROT_STAT_OK, filename);
-}
-
-bool prot_marshal_read(struct prot_pdu* pdu, const char* filename)
-{
-    return marshal(pdu, PROT_CMD_READ, PROT_STAT_OK, filename);
-}
-
-ssize_t prot_marshal_stat(void* buf, size_t bufsize, enum prot_stat stat,
+ssize_t prot_marshal_stat(struct prot_xfer_stat_m* pdu, enum prot_stat stat,
                           const size_t file_size, const size_t new_file_offset)
 {
-    if (bufsize < sizeof(prot_stat_buf))
-        return 0;
+    uint8_t* p = marshal_hdr(pdu->data, PROT_CMD_STAT, stat, 16);
 
-    uint8_t* p = buf;
-
-    *p++ = PROT_CMD_STAT;
-    *p++ = stat;
     memcpy(p, &file_size, 8);
     p += 8;
     memcpy(p, &new_file_offset, 8);
     p += 8;
 
-    return (p - (uint8_t*)buf);
+    return (p - pdu->data);
 }
 
-ssize_t prot_unmarshal(const void* buf, const size_t size, struct prot_pdu* pdu)
+static const uint8_t* unmarshal_hdr(struct prot_hdr* hdr, const void* buf)
 {
-    if (size == 0)
-        return -1;
-
-    /* Uses UDP, so we should have an entire message if we have anything */
-    assert (size >= PROT_HDR_SIZE);
-
     const uint8_t* p = buf;
 
-    *pdu = (struct prot_pdu) {
+    *hdr = (struct prot_hdr) {
         .cmd = *p,
-        .stat = *(p + 1),
-        .filename_len = (uint16_t)(*(p + 2) | (*(p + 3) << 8))
+        .stat = *(p + 1)
     };
-    p += 4;
+    p += 2;
 
-    if (pdu->filename_len == 0)
-        return (p - (uint8_t*)buf);
+    memcpy(&hdr->body_len, p, 8);
+    p += 8;
 
-    pdu->filename = (char*)p;
+    assert ((p - (uint8_t*)buf) == PROT_HDR_SIZE);
+    return p;
+}
 
-    p += pdu->filename_len;
+bool prot_unmarshal_request(struct prot_pdu* pdu, const void* buf)
+{
+    const uint8_t* p = unmarshal_hdr((struct prot_hdr*)pdu, buf);
 
-    return (p - (uint8_t*)buf);
+    if (pdu->body_len > 0) {
+        pdu->filename = (char*)p;
+        return true;
+    } else {
+        pdu->filename = NULL;
+        return false;
+    }
+}
+
+bool prot_unmarshal_ack(struct prot_ack* pdu, const void* buf)
+{
+    const uint8_t* p = unmarshal_hdr((struct prot_hdr*)pdu, buf);
+
+    if (pdu->body_len != 8)
+        return false;
+
+    memcpy(&pdu->file_size, p, 8);
+
+    return true;
+}
+
+bool prot_unmarshal_xfer_stat(struct prot_xfer_stat* pdu, const void* buf)
+{
+    const uint8_t* p = unmarshal_hdr((struct prot_hdr*)pdu, buf);
+
+    if (pdu->body_len != 16)
+        return false;
+
+    memcpy(&pdu->file_size, p, 8);
+    memcpy(&pdu->new_file_offset, p + 8, 8);
+
+    return true;
 }

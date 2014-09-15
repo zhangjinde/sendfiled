@@ -31,19 +31,16 @@ TEST(Fiod, xxx)
     if (pipefd == -1)
         std::printf("XXX errno: %s\n", strerror(errno));
 
-    uint8_t buf[1024];
-    ssize_t nstat = read(pipefd, buf, sizeof(buf));
-    ASSERT_EQ(18, nstat);
+    uint8_t buf [PROT_XFER_STAT_SIZE];
+    ssize_t nstat = read(pipefd, buf, PROT_XFER_STAT_SIZE);
+    ASSERT_EQ(PROT_XFER_STAT_SIZE, nstat);
 
-    // TODO: use the public response-parsing functions instead
-    EXPECT_EQ(PROT_CMD_STAT, buf[0]);
-    EXPECT_EQ(PROT_STAT_XFER, buf[1]);
-    std::uint64_t file_size {};
-    std::uint64_t file_off {};
-    memcpy(&file_size, buf + 2, 8);
-    memcpy(&file_off, buf + 2 + 8, 8);
-    EXPECT_EQ(file_contents.size(), file_size);
-    EXPECT_EQ(file_contents.size(), file_off);
+    struct prot_xfer_stat stat;
+    ASSERT_TRUE(prot_unmarshal_xfer_stat(&stat, buf));
+    EXPECT_EQ(PROT_CMD_STAT, stat.cmd);
+    EXPECT_EQ(PROT_STAT_XFER, stat.stat);
+    EXPECT_EQ(file_contents.size(), stat.file_size);
+    EXPECT_EQ(file_contents.size(), stat.new_file_offset);
 
     ssize_t nfile = read(pfd[0], buf, sizeof(buf));
     if (nfile == -1) {

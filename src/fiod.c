@@ -105,13 +105,12 @@ int fiod_send(int srv_sockfd,
 
     fds[2] = dest_sockfd;
 
-    struct prot_pdu req;
-
+    struct prot_request_m req;
     if (!prot_marshal_send(&req, filename))
         goto fail1;
 
     if (us_sendv(srv_sockfd,
-                 req.iovs, PROT_PDU_NIOVS,
+                 req.iovs, 2,
                  &fds[1], 2) == -1) {
         goto fail1;
     }
@@ -128,33 +127,33 @@ int fiod_send(int srv_sockfd,
     return -1;
 }
 
-int fiod_read(const int sockfd,
-              const char* filename,
-              off_t offset UNUSED, size_t count UNUSED)
-{
-    int fds[3];
+/* int fiod_read(const int sockfd, */
+/*               const char* filename, */
+/*               off_t offset UNUSED, size_t count UNUSED) */
+/* { */
+/*     int fds[3]; */
 
-    if (pipe(fds) == -1)
-        return -1;
+/*     if (pipe(fds) == -1) */
+/*         return -1; */
 
-    struct prot_pdu req;
+/*     struct prot_pdu req; */
 
-    if (!prot_marshal_read(&req, filename))
-        goto fail1;
+/*     if (!prot_marshal_read(&req, filename)) */
+/*         goto fail1; */
 
-    if (us_sendv(sockfd, req.iovs, PROT_PDU_NIOVS, &fds[1], 1) == -1)
-        goto fail1;
+/*     if (us_sendv(sockfd, req.iovs, PROT_PDU_NIOVS, &fds[1], 1) == -1) */
+/*         goto fail1; */
 
-    /* No use for the write end of the pipe in this process */
-    close (fds[1]);
+/*     /\* No use for the write end of the pipe in this process *\/ */
+/*     close (fds[1]); */
 
-    return fds[0];
+/*     return fds[0]; */
 
- fail1:
-    close(fds[0]);
-    close(fds[1]);
+/*  fail1: */
+/*     close(fds[0]); */
+/*     close(fds[1]); */
 
-    return -1;
-}
+/*     return -1; */
+/* } */
 
 /* -------------- Internal implementations ------------ */

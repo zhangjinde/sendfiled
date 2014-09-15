@@ -100,7 +100,7 @@ bool srv_run(const int listenfd, const int maxfds)
         goto fail;
     }
 
-    uint8_t* const recvbuf = calloc(PROT_PDU_MAXSIZE, 1);
+    uint8_t* const recvbuf = calloc(PROT_REQ_MAXSIZE, 1);
     if (!recvbuf)
         goto fail;
 
@@ -109,7 +109,7 @@ bool srv_run(const int listenfd, const int maxfds)
     for (int i = 0; i < 3; i++) {
         const int n = syspoll_poll(ctx.poller);
 
-        if (!process_events(&ctx, n, recvbuf, PROT_PDU_MAXSIZE)) {
+        if (!process_events(&ctx, n, recvbuf, PROT_REQ_MAXSIZE)) {
             fprintf(stderr,
                     "%s: fatal error during event processing; exiting\n",
                     __func__);
@@ -218,15 +218,18 @@ static bool process_request(struct context* ctx,
                             int* fds, const size_t nfds UNUSED)
 {
     struct prot_pdu pdu;
-
-    prot_unmarshal(buf, size, &pdu);
+    if (!prot_unmarshal_request(&pdu, buf)) {
+        fprintf(stderr, "%s: received malformed request PDU\n", __func__);
+        /* TODO: send NACK */
+        return false;
+    }
 
     char fname[PROT_FILENAME_MAX + 1] = {0};
-    memcpy(fname, pdu.filename, pdu.filename_len);
+    memcpy(fname, pdu.filename, pdu.body_len);
     printf("XXX nrecvd: %lu; cmd: %d; stat: %d;"
-           " fnlen: %d; fname: %s;"
+           " fnlen: %lu; fname: %s;"
            " recvd_fds[0]: %d; recvd_fds[1]: %d\n",
-           size, pdu.cmd, pdu.stat, pdu.filename_len, fname,
+           size, pdu.cmd, pdu.stat, pdu.body_len, fname,
            fds[0], fds[1]);
 
     if ((pdu.cmd == PROT_CMD_READ || pdu.cmd == PROT_CMD_SEND) &&
@@ -411,12 +414,12 @@ static void delete_xfer(struct xfer* x)
 static bool send_stat(const int fd, const enum prot_stat stat,
                       const size_t file_size, const off_t file_offset)
 {
-    prot_stat_buf buf;
-    prot_marshal_stat(buf, sizeof(buf), stat, file_size, (size_t)file_offset);
+    struct prot_xfer_stat_m pdu;
+    prot_marshal_stat(&pdu, stat, file_size, (size_t)file_offset);
 
-    const ssize_t n = write(fd, buf, sizeof(buf));
+    const ssize_t n = write(fd, pdu.data, sizeof(pdu.data));
 
-    assert (n == -1 || n == sizeof(buf));
+    assert (n == -1 || n == sizeof(pdu));
 
     return (n != -1);
 }
