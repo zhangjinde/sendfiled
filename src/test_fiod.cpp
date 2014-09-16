@@ -34,8 +34,8 @@ TEST(Fiod, xxx)
     uint8_t buf [PROT_PDU_MAXSIZE];
 
     // Request ACK (with file size)
-    ssize_t nstat = read(pipefd, buf, PROT_ACK_SIZE);
-    ASSERT_EQ(PROT_ACK_SIZE, nstat);
+    ssize_t nread = read(pipefd, buf, PROT_ACK_SIZE);
+    ASSERT_EQ(PROT_ACK_SIZE, nread);
     struct prot_ack ack;
     ASSERT_TRUE(prot_unmarshal_ack(&ack, buf));
     EXPECT_EQ(PROT_CMD_ACK, ack.cmd);
@@ -44,8 +44,8 @@ TEST(Fiod, xxx)
     EXPECT_EQ(file_contents.size(), ack.file_size);
 
     // Transfer status update
-    nstat = read(pipefd, buf, PROT_DATA_FRAME_SIZE);
-    ASSERT_EQ(PROT_DATA_FRAME_SIZE, nstat);
+    nread = read(pipefd, buf, PROT_DATA_FRAME_SIZE);
+    ASSERT_EQ(PROT_DATA_FRAME_SIZE, nread);
 
     struct prot_chunk_hdr chunk_hdr;
     ASSERT_TRUE(prot_unmarshal_chunk_hdr(&chunk_hdr, buf));

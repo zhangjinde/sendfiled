@@ -61,7 +61,7 @@ static size_t add_send_xfer(struct context* ctx,
                             int stat_fd,
                             int dest_fd);
 
-static bool send_data_hdr(int stat_fd, const size_t file_size);
+static bool send_chunk_hdr(int stat_fd, const size_t file_size);
 
 static bool send_ack(int fd, size_t file_size);
 
@@ -273,7 +273,7 @@ static bool process_file_op(struct xfer* xfer)
     case PROT_CMD_SEND: {
         const size_t nbytes = MIN_(xfer->file.size, (size_t)xfer->file.blksize);
 
-        if (!send_data_hdr(xfer->stat_fd, nbytes))
+        if (!send_chunk_hdr(xfer->stat_fd, nbytes))
             return false;
 
         const ssize_t nwritten = file_splice(&xfer->file, xfer->dest_fd);
@@ -426,7 +426,7 @@ static void delete_xfer(struct xfer* x)
     free(x);
 }
 
-static bool send_data_hdr(const int stat_fd, const size_t file_size)
+static bool send_chunk_hdr(const int stat_fd, const size_t file_size)
 {
     struct prot_chunk_hdr_m pdu;
     prot_marshal_chunk_hdr(&pdu, file_size);
