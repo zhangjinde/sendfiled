@@ -18,17 +18,8 @@ enum prot_cmd {
 };
 
 enum prot_stat {
-    /* Used in undecided cases */
-    PROT_STAT_XXX,
-    /* Success */
-    PROT_STAT_OK,
-    PROT_STAT_UNKNOWN_CMD,
-    /* File operation capacity reached */
-    PROT_STAT_CAPACITY,
-    /* Transfer status report */
-    PROT_STAT_XFER,
-    /* File not found */
-    PROT_STAT_NOTFOUND
+    /* No error */
+    PROT_STAT_OK
 };
 
 #define PROT_FILENAME_MAX 512
@@ -66,6 +57,10 @@ struct prot_chunk_hdr {
 
 /* ---------------- Marshaled PDUs --------------- */
 
+struct prot_hdr_m {
+    uint8_t data [PROT_HDR_SIZE];
+};
+
 /* A marshaled request PDU */
 struct prot_request_m {
     uint8_t hdr [PROT_HDR_SIZE];
@@ -75,12 +70,12 @@ struct prot_request_m {
 
 /* A marshaled ACK PDU */
 struct prot_ack_m {
-    uint8_t data [PROT_HDR_SIZE + 8];
+    uint8_t data [PROT_ACK_SIZE];
 };
 
 /* A marshaled file data chunk */
 struct prot_chunk_hdr_m {
-    uint8_t data [PROT_HDR_SIZE + 8];
+    uint8_t data [PROT_DATA_FRAME_SIZE];
 };
 
 #pragma GCC diagnostic pop
@@ -88,6 +83,11 @@ struct prot_chunk_hdr_m {
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+    void prot_marshal_hdr(struct prot_hdr_m* hdr,
+                          enum prot_cmd cmd,
+                          enum prot_stat stat,
+                          uint64_t len);
 
     bool prot_marshal_send(struct prot_request_m* req, const char* filename);
 

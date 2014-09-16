@@ -16,10 +16,10 @@ struct prot_hdr {
 
 #pragma GCC diagnostic pop
 
-static uint8_t* marshal_hdr(void* buf,
-                            const enum prot_cmd cmd,
-                            const enum prot_stat stat,
-                            const uint64_t len)
+static uint8_t* marshal_hdr_impl(void* buf,
+                                 const enum prot_cmd cmd,
+                                 const enum prot_stat stat,
+                                 const uint64_t len)
 {
     uint8_t* p = buf;
 
@@ -28,6 +28,14 @@ static uint8_t* marshal_hdr(void* buf,
     memcpy(p, &len, 8);
 
     return (p + 8);
+}
+
+void prot_marshal_hdr(struct prot_hdr_m* hdr,
+                      enum prot_cmd cmd,
+                      enum prot_stat stat,
+                      uint64_t len)
+{
+    marshal_hdr_impl(hdr->data, cmd, stat, len);
 }
 
 bool prot_marshal_send(struct prot_request_m* req,
@@ -42,7 +50,7 @@ bool prot_marshal_send(struct prot_request_m* req,
         return false;
     }
 
-    marshal_hdr(req->hdr, PROT_CMD_SEND, PROT_STAT_OK, namelen);
+    marshal_hdr_impl(req->hdr, PROT_CMD_SEND, PROT_STAT_OK, namelen);
 
     req->filename = filename;
 
@@ -57,13 +65,13 @@ bool prot_marshal_send(struct prot_request_m* req,
 
 void prot_marshal_ack(struct prot_ack_m* pdu, const uint64_t file_size)
 {
-    uint8_t* p = marshal_hdr(pdu->data, PROT_CMD_ACK, PROT_STAT_OK, 8);
+    uint8_t* p = marshal_hdr_impl(pdu->data, PROT_CMD_ACK, PROT_STAT_OK, 8);
     memcpy(p, &file_size, 8);
 }
 
 void prot_marshal_nack(struct prot_ack_m* pdu, const enum prot_stat stat)
 {
-    uint8_t* p = marshal_hdr(pdu->data, PROT_CMD_ACK, stat, 8);
+    uint8_t* p = marshal_hdr_impl(pdu->data, PROT_CMD_ACK, stat, 8);
 
     const uint64_t file_size = 0;
     memcpy(p, &file_size, 8);
@@ -71,7 +79,7 @@ void prot_marshal_nack(struct prot_ack_m* pdu, const enum prot_stat stat)
 
 void prot_marshal_chunk_hdr(struct prot_chunk_hdr_m* pdu, uint64_t file_size)
 {
-    uint8_t* p = marshal_hdr(pdu->data, PROT_CMD_DATA, PROT_STAT_OK, 8);
+    uint8_t* p = marshal_hdr_impl(pdu->data, PROT_CMD_DATA, PROT_STAT_OK, 8);
     memcpy(p, &file_size, 8);
 }
 

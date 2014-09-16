@@ -22,13 +22,8 @@
 
 ssize_t file_splice(struct file* file, int fd)
 {
-    const ssize_t n = splice(fileno(file->ptr), NULL,
-                             fd, NULL,
-                             (size_t)file->blksize,
-                             0);
-
-   printf("XXX %s: nspliced: %ld; file_off: %ld; blksize: %d\n",
-          __func__, n, ftello(file->ptr), file->blksize);
-
-    return n;
+    return splice(fileno(file->ptr), NULL,
+                  fd, NULL,
+                  (size_t)file->blksize,
+                  0);
 }

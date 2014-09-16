@@ -5,7 +5,7 @@
 #include "fiod.h"
 #include "impl/protocol.h"
 
-TEST(Fiod, xxx)
+TEST(Fiod, send)
 {
     const std::string srvname {"testing123"};
 

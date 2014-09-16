@@ -67,6 +67,8 @@ static bool send_ack(int fd, size_t file_size);
 
 static bool send_nack(int fd, enum prot_stat stat);
 
+static bool send_err(int fd, int err);
+
 /*
   Removing, e.g., xfer 'b':
 
@@ -281,10 +283,12 @@ static bool process_file_op(struct xfer* xfer)
 
         const ssize_t nwritten = file_splice(&xfer->file, xfer->dest_fd);
 
-        PRINT_XFER(xfer);
-
         if (nwritten < 0) {
-            return !errno_is_fatal(errno);
+            if (errno_is_fatal(errno)) {
+                send_err(xfer->stat_fd, errno);
+                return false;
+            }
+            return true;
         } else if (nwritten == 0) {
             /* FIXME Not sure how to deal with this properly */
             return false;
@@ -429,40 +433,39 @@ static void delete_xfer(struct xfer* x)
     free(x);
 }
 
+static bool send_pdu(const int fd, void* pdu, const size_t size)
+{
+    const ssize_t n = write(fd, pdu, size);
+    assert (n == -1 || (size_t)n == size);
+    return (n != -1);
+}
+
 static bool send_chunk_hdr(const int stat_fd, const size_t file_size)
 {
     struct prot_chunk_hdr_m pdu;
     prot_marshal_chunk_hdr(&pdu, file_size);
-
-    const ssize_t n = write(stat_fd, pdu.data, sizeof(pdu.data));
-
-    assert (n == -1 || n == sizeof(pdu.data));
-
-    return (n != -1);
+    return send_pdu(stat_fd, pdu.data, sizeof(pdu.data));
 }
 
 static bool send_ack(int fd, size_t file_size)
 {
     struct prot_ack_m pdu;
     prot_marshal_ack(&pdu, file_size);
-
-    const ssize_t n = write(fd, pdu.data, PROT_ACK_SIZE);
-
-    assert (n == -1 || n == PROT_ACK_SIZE);
-
-    return (n != -1);
+    return send_pdu(fd, pdu.data, sizeof(pdu.data));
 }
 
 static bool send_nack(int fd, enum prot_stat stat)
 {
     struct prot_ack_m pdu;
     prot_marshal_nack(&pdu, stat);
+    return send_pdu(fd, pdu.data, sizeof(pdu.data));
+}
 
-    const ssize_t n = write(fd, pdu.data, PROT_ACK_SIZE);
-
-    assert (n == -1 || n == PROT_ACK_SIZE);
-
-    return (n != -1);
+static bool send_err(int fd, const int stat)
+{
+    struct prot_hdr_m pdu;
+    prot_marshal_hdr(&pdu, PROT_CMD_CANCEL, (uint8_t)stat, 0);
+    return send_pdu(fd, pdu.data, sizeof(pdu.data));
 }
 
 /*
