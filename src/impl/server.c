@@ -99,8 +99,7 @@ bool srv_run(const int listenfd, const int maxfds)
     if (!syspoll_register(ctx.poller,
                           ctx.listenfd,
                           &ctx.listenfd,
-                          /* FIXME: WRITE makes no sense for listen socket  */
-                          SYSPOLL_READ | SYSPOLL_WRITE)) {
+                          SYSPOLL_READ)) {
         goto fail;
     }
 
@@ -148,6 +147,13 @@ static bool process_events(struct context* ctx,
         struct syspoll_resrc resrc = syspoll_get(ctx->poller, i);
 
         if (*(int*)resrc.udata == ctx->listenfd) {
+            if (resrc.events & SYSPOLL_ERROR) {
+                fprintf(stderr,
+                        "%s: fatal error on request socket; aborting\n",
+                        __func__);
+                return false;
+            }
+
             if (!handle_listenfd(ctx, resrc.events, buf, buf_size)) {
                 fprintf(stderr, "%s: fatal error on listen socket\n", __func__);
                 return false;
@@ -182,40 +188,37 @@ static bool handle_listenfd(struct context* ctx,
                             uint8_t* buf,
                             const size_t buf_size)
 {
-    if (events & SYSPOLL_READ) {
-        int recvd_fds[2];
-        size_t nfds;
+    assert (events == SYSPOLL_READ);
 
-        for (;;) {
-            nfds = 2;
+    int recvd_fds[2];
+    size_t nfds;
 
-            const ssize_t nread = us_recv(ctx->listenfd,
-                                          buf, buf_size,
-                                          recvd_fds, &nfds);
+    for (;;) {
+        nfds = 2;
 
-            if (nread < 0) {
-                return !errno_is_fatal(errno);
-            } else {
-                /* Recv of zero makes no sense on a UDP (connectionless)
-                   socket */
-                assert (nread > 0);
+        const ssize_t nread = us_recv(ctx->listenfd,
+                                      buf, buf_size,
+                                      recvd_fds, &nfds);
 
-                if (!process_request(ctx,
-                                     buf, (size_t)nread,
-                                     recvd_fds, nfds)) {
-                    puts("BAD REQUEST");
-                    if (nfds > 0) {
-                        close(recvd_fds[0]);
-                        if (nfds == 2)
-                            close(recvd_fds[1]);
-                    }
+        if (nread < 0) {
+            return !errno_is_fatal(errno);
+        } else {
+            /* Recv of zero makes no sense on a UDP (connectionless)
+               socket */
+            assert (nread > 0);
+
+            if (!process_request(ctx,
+                                 buf, (size_t)nread,
+                                 recvd_fds, nfds)) {
+                puts("BAD REQUEST");
+                if (nfds > 0) {
+                    close(recvd_fds[0]);
+                    if (nfds == 2)
+                        close(recvd_fds[1]);
                 }
             }
         }
     }
-
-    /* if (events & SYSPOLL_WRITE) { */
-    /* } */
 
     return true;
 }

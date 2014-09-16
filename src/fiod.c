@@ -1,6 +1,7 @@
+#include <sys/socket.h>
 #include <sys/types.h>
-#include <sys/wait.h>
 #include <sys/uio.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <stdio.h>
@@ -76,7 +77,10 @@ pid_t fiod_spawn(const char* name, const char* root, const int maxfiles)
 
 int fiod_connect(const char* name)
 {
-    return us_connect(name);
+    const int fd = us_connect(name);
+    if (fd != -1)
+        shutdown(fd, SHUT_RD);
+    return fd;
 }
 
 int fiod_shutdown(const pid_t pid)
