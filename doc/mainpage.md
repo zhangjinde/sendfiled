@@ -90,19 +90,19 @@ count.
 
 #### More Regular Usage Patterns
 
-For example, consider a server sending a file to a client over a network. It
-would make sense for the server to fill the client socket's send buffer with as
-much file data as it will hold before moving on to the next client's
-transfer. Assuming that the socket's send buffer is larger than the file's
-optimal I/O block size (a very realistic assumption), multiple reads (of
-contiguous blocks) would be required.
+(*Usage patterns are not of much concern for solid-state drives*.)
 
-If this is the only thread using the disk, these reads would be issued to the
-disk controller sequentially, which is ideal. However, the more other threads
-are trying to do the same, the more likely these reads are to be interleaved
-with other, unrelated requests, possibly for data on the other side of the disk,
-in spite of the OS' and/or disk's best attempts. If the reading thread were to
-be suspended by the CPU scheduler, for example, the OS would have no choice but
-to send another thread's requests to the disk.
+Consider a server sending files to one or more clients over a network. It would
+make sense for the server to fill the client socket's send buffer with as much
+file content as it can hold before moving on to the next client's
+transfer. Assuming that the socket's send buffer is larger than the file's
+optimal I/O block size (a very realistic assumption), multiple reads would be
+required.
+
+If this were the only thread using the disk, the reads would be issued
+sequentially, which is very efficient. However, the more threads performing file
+I/O there are, the more likely the reads are to be interleaved with unrelated
+file I/O operations, leading to less regular and thus less efficient usage
+patterns.
 
 #### Decoupling Application and I/O Thread Counts 
