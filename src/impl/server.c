@@ -212,7 +212,6 @@ static bool handle_listenfd(struct context* ctx,
             if (!process_request(ctx,
                                  buf, (size_t)nread,
                                  recvd_fds, nfds)) {
-                puts("BAD REQUEST");
                 if (nfds > 0) {
                     close(recvd_fds[0]);
                     if (nfds == 2)
@@ -230,9 +229,15 @@ static bool process_request(struct context* ctx,
                             int* fds, const size_t nfds UNUSED)
 {
     struct prot_request pdu;
-    if (!prot_unmarshal_request(&pdu, buf)) {
+    int err = prot_unmarshal_request(&pdu, buf);
+
+    if (err == -1) {
         fprintf(stderr, "%s: received malformed request PDU\n", __func__);
         /* TODO: send NACK */
+        return false;
+
+    } else if (err > 0) {
+        fprintf(stderr, "%s: client sent error code %d\n", __func__, pdu.stat);
         return false;
     }
 

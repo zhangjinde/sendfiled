@@ -98,11 +98,26 @@ extern "C" {
     void prot_marshal_chunk_hdr(struct prot_chunk_hdr_m* pdu,
                                 uint64_t file_size);
 
-    bool prot_unmarshal_request(struct prot_request*, const void* buf);
+    /**
+       @retval 0 Success
+       @retval -1 Malformed PDU
+       @retval >0 Error code from PDU header
+     */
+    int prot_unmarshal_request(struct prot_request*, const void* buf);
 
-    bool prot_unmarshal_ack(struct prot_ack* pdu, const void* buf);
+    /**
+       @retval 0 Success
+       @retval -1 Malformed PDU
+       @retval >0 Error code from PDU header
+     */
+    int prot_unmarshal_ack(struct prot_ack* pdu, const void* buf);
 
-    bool prot_unmarshal_chunk_hdr(struct prot_chunk_hdr* pdu, const void* buf);
+    /**
+       @retval 0 Success
+       @retval -1 Malformed PDU
+       @retval >0 Error code from PDU header
+     */
+    int prot_unmarshal_chunk_hdr(struct prot_chunk_hdr* pdu, const void* buf);
 
 #ifdef __cplusplus
 }
