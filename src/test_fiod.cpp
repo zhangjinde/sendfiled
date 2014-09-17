@@ -5,38 +5,67 @@
 #include "fiod.h"
 #include "impl/protocol.h"
 
-TEST(Fiod, send)
+namespace {
+struct FiodFix : public ::testing::Test {
+    static const std::string file_contents;
+
+    FiodFix() : file(file_contents) {
+        const std::string srvname {"testing123"};
+
+        srv_pid = fiod_spawn(srvname.c_str(), "/tmp", 10);
+        if (srv_pid <= 0)
+            throw std::runtime_error("Couldn't start daemon");
+
+        srv_fd = fiod_connect(srvname.c_str());
+        if (srv_fd == -1)
+            throw std::runtime_error("Couldn't connect to daemon");
+    }
+
+    ~FiodFix() {
+        const int status = fiod_shutdown(srv_pid);
+        if (!WIFEXITED(status))
+            std::fprintf(stderr, "Daemon has not exited\n");
+        if (WEXITSTATUS(status) != EXIT_SUCCESS)
+            std::fprintf(stderr, "Daemon did not shut down cleanly\n");
+    }
+
+    int srv_fd;
+    pid_t srv_pid;
+    test::TmpFile file;
+};
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wexit-time-destructors"
+
+const std::string FiodFix::file_contents {"1234567890"};
+
+#pragma GCC diagnostic pop
+
+} // namespace
+
+TEST_F(FiodFix, send)
 {
-    const std::string srvname {"testing123"};
+    // Pipe to which file will be written
+    int data_pipe[2];
 
-    const pid_t pid = fiod_spawn(srvname.c_str(), "/tmp", 10);
+    ASSERT_NE(-1, pipe(data_pipe));
 
-    ASSERT_GT(pid, 0);
+    const int stat_fd = fiod_send(srv_fd,
+                                  file.name().c_str(),
+                                  data_pipe[1],
+                                  0, 0);
+    ASSERT_NE(-1, stat_fd);
 
-    const int fd = fiod_connect(srvname.c_str());
-    if (fd == -1)
-        std::printf("XXX errno: %s\n", strerror(errno));
-
-    std::printf("Connected; fd: %d\n", fd);
-
-    const std::string file_contents {"1234567890"};
-    test::TmpFile file(file_contents);
-
-    int pfd[2];
-    ASSERT_NE(-1, pipe(pfd));
-
-    const int pipefd = fiod_send(fd, file.name().c_str(), pfd[1], 0, 0);
-    close(pfd[1]);
-
-    if (pipefd == -1)
-        std::printf("XXX errno: %s\n", strerror(errno));
+    close(data_pipe[1]);
 
     uint8_t buf [PROT_PDU_MAXSIZE];
-
-    // Request ACK (with file size)
-    ssize_t nread = read(pipefd, buf, PROT_STAT_SIZE);
-    ASSERT_EQ(PROT_STAT_SIZE, nread);
+    ssize_t nread;
     struct prot_file_stat ack;
+    struct prot_file_stat xfer_stat;
+
+    // Request ACK
+    nread = read(stat_fd, buf, PROT_STAT_SIZE);
+    ASSERT_EQ(PROT_STAT_SIZE, nread);
     ASSERT_EQ(0, prot_unmarshal_stat(&ack, buf));
     EXPECT_EQ(PROT_CMD_STAT, ack.cmd);
     EXPECT_EQ(PROT_STAT_OK, ack.stat);
@@ -44,27 +73,18 @@ TEST(Fiod, send)
     EXPECT_EQ(file_contents.size(), ack.size);
 
     // Transfer status update
-    nread = read(pipefd, buf, PROT_STAT_SIZE);
+    nread = read(stat_fd, buf, PROT_STAT_SIZE);
     ASSERT_EQ(PROT_STAT_SIZE, nread);
-
-    struct prot_file_stat xfer_stat;
     ASSERT_EQ(0, prot_unmarshal_stat(&xfer_stat, buf));
     EXPECT_EQ(PROT_CMD_STAT, xfer_stat.cmd);
     EXPECT_EQ(PROT_STAT_OK, xfer_stat.stat);
-    // Check that file data chunk is in range (0, file_contents.size()]
     EXPECT_GT(xfer_stat.size, 0);
     EXPECT_LE(xfer_stat.size, file_contents.size());
 
-    ssize_t nfile = read(pfd[0], buf, sizeof(buf));
-    if (nfile == -1) {
-        printf("LLLLerrno: %s\n", strerror(errno));
-    }
-    ASSERT_EQ(file_contents.size(), nfile);
-    const std::string recvd_file((const char*)buf, file_contents.size());
+    // File content
+    nread = read(data_pipe[0], buf, sizeof(buf));
+    ASSERT_EQ(file_contents.size(), nread);
+    const std::string recvd_file(reinterpret_cast<const char*>(buf),
+                                 file_contents.size());
     EXPECT_EQ(file_contents, recvd_file);
-
-    const int status = fiod_shutdown(pid);
-
-    EXPECT_TRUE(WIFEXITED(status));
-    EXPECT_EQ(EXIT_SUCCESS, WEXITSTATUS(status));
 }
