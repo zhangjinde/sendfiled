@@ -34,26 +34,26 @@ TEST(Fiod, send)
     uint8_t buf [PROT_PDU_MAXSIZE];
 
     // Request ACK (with file size)
-    ssize_t nread = read(pipefd, buf, PROT_ACK_SIZE);
-    ASSERT_EQ(PROT_ACK_SIZE, nread);
-    struct prot_ack ack;
-    ASSERT_EQ(0, prot_unmarshal_ack(&ack, buf));
-    EXPECT_EQ(PROT_CMD_ACK, ack.cmd);
+    ssize_t nread = read(pipefd, buf, PROT_STAT_SIZE);
+    ASSERT_EQ(PROT_STAT_SIZE, nread);
+    struct prot_file_stat ack;
+    ASSERT_EQ(0, prot_unmarshal_stat(&ack, buf));
+    EXPECT_EQ(PROT_CMD_STAT, ack.cmd);
     EXPECT_EQ(PROT_STAT_OK, ack.stat);
     EXPECT_EQ(8, ack.body_len);
-    EXPECT_EQ(file_contents.size(), ack.file_size);
+    EXPECT_EQ(file_contents.size(), ack.size);
 
     // Transfer status update
-    nread = read(pipefd, buf, PROT_DATA_FRAME_SIZE);
-    ASSERT_EQ(PROT_DATA_FRAME_SIZE, nread);
+    nread = read(pipefd, buf, PROT_STAT_SIZE);
+    ASSERT_EQ(PROT_STAT_SIZE, nread);
 
-    struct prot_chunk_hdr chunk_hdr;
-    ASSERT_EQ(0, prot_unmarshal_chunk_hdr(&chunk_hdr, buf));
-    EXPECT_EQ(PROT_CMD_DATA, chunk_hdr.cmd);
-    EXPECT_EQ(PROT_STAT_OK, chunk_hdr.stat);
+    struct prot_file_stat xfer_stat;
+    ASSERT_EQ(0, prot_unmarshal_stat(&xfer_stat, buf));
+    EXPECT_EQ(PROT_CMD_STAT, xfer_stat.cmd);
+    EXPECT_EQ(PROT_STAT_OK, xfer_stat.stat);
     // Check that file data chunk is in range (0, file_contents.size()]
-    EXPECT_GT(chunk_hdr.chunk_size, 0);
-    EXPECT_LE(chunk_hdr.chunk_size, file_contents.size());
+    EXPECT_GT(xfer_stat.size, 0);
+    EXPECT_LE(xfer_stat.size, file_contents.size());
 
     ssize_t nfile = read(pfd[0], buf, sizeof(buf));
     if (nfile == -1) {

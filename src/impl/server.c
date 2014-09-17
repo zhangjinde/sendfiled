@@ -61,11 +61,7 @@ static size_t add_send_xfer(struct context* ctx,
                             int stat_fd,
                             int dest_fd);
 
-static bool send_chunk_hdr(int stat_fd, const size_t file_size);
-
-static bool send_ack(int fd, size_t file_size);
-
-static bool send_nack(int fd, enum prot_stat stat);
+static bool send_stat(int fd, size_t file_size);
 
 static bool send_err(int fd, int err);
 
@@ -259,21 +255,27 @@ static bool process_request(struct context* ctx,
         const size_t fsize = add_read_xfer(ctx, fname, fds[0]);
         if (fsize == 0)
             return false;
-        send_ack(fds[0], fsize);
+        send_stat(fds[0], fsize);
     } break;
 
     case PROT_CMD_SEND: {
         const size_t fsize = add_send_xfer(ctx, fname, fds[0], fds[1]);
         if (fsize == 0)
             return false;
-        send_ack(fds[0], fsize);
+        send_stat(fds[0], fsize);
     } break;
 
     default:
+        /* TODO report "unknown command" */
         return false;
     }
 
     return true;
+}
+
+static bool needs_stat(const struct xfer* x)
+{
+    return (x->stat_fd != x->dest_fd);
 }
 
 static bool process_file_op(struct xfer* xfer)
@@ -281,24 +283,23 @@ static bool process_file_op(struct xfer* xfer)
     switch (xfer->cmd) {
     case PROT_CMD_READ:
     case PROT_CMD_SEND: {
-        const size_t nbytes = MIN_(xfer->file.size, (size_t)xfer->file.blksize);
-
-        if (!send_chunk_hdr(xfer->stat_fd, nbytes))
-            return false;
-
         const ssize_t nwritten = file_splice(&xfer->file, xfer->dest_fd);
 
         if (nwritten < 0) {
             if (errno_is_fatal(errno)) {
-                send_err(xfer->stat_fd, errno);
+                if (needs_stat(xfer))
+                    send_err(xfer->stat_fd, errno);
                 return false;
             }
             return true;
+
         } else if (nwritten == 0) {
             /* FIXME Not sure how to deal with this properly */
             return false;
+
         } else {
-            return true;
+            return (needs_stat(xfer) &&
+                    send_stat(xfer->stat_fd, (size_t)nwritten));
         }
     }
 
@@ -445,31 +446,17 @@ static bool send_pdu(const int fd, void* pdu, const size_t size)
     return (n != -1);
 }
 
-static bool send_chunk_hdr(const int stat_fd, const size_t file_size)
+static bool send_stat(int fd, size_t file_size)
 {
-    struct prot_chunk_hdr_m pdu;
-    prot_marshal_chunk_hdr(&pdu, file_size);
-    return send_pdu(stat_fd, pdu.data, sizeof(pdu.data));
-}
-
-static bool send_ack(int fd, size_t file_size)
-{
-    struct prot_ack_m pdu;
-    prot_marshal_ack(&pdu, file_size);
-    return send_pdu(fd, pdu.data, sizeof(pdu.data));
-}
-
-static bool send_nack(int fd, enum prot_stat stat)
-{
-    struct prot_ack_m pdu;
-    prot_marshal_nack(&pdu, stat);
+    struct prot_file_stat_m pdu;
+    prot_marshal_stat(&pdu, file_size);
     return send_pdu(fd, pdu.data, sizeof(pdu.data));
 }
 
 static bool send_err(int fd, const int stat)
 {
     struct prot_hdr_m pdu;
-    prot_marshal_hdr(&pdu, PROT_CMD_CANCEL, (uint8_t)stat, 0);
+    prot_marshal_hdr(&pdu, PROT_CMD_STAT, (int)stat, 0);
     return send_pdu(fd, pdu.data, sizeof(pdu.data));
 }
 

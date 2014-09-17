@@ -18,13 +18,15 @@ struct prot_hdr {
 
 static uint8_t* marshal_hdr_impl(void* buf,
                                  const enum prot_cmd cmd,
-                                 const enum prot_stat stat,
+                                 const int stat,
                                  const uint64_t len)
 {
+    assert (stat >= 0 && stat <= 0xFF);
+
     uint8_t* p = buf;
 
     *p++ = cmd;
-    *p++ = stat;
+    *p++ = (uint8_t)stat;
     memcpy(p, &len, 8);
 
     return (p + 8);
@@ -32,7 +34,7 @@ static uint8_t* marshal_hdr_impl(void* buf,
 
 void prot_marshal_hdr(struct prot_hdr_m* hdr,
                       enum prot_cmd cmd,
-                      enum prot_stat stat,
+                      int stat,
                       uint64_t len)
 {
     marshal_hdr_impl(hdr->data, cmd, stat, len);
@@ -63,23 +65,9 @@ bool prot_marshal_send(struct prot_request_m* req,
     return true;
 }
 
-void prot_marshal_ack(struct prot_ack_m* pdu, const uint64_t file_size)
+void prot_marshal_stat(struct prot_file_stat_m* pdu, const uint64_t file_size)
 {
-    uint8_t* p = marshal_hdr_impl(pdu->data, PROT_CMD_ACK, PROT_STAT_OK, 8);
-    memcpy(p, &file_size, 8);
-}
-
-void prot_marshal_nack(struct prot_ack_m* pdu, const enum prot_stat stat)
-{
-    uint8_t* p = marshal_hdr_impl(pdu->data, PROT_CMD_ACK, stat, 8);
-
-    const uint64_t file_size = 0;
-    memcpy(p, &file_size, 8);
-}
-
-void prot_marshal_chunk_hdr(struct prot_chunk_hdr_m* pdu, uint64_t file_size)
-{
-    uint8_t* p = marshal_hdr_impl(pdu->data, PROT_CMD_DATA, PROT_STAT_OK, 8);
+    uint8_t* p = marshal_hdr_impl(pdu->data, PROT_CMD_STAT, PROT_STAT_OK, 8);
     memcpy(p, &file_size, 8);
 }
 
@@ -101,8 +89,8 @@ static const uint8_t* unmarshal_hdr(struct prot_hdr* hdr, const void* buf)
 }
 
 static int check_pdu(struct prot_hdr* hdr,
-                    const enum prot_cmd expected_cmd,
-                    const uint64_t expected_body_len)
+                     const enum prot_cmd expected_cmd,
+                     const uint64_t expected_body_len)
 {
     if (hdr->cmd != expected_cmd)
         return -1;
@@ -132,28 +120,15 @@ int prot_unmarshal_request(struct prot_request* pdu, const void* buf)
     }
 }
 
-int prot_unmarshal_ack(struct prot_ack* pdu, const void* buf)
+int prot_unmarshal_stat(struct prot_file_stat* pdu, const void* buf)
 {
     const uint8_t* p = unmarshal_hdr((struct prot_hdr*)pdu, buf);
 
-    const int err = check_pdu((struct prot_hdr*)pdu, PROT_CMD_ACK, 8);
+    const int err = check_pdu((struct prot_hdr*)pdu, PROT_CMD_STAT, 8);
     if (err != 0)
         return err;
 
-    memcpy(&pdu->file_size, p, 8);
-
-    return 0;
-}
-
-int prot_unmarshal_chunk_hdr(struct prot_chunk_hdr* pdu, const void* buf)
-{
-    const uint8_t* p = unmarshal_hdr((struct prot_hdr*)pdu, buf);
-
-    const int err = check_pdu((struct prot_hdr*)pdu, PROT_CMD_DATA, 8);
-    if (err != 0)
-        return err;
-
-    memcpy(&pdu->chunk_size, p, 8);
+    memcpy(&pdu->size, p, 8);
 
     return 0;
 }
