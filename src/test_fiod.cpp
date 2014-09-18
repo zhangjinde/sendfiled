@@ -43,6 +43,35 @@ const std::string FiodFix::file_contents {"1234567890"};
 
 } // namespace
 
+TEST(Fiod, unmarshal_error_status)
+{
+    struct prot_file_stat stat;
+
+    std::uint8_t buf[PROT_STAT_SIZE] {}; // Zeroes body_len field
+    buf[0] = PROT_CMD_STAT;
+    buf[1] = ENOENT;
+
+    EXPECT_EQ(ENOENT, prot_unmarshal_stat(&stat, buf));
+    EXPECT_EQ(PROT_CMD_STAT, stat.cmd);
+    EXPECT_EQ(ENOENT, stat.stat);
+    EXPECT_EQ(0, stat.body_len);
+}
+
+TEST(Fiod, unmarshal_invalid_cmd)
+{
+    struct prot_file_stat stat;
+
+    std::uint8_t buf[PROT_STAT_SIZE] {};
+    buf[0] = 0xFF;
+    buf[1] = PROT_STAT_OK;
+    buf[2] = 111;
+
+    EXPECT_EQ(-1, prot_unmarshal_stat(&stat, buf));
+    EXPECT_EQ(0xFF, stat.cmd);
+    EXPECT_EQ(PROT_STAT_OK, stat.stat);
+    EXPECT_EQ(111, stat.body_len);
+}
+
 // Non-existent file should respond to request with status message containing
 // ENOENT.
 TEST_F(FiodFix, file_not_found)
@@ -60,13 +89,11 @@ TEST_F(FiodFix, file_not_found)
     close(data_pipe[1]);
 
     uint8_t buf [PROT_PDU_MAXSIZE];
-    ssize_t nread;
     struct prot_file_stat ack;
 
     // Request ACK
-    nread = read(stat_fd, buf, PROT_STAT_SIZE);
-    ASSERT_GE(nread, PROT_HDR_SIZE);
-    ASSERT_LE(nread, PROT_STAT_SIZE);
+    const ssize_t nread {read(stat_fd, buf, PROT_STAT_SIZE)};
+    ASSERT_EQ(nread, PROT_HDR_SIZE);
     ASSERT_EQ(ENOENT, prot_unmarshal_stat(&ack, buf));
     EXPECT_EQ(PROT_CMD_STAT, ack.cmd);
     EXPECT_EQ(ENOENT, ack.stat);
@@ -118,4 +145,34 @@ TEST_F(FiodFix, send)
     const std::string recvd_file(reinterpret_cast<const char*>(buf),
                                  file_contents.size());
     EXPECT_EQ(file_contents, recvd_file);
+
+    close(stat_fd);
+}
+
+TEST_F(FiodFix, read)
+{
+    const int data_fd = fiod_read(srv_fd, file.name().c_str(), 0, 0);
+    ASSERT_NE(-1, data_fd);
+
+    uint8_t buf [PROT_PDU_MAXSIZE];
+    ssize_t nread;
+    struct prot_file_stat ack;
+
+    // Request ACK
+    nread = read(data_fd, buf, PROT_STAT_SIZE);
+    ASSERT_EQ(PROT_STAT_SIZE, nread);
+    ASSERT_EQ(0, prot_unmarshal_stat(&ack, buf));
+    EXPECT_EQ(PROT_CMD_STAT, ack.cmd);
+    EXPECT_EQ(PROT_STAT_OK, ack.stat);
+    EXPECT_EQ(8, ack.body_len);
+    EXPECT_EQ(file_contents.size(), ack.size);
+
+    // File content
+    nread = read(data_fd, buf, sizeof(buf));
+    ASSERT_EQ(file_contents.size(), nread);
+    const std::string recvd_file(reinterpret_cast<const char*>(buf),
+                                 file_contents.size());
+    EXPECT_EQ(file_contents, recvd_file);
+
+    close(data_fd);
 }

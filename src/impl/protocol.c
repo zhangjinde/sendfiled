@@ -65,6 +65,31 @@ bool prot_marshal_send(struct prot_request_m* req,
     return true;
 }
 
+bool prot_marshal_read(struct prot_request_m* req,
+                       const char* filename)
+{
+    const uint64_t namelen = (filename ?
+                              strnlen(filename, PROT_FILENAME_MAX + 1) :
+                              0);
+
+    if (namelen == PROT_FILENAME_MAX + 1) {
+        errno = ENAMETOOLONG;
+        return false;
+    }
+
+    marshal_hdr_impl(req->hdr, PROT_CMD_READ, PROT_STAT_OK, namelen);
+
+    req->filename = filename;
+
+    req->iovs[0].iov_base = req->hdr;
+    req->iovs[0].iov_len = PROT_HDR_SIZE;
+
+    req->iovs[1].iov_base = (void*)req->filename;
+    req->iovs[1].iov_len = namelen;
+
+    return true;
+}
+
 void prot_marshal_stat(struct prot_file_stat_m* pdu, const uint64_t file_size)
 {
     uint8_t* p = marshal_hdr_impl(pdu->data, PROT_CMD_STAT, PROT_STAT_OK, 8);

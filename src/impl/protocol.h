@@ -82,6 +82,8 @@ extern "C" {
 
     bool prot_marshal_send(struct prot_request_m* req, const char* filename);
 
+    bool prot_marshal_read(struct prot_request_m* req, const char* filename);
+
     void prot_marshal_stat(struct prot_file_stat_m* pdu, uint64_t val);
 
     /**
