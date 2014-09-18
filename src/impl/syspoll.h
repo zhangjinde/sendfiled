@@ -7,9 +7,11 @@
 #pragma GCC diagnostic ignored "-Wpadded"
 
 enum {
-    SYSPOLL_ERROR = 1,
-    SYSPOLL_READ = 2,
-    SYSPOLL_WRITE = 4
+    SYSPOLL_ERROR = 1 << 0,
+    SYSPOLL_READ = 1 << 1,
+    SYSPOLL_WRITE = 1 << 2,
+    /* Shutdown event (e.g., a signal such as SIGTERM or SIGINT) */
+    SYSPOLL_TERM = 1 << 3
 };
 
 struct syspoll;
@@ -18,11 +20,13 @@ struct syspoll* syspoll_new(int timeout_ms, int maxevents);
 
 void syspoll_delete(struct syspoll*);
 
+/**
+   @param data User data. The first item at this address must be the file
+   descriptor (i.e., of type 'int').
+ */
 bool syspoll_register(struct syspoll*, int fd, void* data, unsigned events);
 
 bool syspoll_deregister(struct syspoll*, int fd);
-
-int syspoll_register_signal();
 
 int syspoll_poll(struct syspoll*);
 

@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/uio.h>
@@ -8,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "impl/errors.h"
 #include "impl/process.h"
 #include "impl/protocol.h"
 #include "impl/server.h"
@@ -85,13 +88,15 @@ int fiod_connect(const char* name)
 
 int fiod_shutdown(const pid_t pid)
 {
+    if (kill(pid, SIGTERM) == -1) {
+        LOGERRNOV("kill(%d, SIGTERM) failed\n", pid);
+        return -1;
+    }
+
     int status;
-
-    /* XXX TODO Send shutdown signal to child */
-
     if (waitpid(pid, &status, 0) == -1) {
-        fprintf(stderr, "%s: waitpid failed\n", __func__);
-        status = -1;
+        LOGERRNOV("waitpid(%d) failed\n", pid);
+        return -1;
     }
 
     return status;

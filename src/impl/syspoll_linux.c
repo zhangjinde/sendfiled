@@ -1,8 +1,13 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <sys/epoll.h>
+#include <sys/signalfd.h>
 
 #include <unistd.h>
 
+#include <assert.h>
 #include <errno.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,6 +20,8 @@
 struct syspoll
 {
     int epollfd;
+    int sigfd;
+    sigset_t orig_sigmask;
     int timeout;
     struct epoll_event* events;
     int nevents;
@@ -36,24 +43,43 @@ struct syspoll* syspoll_new(int timeout_ms, const int maxevents)
 
     if (this->epollfd == -1) {
         fprintf(stderr, "%s: epoll_create1() failed\n", __func__);
-        syspoll_delete(this);
-        return NULL;
+        goto fail;
     }
 
     this->events = malloc(sizeof(*this->events) * (unsigned long)this->nevents);
-    if (!this->events) {
-        syspoll_delete(this);
-        return NULL;
-    }
+    if (!this->events)
+        goto fail;
+
+    sigset_t sigmask;
+    sigemptyset(&sigmask);
+    sigaddset(&sigmask, SIGTERM);
+    sigaddset(&sigmask, SIGINT);
+
+    if (sigprocmask(SIG_BLOCK, &sigmask, &this->orig_sigmask) == -1)
+        goto fail;
+
+    this->sigfd = signalfd(-1, &sigmask, SFD_NONBLOCK | SFD_CLOEXEC);
+    if (this->sigfd == -1)
+        goto fail;
+
+    if (!syspoll_register(this, this->sigfd, &this->sigfd, SYSPOLL_READ))
+        goto fail;
 
     return this;
+
+ fail:
+    syspoll_delete(this);
+    return NULL;
 }
 
 void syspoll_delete(struct syspoll* this)
 {
     if (this) {
-        free(this->events);
         close(this->epollfd);
+        close(this->sigfd);
+        sigprocmask(SIG_SETMASK, &this->orig_sigmask, NULL);
+
+        free(this->events);
         free(this);
     }
 }
@@ -108,19 +134,47 @@ int syspoll_poll(struct syspoll* this)
     return n;
 }
 
+static bool recvd_term_signal(struct syspoll* this);
+
 struct syspoll_resrc syspoll_get(struct syspoll* this, int eventnum)
 {
-    int events = 0;
+    const struct epoll_event* const e = &this->events[eventnum];
 
-    if (this->events[eventnum].events & EPOLLERR)
-        events |= SYSPOLL_ERROR;
-    if (this->events[eventnum].events & EPOLLIN)
-        events |= SYSPOLL_READ;
-    if (this->events[eventnum].events & EPOLLOUT)
-        events |= SYSPOLL_WRITE;
-
-    return (struct syspoll_resrc) {
-        .events = events,
-        .udata = this->events[eventnum].data.ptr
+    struct syspoll_resrc info = {
+        .events = 0,
+        .udata = e->data.ptr
     };
+
+    if (e->events & EPOLLERR) {
+        info.events = SYSPOLL_ERROR;
+
+    } else {
+        if (e->events & EPOLLOUT)
+            info.events |= SYSPOLL_WRITE;
+
+        if (e->events & EPOLLIN) {
+            if (*(int*)e->data.ptr == this->sigfd) {
+                info.events = (recvd_term_signal(this) ?
+                               SYSPOLL_TERM :
+                               SYSPOLL_ERROR);
+                return info;
+            }
+            info.events |= SYSPOLL_READ;
+        }
+    }
+
+    info.udata = e->data.ptr;
+
+    return info;
+}
+
+// ------------------ (Uninteresting) Internal implementations ---------------
+
+static bool recvd_term_signal(struct syspoll* this)
+{
+    struct signalfd_siginfo info;
+
+    const ssize_t s = read(this->sigfd, &info, sizeof(struct signalfd_siginfo));
+    return (s == sizeof(struct signalfd_siginfo) &&
+            (info.ssi_signo == SIGTERM || info.ssi_signo == SIGINT));
 }

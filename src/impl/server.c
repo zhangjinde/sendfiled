@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "../attributes.h"
+#include "errors.h"
 #include "file_io.h"
 #include "protocol.h"
 #include "server.h"
@@ -37,10 +38,6 @@ struct context
 #pragma GCC diagnostic pop
 
 static void print_xfer(const struct xfer* x);
-
-#define MIN_(a, b) ((a) < (b) ? (a) : (b))
-
-#define MAX_(a, b) ((a) > (b) ? (a) : (b))
 
 #define PRINT_XFER(x)                           \
     printf("%s: ", __func__);                   \
@@ -106,16 +103,11 @@ bool srv_run(const int listenfd, const int maxfds)
         goto fail;
 
     /* The processing loop */
-    /* for (;;) { */
-    for (int i = 0; i < 3; i++) {
+    for (;;) {
         const int n = syspoll_poll(ctx.poller);
 
-        if (!process_events(&ctx, n, recvbuf, PROT_REQ_MAXSIZE)) {
-            fprintf(stderr,
-                    "%s: fatal error during event processing; exiting\n",
-                    __func__);
+        if (!process_events(&ctx, n, recvbuf, PROT_REQ_MAXSIZE))
             break;
-        }
     }
 
     printf("%s: terminating\n", __func__);
@@ -158,6 +150,9 @@ static bool process_events(struct context* ctx,
             }
 
         } else {
+            if (resrc.events & SYSPOLL_TERM)
+                return false;
+
             struct xfer* const xfer = (struct xfer*)resrc.udata;
 
             if (resrc.events & SYSPOLL_ERROR) {
@@ -310,6 +305,10 @@ static bool process_file_op(struct xfer* xfer)
 
     case PROT_CMD_CANCEL:
         break;
+
+    case PROT_CMD_STAT:
+        LOGERRNOV("invalid client command: %d\n", xfer->cmd);
+        return false;
     }
 
     return false;

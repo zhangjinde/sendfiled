@@ -6,7 +6,7 @@
 
 #define LOGERRNO(msg) {                                 \
         const int tmp = errno;                          \
-        fprintf(stderr, "%s [errno %d %s]: %s\n",       \
+        fprintf(stderr, "%s [errno %d %s]: %s",         \
                 __func__, errno, strerror(errno), msg); \
         errno = tmp;                                    \
     }

@@ -55,8 +55,6 @@ src_all := $(src_c) $(src_test)
 obj_c:=$(src_c:%=$(builddir)/%.o)
 obj_test:=$(src_test:%=$(builddir)/%.o)
 
-$(builddir)/fiod_linux.c.o: CFLAGS += -D_GNU_SOURCE
-
 $(builddir)/test_%.cpp.o: CXXFLAGS += -Wno-error
 
 .PHONY: all
