@@ -60,7 +60,7 @@ $(builddir)/fiod_linux.c.o: CFLAGS += -D_GNU_SOURCE
 $(builddir)/test_%.cpp.o: CXXFLAGS += -Wno-error
 
 .PHONY: all
-all: $(builddir)/$(target) $(builddir)/$(target_so) $(builddir)/$(test_target)
+all: $(builddir)/$(target) $(builddir)/$(target_so)
 
 ifneq ($(MAKECMDGOALS), clean)
 -include $(src_all:%=$(builddir)/%.d)
