@@ -43,6 +43,37 @@ const std::string FiodFix::file_contents {"1234567890"};
 
 } // namespace
 
+// Non-existent file should respond to request with status message containing
+// ENOENT.
+TEST_F(FiodFix, file_not_found)
+{
+    int data_pipe[2];
+
+    ASSERT_NE(-1, pipe(data_pipe));
+
+    const int stat_fd = fiod_send(srv_fd,
+                                  (file.name() + "XXXXXXXXX").c_str(),
+                                  data_pipe[1],
+                                  0, 0);
+    ASSERT_NE(-1, stat_fd);
+
+    close(data_pipe[1]);
+
+    uint8_t buf [PROT_PDU_MAXSIZE];
+    ssize_t nread;
+    struct prot_file_stat ack;
+
+    // Request ACK
+    nread = read(stat_fd, buf, PROT_STAT_SIZE);
+    ASSERT_GE(nread, PROT_HDR_SIZE);
+    ASSERT_LE(nread, PROT_STAT_SIZE);
+    ASSERT_EQ(ENOENT, prot_unmarshal_stat(&ack, buf));
+    EXPECT_EQ(PROT_CMD_STAT, ack.cmd);
+    EXPECT_EQ(ENOENT, ack.stat);
+    EXPECT_EQ(0, ack.body_len);
+    EXPECT_EQ(0, ack.size);
+}
+
 TEST_F(FiodFix, send)
 {
     // Pipe to which file will be written
