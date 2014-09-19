@@ -23,6 +23,7 @@ struct FiodFix : public ::testing::Test {
 
     ~FiodFix() {
         const int status = fiod_shutdown(srv_pid);
+        close(srv_fd);
         if (!WIFEXITED(status))
             std::fprintf(stderr, "Daemon has not exited\n");
         if (WEXITSTATUS(status) != EXIT_SUCCESS)
@@ -69,7 +70,9 @@ TEST_F(FiodFix, file_not_found)
     EXPECT_EQ(PROT_CMD_STAT, ack.cmd);
     EXPECT_EQ(ENOENT, ack.stat);
     EXPECT_EQ(0, ack.body_len);
-    EXPECT_EQ(0, ack.size);
+
+    close(stat_fd);
+    close(data_pipe[0]);
 }
 
 TEST_F(FiodFix, send)
@@ -117,6 +120,7 @@ TEST_F(FiodFix, send)
                                  file_contents.size());
     EXPECT_EQ(file_contents, recvd_file);
 
+    close(data_pipe[0]);
     close(stat_fd);
 }
 

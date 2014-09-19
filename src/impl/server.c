@@ -25,7 +25,6 @@ struct xfer {
     int stat_fd;
     enum prot_cmd cmd;
     struct file file;
-    loff_t offset;
     size_t len;
     int idx;
 };
@@ -297,7 +296,6 @@ static bool process_file_op(struct xfer* xfer)
     case PROT_CMD_SEND: {
         const ssize_t nwritten = file_splice(&xfer->file,
                                              xfer->dest_fd,
-                                             xfer->offset,
                                              xfer->len);
 
         if (nwritten < 0) {
@@ -313,7 +311,6 @@ static bool process_file_op(struct xfer* xfer)
             return false;
 
         } else {
-            xfer->offset += (loff_t)nwritten;
             xfer->len -= (size_t)nwritten;
             return (needs_stat(xfer) &&
                     send_stat(xfer->stat_fd, (size_t)nwritten));
@@ -414,7 +411,6 @@ static struct xfer* add_xfer(struct context* ctx,
         .dest_fd = dest_fd,
         .stat_fd = stat_fd,
         .file = *file,
-        .offset = offset,
         .len = (len > 0 ? len : (file->size - (size_t)offset))
     };
 
@@ -441,7 +437,7 @@ static size_t add_read_xfer(struct context* ctx,
                             const int dest_fd)
 {
     struct file file;
-    if (!file_open_read(&file, filename))
+    if (!file_open_read(&file, filename, offset))
         return 0;
 
     const struct xfer* const x = add_xfer(ctx,
@@ -459,7 +455,7 @@ static size_t add_send_xfer(struct context* ctx,
                             const int dest_fd)
 {
     struct file file;
-    if (!file_open_read(&file, filename))
+    if (!file_open_read(&file, filename, offset))
         return 0;
 
     const struct xfer* const x = add_xfer(ctx,

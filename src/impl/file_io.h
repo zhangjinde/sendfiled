@@ -17,12 +17,12 @@ struct file {
 
 #pragma GCC diagnostic pop
 
-bool file_open_read(struct file* file, const char* name);
+bool file_open_read(struct file* file, const char* name, loff_t offset);
 
 void file_close(struct file*);
 
 off_t file_offset(const struct file*);
 
-ssize_t file_splice(struct file* file, int fd, loff_t offset, size_t count);
+ssize_t file_splice(struct file* file, int fd, size_t len);
 
 #endif

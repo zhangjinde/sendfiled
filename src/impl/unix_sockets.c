@@ -15,6 +15,8 @@
 #include "../attributes.h"
 #include "unix_sockets.h"
 
+#define MAXFDS 2
+
 /* Defined in unix_sockets_<platform>.c */
 int us_socket(int, int, int);
 
@@ -155,8 +157,6 @@ int us_connect(const char* srvname)
     return -1;
 }
 
-#define MAXFDS 2
-
 ssize_t us_sendv(int fd,
                  const struct iovec* iovs, size_t niovs,
                  const int* fds_to_send, const size_t nfds)
@@ -166,11 +166,11 @@ ssize_t us_sendv(int fd,
         .msg_iovlen = niovs
     };
 
-    if (fds_to_send && nfds > 0) {
-        char cmsg_buf[CMSG_SPACE(sizeof(int) * MAXFDS)];
+    char cmsg_buf[CMSG_SPACE(sizeof(int) * MAXFDS)] = {0};
 
+    if (fds_to_send && nfds > 0) {
         msg.msg_control = cmsg_buf;
-        msg.msg_controllen = sizeof(cmsg_buf);
+        msg.msg_controllen = CMSG_SPACE(sizeof(int) * nfds);
 
         struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
         *cmsg = (struct cmsghdr) {
@@ -182,9 +182,7 @@ ssize_t us_sendv(int fd,
         memcpy(CMSG_DATA(cmsg), fds_to_send, sizeof(int) * nfds);
     }
 
-    const ssize_t nsent = sendmsg(fd, &msg, 0);
-
-    return nsent;
+    return sendmsg(fd, &msg, 0);
 }
 
 ssize_t us_recv(int srv_fd,

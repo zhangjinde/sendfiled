@@ -23,7 +23,7 @@ static bool set_info(struct file* file)
     return true;
 }
 
-bool file_open_read(struct file* file, const char* name)
+bool file_open_read(struct file* file, const char* name, const loff_t offset)
 {
     *file = (struct file) {
         .ptr = fopen(name, "rb")
@@ -34,6 +34,11 @@ bool file_open_read(struct file* file, const char* name)
 
     if (!set_info(file))
         goto fail1;
+
+    if (offset > 0) {
+        if (fseeko(file->ptr, offset, SEEK_SET) == -1)
+            goto fail1;
+    }
 
     return true;
 
