@@ -101,8 +101,8 @@ int fiod_shutdown(const pid_t pid)
 int fiod_send(int srv_sockfd,
               const char* filename,
               int dest_sockfd,
-              const uint64_t offset,
-              const uint64_t len)
+              const loff_t offset,
+              const size_t len)
 {
     int fds[3];
 
@@ -132,8 +132,8 @@ int fiod_send(int srv_sockfd,
 
 int fiod_read(const int sockfd,
               const char* filename,
-              const uint64_t offset,
-              const uint64_t len)
+              const loff_t offset,
+              const size_t len)
 {
     int fds[2];
 

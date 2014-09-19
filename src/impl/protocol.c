@@ -35,9 +35,9 @@ static uint8_t* marshal_hdr_impl(void* buf,
 void prot_marshal_hdr(struct prot_hdr_m* hdr,
                       enum prot_cmd cmd,
                       int stat,
-                      uint64_t len)
+                      size_t len)
 {
-    marshal_hdr_impl(hdr->data, cmd, stat, len);
+    marshal_hdr_impl(hdr->data, cmd, stat, (uint64_t)len);
 }
 
 static bool marshal_req(struct prot_request_m* req,
@@ -82,21 +82,29 @@ static bool marshal_req(struct prot_request_m* req,
 
 bool prot_marshal_send(struct prot_request_m* req,
                        const char* filename,
-                       const uint64_t offset,
-                       const uint64_t len)
+                       const loff_t offset,
+                       const size_t len)
 {
-    return marshal_req(req, PROT_CMD_SEND, offset, len, filename);
+    return marshal_req(req,
+                       PROT_CMD_SEND,
+                       (uint64_t)offset,
+                       (uint64_t)len,
+                       filename);
 }
 
 bool prot_marshal_read(struct prot_request_m* req,
                        const char* filename,
-                       const uint64_t offset,
-                       const uint64_t len)
+                       const loff_t offset,
+                       const size_t len)
 {
-    return marshal_req(req, PROT_CMD_READ, offset, len, filename);
+    return marshal_req(req,
+                       PROT_CMD_READ,
+                       (uint64_t)offset,
+                       (uint64_t)len,
+                       filename);
 }
 
-void prot_marshal_stat(struct prot_file_stat_m* pdu, const uint64_t file_size)
+void prot_marshal_stat(struct prot_file_stat_m* pdu, const size_t file_size)
 {
     uint8_t* p = marshal_hdr_impl(pdu->data, PROT_CMD_STAT, PROT_STAT_OK, 8);
     memcpy(p, &file_size, 8);

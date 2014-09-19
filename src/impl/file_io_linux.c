@@ -6,7 +6,7 @@
 #include "util.h"
 
 ssize_t file_splice(struct file* file, const int fd,
-                    const uint64_t offset, const uint64_t count)
+                    const loff_t offset, const size_t count)
 {
     loff_t o = (loff_t)offset;
 

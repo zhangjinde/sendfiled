@@ -14,7 +14,6 @@
 #include <sys/types.h>
 
 #include <stdbool.h>
-#include <stdint.h>
 
 #include "attributes.h"
 
@@ -82,7 +81,7 @@ extern "C" {
     int fiod_send(int srv_sockfd,
                   const char* filename,
                   int dest_sockfd,
-                  uint64_t offset, uint64_t len) DSO_EXPORT;
+                  loff_t offset, size_t len) DSO_EXPORT;
 
     /**
        Reads a file into a pipe.
@@ -102,7 +101,7 @@ extern "C" {
      */
     int fiod_read(int sockfd,
                   const char* filename,
-                  uint64_t offset, uint64_t len) DSO_EXPORT;
+                  loff_t offset, size_t len) DSO_EXPORT;
 
     /**
        @}

@@ -1,6 +1,7 @@
 #ifndef FIOD_PROTOCOL_H
 #define FIOD_PROTOCOL_H
 
+#include <sys/types.h>
 #include <sys/uio.h>
 
 #include <stdbool.h>
@@ -47,18 +48,18 @@ enum {
 #define PROT_HDR_FIELDS                         \
     uint8_t cmd;                                \
     uint8_t stat;                               \
-    uint64_t body_len
+    size_t body_len
 
 struct prot_request {
     PROT_HDR_FIELDS;
-    uint64_t offset;
-    uint64_t len;
+    loff_t offset;
+    size_t len;
     const char* filename;
 };
 
 struct prot_file_stat {
     PROT_HDR_FIELDS;
-    uint64_t size;
+    size_t size;
 };
 
 /* ---------------- Marshaled PDUs --------------- */
@@ -88,15 +89,15 @@ extern "C" {
     void prot_marshal_hdr(struct prot_hdr_m* hdr,
                           enum prot_cmd cmd,
                           int stat,
-                          uint64_t len);
+                          size_t len);
 
     bool prot_marshal_send(struct prot_request_m* req, const char* filename,
-                           uint64_t offset, uint64_t len);
+                           loff_t offset, size_t len);
 
     bool prot_marshal_read(struct prot_request_m* req, const char* filename,
-                           uint64_t offset, uint64_t len);
+                           loff_t offset, size_t len);
 
-    void prot_marshal_stat(struct prot_file_stat_m* pdu, uint64_t val);
+    void prot_marshal_stat(struct prot_file_stat_m* pdu, size_t val);
 
     /**
        @retval 0 Success

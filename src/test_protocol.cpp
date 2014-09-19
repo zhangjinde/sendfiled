@@ -14,9 +14,9 @@ TEST(Protocol, marshal_send)
     EXPECT_EQ(PROT_CMD_SEND, pdu.hdr[0]);
     EXPECT_EQ(PROT_STAT_OK, pdu.hdr[1]);
 
-    uint64_t body_len;
-    uint64_t offset;
-    uint64_t len;
+    size_t body_len;
+    loff_t offset;
+    size_t len;
 
     uint8_t* p = &pdu.hdr[2];
 

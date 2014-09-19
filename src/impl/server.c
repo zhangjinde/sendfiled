@@ -1,3 +1,5 @@
+#include <sys/types.h>
+
 #include <unistd.h>
 
 #include <assert.h>
@@ -23,8 +25,8 @@ struct xfer {
     int stat_fd;
     enum prot_cmd cmd;
     struct file file;
-    uint64_t offset;
-    uint64_t len;
+    loff_t offset;
+    size_t len;
     int idx;
 };
 
@@ -51,20 +53,20 @@ static bool process_file_op(struct xfer* xfer);
 
 static void context_destruct(struct context* ctx);
 
-static uint64_t add_read_xfer(struct context* ctx,
-                              const char* filename,
-                              uint64_t offset,
-                              uint64_t len,
-                              int dest_fd);
+static size_t add_read_xfer(struct context* ctx,
+                            const char* filename,
+                            loff_t offset,
+                            size_t len,
+                            int dest_fd);
 
-static uint64_t add_send_xfer(struct context* ctx,
-                              const char* filename,
-                              uint64_t offset,
-                              uint64_t len,
-                              int stat_fd,
-                              int dest_fd);
+static size_t add_send_xfer(struct context* ctx,
+                            const char* filename,
+                            loff_t offset,
+                            size_t len,
+                            int stat_fd,
+                            int dest_fd);
 
-static bool send_stat(int fd, uint64_t file_size);
+static bool send_stat(int fd, size_t file_size);
 
 static bool send_err(int fd, int err);
 
@@ -251,10 +253,10 @@ static bool process_request(struct context* ctx,
 
     switch (pdu.cmd) {
     case PROT_CMD_READ: {
-        const uint64_t fsize = add_read_xfer(ctx,
-                                             fname,
-                                             pdu.offset, pdu.len,
-                                             fds[0]);
+        const size_t fsize = add_read_xfer(ctx,
+                                           fname,
+                                           (loff_t)pdu.offset, pdu.len,
+                                           fds[0]);
         if (fsize == 0) {
             send_err(fds[0], errno);
             return false;
@@ -263,10 +265,10 @@ static bool process_request(struct context* ctx,
     } break;
 
     case PROT_CMD_SEND: {
-        const uint64_t fsize = add_send_xfer(ctx,
-                                             fname,
-                                             pdu.offset, pdu.len,
-                                             fds[0], fds[1]);
+        const size_t fsize = add_send_xfer(ctx,
+                                           fname,
+                                           (loff_t)pdu.offset, pdu.len,
+                                           fds[0], fds[1]);
         printf("XXX fsize: %lu\n", fsize);
         if (fsize == 0) {
             send_err(fds[0], errno);
@@ -311,8 +313,8 @@ static bool process_file_op(struct xfer* xfer)
             return false;
 
         } else {
-            xfer->offset += (uint64_t)nwritten;
-            xfer->len -= (uint64_t)nwritten;
+            xfer->offset += (loff_t)nwritten;
+            xfer->len -= (size_t)nwritten;
             return (needs_stat(xfer) &&
                     send_stat(xfer->stat_fd, (size_t)nwritten));
         }
@@ -390,14 +392,14 @@ static bool errno_is_fatal(const int err)
 static struct xfer* add_xfer(struct context* ctx,
                              const enum prot_cmd cmd,
                              struct file* file,
-                             const uint64_t offset,
-                             const uint64_t len,
+                             const loff_t offset,
+                             const size_t len,
                              const int stat_fd,
                              const int dest_fd)
 {
     assert (ctx->nxfers < ctx->max_xfers);
 
-    if ((offset + len) > file->size) {
+    if (((size_t)offset + len) > file->size) {
         /* Requested range is invalid */
         errno = ERANGE;
         return NULL;
@@ -413,7 +415,7 @@ static struct xfer* add_xfer(struct context* ctx,
         .stat_fd = stat_fd,
         .file = *file,
         .offset = offset,
-        .len = (len > 0 ? len : (file->size - offset))
+        .len = (len > 0 ? len : (file->size - (size_t)offset))
     };
 
     if (!syspoll_register(ctx->poller, xfer->dest_fd, xfer, SYSPOLL_WRITE))
@@ -432,11 +434,11 @@ static struct xfer* add_xfer(struct context* ctx,
     return NULL;
 }
 
-static uint64_t add_read_xfer(struct context* ctx,
-                              const char* filename,
-                              const uint64_t offset,
-                              const uint64_t len,
-                              const int dest_fd)
+static size_t add_read_xfer(struct context* ctx,
+                            const char* filename,
+                            const loff_t offset,
+                            const size_t len,
+                            const int dest_fd)
 {
     struct file file;
     if (!file_open_read(&file, filename))
@@ -449,12 +451,12 @@ static uint64_t add_read_xfer(struct context* ctx,
     return (x ? x->len : 0);
 }
 
-static uint64_t add_send_xfer(struct context* ctx,
-                              const char* filename,
-                              const uint64_t offset,
-                              const uint64_t len,
-                              const int stat_fd,
-                              const int dest_fd)
+static size_t add_send_xfer(struct context* ctx,
+                            const char* filename,
+                            const loff_t offset,
+                            const size_t len,
+                            const int stat_fd,
+                            const int dest_fd)
 {
     struct file file;
     if (!file_open_read(&file, filename))
