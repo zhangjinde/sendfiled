@@ -237,12 +237,10 @@ static bool process_request(struct context* ctx,
         return false;
     }
 
-    char fname[PROT_FILENAME_MAX + 1] = {0};
-    memcpy(fname, pdu.filename, pdu.body_len);
     printf("XXX nrecvd: %lu; cmd: %d; stat: %d;"
            " fnlen: %lu; fname: %s;"
            " recvd_fds[0]: %d; recvd_fds[1]: %d\n",
-           size, pdu.cmd, pdu.stat, pdu.body_len, fname,
+           size, pdu.cmd, pdu.stat, pdu.body_len, pdu.filename,
            fds[0], fds[1]);
 
     if ((pdu.cmd == PROT_CMD_READ || pdu.cmd == PROT_CMD_SEND) &&
@@ -253,7 +251,7 @@ static bool process_request(struct context* ctx,
     switch (pdu.cmd) {
     case PROT_CMD_READ: {
         const size_t fsize = add_read_xfer(ctx,
-                                           fname,
+                                           pdu.filename,
                                            (loff_t)pdu.offset, pdu.len,
                                            fds[0]);
         if (fsize == 0) {
@@ -265,7 +263,7 @@ static bool process_request(struct context* ctx,
 
     case PROT_CMD_SEND: {
         const size_t fsize = add_send_xfer(ctx,
-                                           fname,
+                                           pdu.filename,
                                            (loff_t)pdu.offset, pdu.len,
                                            fds[0], fds[1]);
         printf("XXX fsize: %lu\n", fsize);
