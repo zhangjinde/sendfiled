@@ -23,6 +23,8 @@ struct xfer {
     int stat_fd;
     enum prot_cmd cmd;
     struct file file;
+    uint64_t offset;
+    uint64_t len;
     int idx;
 };
 
@@ -49,16 +51,20 @@ static bool process_file_op(struct xfer* xfer);
 
 static void context_destruct(struct context* ctx);
 
-static ssize_t add_read_xfer(struct context* ctx,
-                             const char* filename,
-                             int dest_fd);
+static uint64_t add_read_xfer(struct context* ctx,
+                              const char* filename,
+                              uint64_t offset,
+                              uint64_t len,
+                              int dest_fd);
 
-static ssize_t add_send_xfer(struct context* ctx,
-                             const char* filename,
-                             int stat_fd,
-                             int dest_fd);
+static uint64_t add_send_xfer(struct context* ctx,
+                              const char* filename,
+                              uint64_t offset,
+                              uint64_t len,
+                              int stat_fd,
+                              int dest_fd);
 
-static bool send_stat(int fd, size_t file_size);
+static bool send_stat(int fd, uint64_t file_size);
 
 static bool send_err(int fd, int err);
 
@@ -109,8 +115,6 @@ bool srv_run(const int listenfd, const int maxfds)
         if (!process_events(&ctx, n, recvbuf, PROT_REQ_MAXSIZE))
             break;
     }
-
-    printf("%s: terminating\n", __func__);
 
     free(recvbuf);
     context_destruct(&ctx);
@@ -247,22 +251,28 @@ static bool process_request(struct context* ctx,
 
     switch (pdu.cmd) {
     case PROT_CMD_READ: {
-        const ssize_t fsize = add_read_xfer(ctx, fname, fds[0]);
-        if (fsize < 0) {
-            send_err(fds[0], (int)-fsize);
+        const uint64_t fsize = add_read_xfer(ctx,
+                                             fname,
+                                             pdu.offset, pdu.len,
+                                             fds[0]);
+        if (fsize == 0) {
+            send_err(fds[0], errno);
             return false;
         }
-        send_stat(fds[0], (size_t)fsize);
+        send_stat(fds[0], fsize);
     } break;
 
     case PROT_CMD_SEND: {
-        const ssize_t fsize = add_send_xfer(ctx, fname, fds[0], fds[1]);
-        printf("XXX fsize: %ld\n", fsize);
-        if (fsize < 0) {
-            send_err(fds[0], (int)-fsize);
+        const uint64_t fsize = add_send_xfer(ctx,
+                                             fname,
+                                             pdu.offset, pdu.len,
+                                             fds[0], fds[1]);
+        printf("XXX fsize: %lu\n", fsize);
+        if (fsize == 0) {
+            send_err(fds[0], errno);
             return false;
         }
-        send_stat(fds[0], (size_t)fsize);
+        send_stat(fds[0], fsize);
     } break;
 
     default:
@@ -283,7 +293,10 @@ static bool process_file_op(struct xfer* xfer)
     switch (xfer->cmd) {
     case PROT_CMD_READ:
     case PROT_CMD_SEND: {
-        const ssize_t nwritten = file_splice(&xfer->file, xfer->dest_fd);
+        const ssize_t nwritten = file_splice(&xfer->file,
+                                             xfer->dest_fd,
+                                             xfer->offset,
+                                             xfer->len);
 
         if (nwritten < 0) {
             if (errno_is_fatal(errno)) {
@@ -298,6 +311,8 @@ static bool process_file_op(struct xfer* xfer)
             return false;
 
         } else {
+            xfer->offset += (uint64_t)nwritten;
+            xfer->len -= (uint64_t)nwritten;
             return (needs_stat(xfer) &&
                     send_stat(xfer->stat_fd, (size_t)nwritten));
         }
@@ -372,23 +387,33 @@ static bool errno_is_fatal(const int err)
     }
 }
 
-static bool add_xfer(struct context* ctx,
-                     const enum prot_cmd cmd,
-                     struct file* file,
-                     const int stat_fd,
-                     const int dest_fd)
+static struct xfer* add_xfer(struct context* ctx,
+                             const enum prot_cmd cmd,
+                             struct file* file,
+                             const uint64_t offset,
+                             const uint64_t len,
+                             const int stat_fd,
+                             const int dest_fd)
 {
     assert (ctx->nxfers < ctx->max_xfers);
 
+    if ((offset + len) > file->size) {
+        /* Requested range is invalid */
+        errno = ERANGE;
+        return NULL;
+    }
+
     struct xfer* xfer = malloc(sizeof(*xfer));
     if (!xfer)
-        return false;
+        return NULL;
 
     *xfer = (struct xfer) {
         .cmd = cmd,
         .dest_fd = dest_fd,
         .stat_fd = stat_fd,
-        .file = *file
+        .file = *file,
+        .offset = offset,
+        .len = (len > 0 ? len : (file->size - offset))
     };
 
     if (!syspoll_register(ctx->poller, xfer->dest_fd, xfer, SYSPOLL_WRITE))
@@ -400,38 +425,46 @@ static bool add_xfer(struct context* ctx,
     xfer->idx = ctx->nxfers;
     ctx->nxfers++;
 
-    return true;
+    return xfer;
 
  fail:
     free(xfer);
-    return false;
+    return NULL;
 }
 
-static ssize_t add_read_xfer(struct context* ctx,
-                             const char* filename,
-                             const int dest_fd)
+static uint64_t add_read_xfer(struct context* ctx,
+                              const char* filename,
+                              const uint64_t offset,
+                              const uint64_t len,
+                              const int dest_fd)
 {
     struct file file;
     if (!file_open_read(&file, filename))
-        return -errno;
+        return 0;
 
-    return (add_xfer(ctx, PROT_CMD_READ, &file, dest_fd, dest_fd) ?
-            (ssize_t)file.size :
-            -errno);
+    const struct xfer* const x = add_xfer(ctx,
+                                          PROT_CMD_READ,
+                                          &file, offset, len,
+                                          dest_fd, dest_fd);
+    return (x ? x->len : 0);
 }
 
-static ssize_t add_send_xfer(struct context* ctx,
-                             const char* filename,
-                             const int stat_fd,
-                             const int dest_fd)
+static uint64_t add_send_xfer(struct context* ctx,
+                              const char* filename,
+                              const uint64_t offset,
+                              const uint64_t len,
+                              const int stat_fd,
+                              const int dest_fd)
 {
     struct file file;
     if (!file_open_read(&file, filename))
-        return -errno;
+        return 0;
 
-    return (add_xfer(ctx, PROT_CMD_SEND, &file, stat_fd, dest_fd) ?
-            (ssize_t)file.size :
-            -errno);
+    const struct xfer* const x = add_xfer(ctx,
+                                          PROT_CMD_SEND,
+                                          &file, offset, len,
+                                          stat_fd, dest_fd);
+    return (x ? x->len : 0);
 }
 
 static void delete_xfer(struct xfer* x)

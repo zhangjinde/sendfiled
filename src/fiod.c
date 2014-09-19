@@ -67,11 +67,7 @@ pid_t fiod_spawn(const char* name, const char* root, const int maxfiles)
 
     close(pfd[1]);
 
-    printf("%s: starting event loop\n", __func__);
-
     const bool success = srv_run(listenfd, maxfiles);
-
-    printf("%s: event loop done\n", __func__);
 
     us_stop_serving(name, listenfd);
 
@@ -105,7 +101,8 @@ int fiod_shutdown(const pid_t pid)
 int fiod_send(int srv_sockfd,
               const char* filename,
               int dest_sockfd,
-              off_t offset UNUSED, size_t count UNUSED)
+              const uint64_t offset,
+              const uint64_t len)
 {
     int fds[3];
 
@@ -115,7 +112,7 @@ int fiod_send(int srv_sockfd,
     fds[2] = dest_sockfd;
 
     struct prot_request_m req;
-    if (!prot_marshal_send(&req, filename))
+    if (!prot_marshal_send(&req, filename, offset, len))
         goto fail1;
 
     if (us_sendv(srv_sockfd, req.iovs, 2, &fds[1], 2) == -1)
@@ -135,7 +132,8 @@ int fiod_send(int srv_sockfd,
 
 int fiod_read(const int sockfd,
               const char* filename,
-              off_t offset UNUSED, size_t count UNUSED)
+              const uint64_t offset,
+              const uint64_t len)
 {
     int fds[2];
 
@@ -143,7 +141,7 @@ int fiod_read(const int sockfd,
         return -1;
 
     struct prot_request_m req;
-    if (!prot_marshal_read(&req, filename))
+    if (!prot_marshal_read(&req, filename, offset, len))
         goto fail1;
 
     if (us_sendv(sockfd, req.iovs, 2, &fds[1], 1) == -1)

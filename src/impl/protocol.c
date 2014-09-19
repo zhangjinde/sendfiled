@@ -40,8 +40,11 @@ void prot_marshal_hdr(struct prot_hdr_m* hdr,
     marshal_hdr_impl(hdr->data, cmd, stat, len);
 }
 
-bool prot_marshal_send(struct prot_request_m* req,
-                       const char* filename)
+static bool marshal_req(struct prot_request_m* req,
+                        const uint8_t cmd,
+                        const uint64_t offset,
+                        const uint64_t len,
+                        const char* filename)
 {
     const uint64_t namelen = (filename ?
                               strnlen(filename, PROT_FILENAME_MAX + 1) :
@@ -52,42 +55,45 @@ bool prot_marshal_send(struct prot_request_m* req,
         return false;
     }
 
-    marshal_hdr_impl(req->hdr, PROT_CMD_SEND, PROT_STAT_OK, namelen);
+    /* 16 for the offset and len fields; +1 for terminating '\0' */
+    const uint64_t body_len = 16 + namelen + 1;
+
+    uint8_t* p = marshal_hdr_impl(req->hdr, cmd, PROT_STAT_OK, body_len);
+
+    /* Offset */
+    memcpy(p, &offset, 8);
+    p += 8;
+
+    /* Len */
+    memcpy(p, &len, 8);
+    p += 8;
 
     req->filename = filename;
 
     req->iovs[0].iov_base = req->hdr;
-    req->iovs[0].iov_len = PROT_HDR_SIZE;
+    assert ((p - req->hdr) == PROT_REQ_BASE_SIZE);
+    req->iovs[0].iov_len = (size_t)(p - req->hdr);
 
     req->iovs[1].iov_base = (void*)req->filename;
-    req->iovs[1].iov_len = namelen;
+    req->iovs[1].iov_len = namelen + 1; /* Include the terminating '\0' */
 
     return true;
 }
 
-bool prot_marshal_read(struct prot_request_m* req,
-                       const char* filename)
+bool prot_marshal_send(struct prot_request_m* req,
+                       const char* filename,
+                       const uint64_t offset,
+                       const uint64_t len)
 {
-    const uint64_t namelen = (filename ?
-                              strnlen(filename, PROT_FILENAME_MAX + 1) :
-                              0);
+    return marshal_req(req, PROT_CMD_SEND, offset, len, filename);
+}
 
-    if (namelen == PROT_FILENAME_MAX + 1) {
-        errno = ENAMETOOLONG;
-        return false;
-    }
-
-    marshal_hdr_impl(req->hdr, PROT_CMD_READ, PROT_STAT_OK, namelen);
-
-    req->filename = filename;
-
-    req->iovs[0].iov_base = req->hdr;
-    req->iovs[0].iov_len = PROT_HDR_SIZE;
-
-    req->iovs[1].iov_base = (void*)req->filename;
-    req->iovs[1].iov_len = namelen;
-
-    return true;
+bool prot_marshal_read(struct prot_request_m* req,
+                       const char* filename,
+                       const uint64_t offset,
+                       const uint64_t len)
+{
+    return marshal_req(req, PROT_CMD_READ, offset, len, filename);
 }
 
 void prot_marshal_stat(struct prot_file_stat_m* pdu, const uint64_t file_size)
@@ -136,13 +142,20 @@ int prot_unmarshal_request(struct prot_request* pdu, const void* buf)
     if (pdu->cmd != PROT_CMD_SEND && pdu->cmd != PROT_CMD_READ)
         return -1;
 
-    if (pdu->body_len > 0) {
-        pdu->filename = (char*)p;
-        return 0;
-    } else {
+    /* offset + len + 1-char filename and its NUL (minimum filename length) */
+    if (pdu->body_len < (8 + 8 + 2)) {
         pdu->filename = NULL;
-        return pdu->stat;
+        return -1;
     }
+
+    memcpy(&pdu->offset, p, 8);
+    p += 8;
+    memcpy(&pdu->len, p, 8);
+    p += 8;
+
+    pdu->filename = (char*)p;
+
+    return 0;
 }
 
 int prot_unmarshal_stat(struct prot_file_stat* pdu, const void* buf)

@@ -48,6 +48,7 @@ unix_sockets_linux.c \
 
 src_test:=\
 test_fiod.cpp\
+test_protocol.cpp\
 test_utils.cpp\
 
 src_all := $(src_c) $(src_test)

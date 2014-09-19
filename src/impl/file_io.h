@@ -4,6 +4,7 @@
 #include <sys/types.h>
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 
 #pragma GCC diagnostic push
@@ -23,6 +24,6 @@ void file_close(struct file*);
 
 off_t file_offset(const struct file*);
 
-ssize_t file_splice(struct file* file, int fd);
+ssize_t file_splice(struct file* file, int fd, uint64_t offset, uint64_t count);
 
 #endif

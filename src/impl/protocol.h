@@ -24,11 +24,19 @@ enum {
 };
 
 #define PROT_HDR_SIZE 10        /* cmd{1} + stat{1} + len{8} */
-#define PROT_FILENAME_MAX 512
 
-#define PROT_REQ_MAXSIZE (PROT_HDR_SIZE + PROT_FILENAME_MAX)
+#define PROT_FILENAME_MAX 512   /* Excludes the terminating '\0' */
+
+/* Size of file operation request PDU minus the filename */
+#define PROT_REQ_BASE_SIZE (PROT_HDR_SIZE + 8 + 8)
+
+/* Maximum size of a file operation request PDU */
+#define PROT_REQ_MAXSIZE (PROT_REQ_BASE_SIZE + PROT_FILENAME_MAX + 1)
+
+/* Size of a status PDU  */
 #define PROT_STAT_SIZE (PROT_HDR_SIZE + 8)
 
+/* Maximum PDU size */
 #define PROT_PDU_MAXSIZE PROT_REQ_MAXSIZE
 
 #pragma GCC diagnostic push
@@ -43,6 +51,8 @@ enum {
 
 struct prot_request {
     PROT_HDR_FIELDS;
+    uint64_t offset;
+    uint64_t len;
     const char* filename;
 };
 
@@ -59,7 +69,7 @@ struct prot_hdr_m {
 
 /* A marshaled request PDU */
 struct prot_request_m {
-    uint8_t hdr [PROT_HDR_SIZE];
+    uint8_t hdr [PROT_REQ_BASE_SIZE];
     const char* filename;
     struct iovec iovs[2];
 };
@@ -80,9 +90,11 @@ extern "C" {
                           int stat,
                           uint64_t len);
 
-    bool prot_marshal_send(struct prot_request_m* req, const char* filename);
+    bool prot_marshal_send(struct prot_request_m* req, const char* filename,
+                           uint64_t offset, uint64_t len);
 
-    bool prot_marshal_read(struct prot_request_m* req, const char* filename);
+    bool prot_marshal_read(struct prot_request_m* req, const char* filename,
+                           uint64_t offset, uint64_t len);
 
     void prot_marshal_stat(struct prot_file_stat_m* pdu, uint64_t val);
 

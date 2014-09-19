@@ -43,35 +43,6 @@ const std::string FiodFix::file_contents {"1234567890"};
 
 } // namespace
 
-TEST(Fiod, unmarshal_error_status)
-{
-    struct prot_file_stat stat;
-
-    std::uint8_t buf[PROT_STAT_SIZE] {}; // Zeroes body_len field
-    buf[0] = PROT_CMD_STAT;
-    buf[1] = ENOENT;
-
-    EXPECT_EQ(ENOENT, prot_unmarshal_stat(&stat, buf));
-    EXPECT_EQ(PROT_CMD_STAT, stat.cmd);
-    EXPECT_EQ(ENOENT, stat.stat);
-    EXPECT_EQ(0, stat.body_len);
-}
-
-TEST(Fiod, unmarshal_invalid_cmd)
-{
-    struct prot_file_stat stat;
-
-    std::uint8_t buf[PROT_STAT_SIZE] {};
-    buf[0] = 0xFF;
-    buf[1] = PROT_STAT_OK;
-    buf[2] = 111;
-
-    EXPECT_EQ(-1, prot_unmarshal_stat(&stat, buf));
-    EXPECT_EQ(0xFF, stat.cmd);
-    EXPECT_EQ(PROT_STAT_OK, stat.stat);
-    EXPECT_EQ(111, stat.body_len);
-}
-
 // Non-existent file should respond to request with status message containing
 // ENOENT.
 TEST_F(FiodFix, file_not_found)
@@ -173,6 +144,37 @@ TEST_F(FiodFix, read)
     const std::string recvd_file(reinterpret_cast<const char*>(buf),
                                  file_contents.size());
     EXPECT_EQ(file_contents, recvd_file);
+
+    close(data_fd);
+}
+
+TEST_F(FiodFix, read_range)
+{
+    constexpr loff_t offset {3};
+    constexpr size_t len {5};
+
+    const int data_fd = fiod_read(srv_fd, file.name().c_str(), offset, len);
+    ASSERT_NE(-1, data_fd);
+
+    uint8_t buf [PROT_PDU_MAXSIZE];
+    ssize_t nread;
+    struct prot_file_stat ack;
+
+    // Request ACK
+    nread = read(data_fd, buf, PROT_STAT_SIZE);
+    ASSERT_EQ(PROT_STAT_SIZE, nread);
+    ASSERT_EQ(0, prot_unmarshal_stat(&ack, buf));
+    EXPECT_EQ(PROT_CMD_STAT, ack.cmd);
+    EXPECT_EQ(PROT_STAT_OK, ack.stat);
+    EXPECT_EQ(8, ack.body_len);
+    EXPECT_EQ(len, ack.size);
+
+    // File content
+    nread = read(data_fd, buf, sizeof(buf));
+    ASSERT_EQ(len, nread);
+    const std::string recvd_file(reinterpret_cast<const char*>(buf), len);
+    std::printf("recvd_file: %s\n", recvd_file.c_str());
+    EXPECT_EQ(0, memcmp(buf, file_contents.c_str() + offset, len));
 
     close(data_fd);
 }
