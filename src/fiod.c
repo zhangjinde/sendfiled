@@ -6,6 +6,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,6 +21,8 @@
 #include "fiod.h"
 
 int fiod_pipe(int fds[2], int flags);
+
+static int wait_child(pid_t pid);
 
 pid_t fiod_spawn(const char* name, const char* root, const int maxfiles)
 {
@@ -40,11 +43,28 @@ pid_t fiod_spawn(const char* name, const char* root, const int maxfiles)
     } else if (pid > 0) {
         close(pfd[1]);
 
-        int b = 0;
-        if (read(pfd[0], &b, 1) != 1) {
-            fprintf(stderr, "%s: read error synching with child\n", __func__);
+        int err;
+        if (read(pfd[0], &err, sizeof(int)) != sizeof(int)) {
+            LOGERRNO("Read error synching with child\n");
             close(pfd[0]);
             return -1;
+        }
+
+        if (err != 0) {
+            if (err == EADDRINUSE) {
+                printf("%s: daemon named '%s' already running"
+                       " (UNIX socket exists)\n",
+                       __func__, name);
+                wait_child(pid);
+                return 0;
+
+            } else {
+                fprintf(stderr, "%s: child failed with errno %d [%s]\n",
+                        __func__, err, strerror(err));
+                close(pfd[0]);
+                wait_child(pid);
+                return -1;
+            }
         }
 
         close(pfd[0]);
@@ -55,17 +75,21 @@ pid_t fiod_spawn(const char* name, const char* root, const int maxfiles)
 
     proc_common_init(root, pfd[1]);
 
+    int err = 0;
+
     const int listenfd = us_serve(name);
     if (listenfd == -1)
-        exit(EXIT_FAILURE);
+        err = errno;
 
-    int b = 1;
-    if (write(pfd[1], &b, 1) != 1) {
-        fprintf(stderr, "%s: write error synching with parent\n", __func__);
-        return false;
+    if (write(pfd[1], &err, sizeof(int)) != sizeof(int)) {
+        LOGERRNO("Write error synching with parent\n");
+        exit(EXIT_FAILURE);
     }
 
     close(pfd[1]);
+
+    if (err != 0)
+        exit(EXIT_FAILURE);
 
     const bool success = srv_run(listenfd, maxfiles);
 
@@ -89,13 +113,7 @@ int fiod_shutdown(const pid_t pid)
         return -1;
     }
 
-    int status;
-    if (waitpid(pid, &status, 0) == -1) {
-        LOGERRNOV("waitpid(%d) failed\n", pid);
-        return -1;
-    }
-
-    return status;
+    return wait_child(pid);
 }
 
 int fiod_send(int srv_sockfd,
@@ -160,3 +178,15 @@ int fiod_read(const int sockfd,
 }
 
 /* -------------- Internal implementations ------------ */
+
+static int wait_child(pid_t pid)
+{
+    int stat;
+
+    if (waitpid(pid, &stat, 0) == -1) {
+        LOGERRNOV("waitpid(%d) failed\n", pid);
+        return -1;
+    }
+
+    return stat;
+}

@@ -3,6 +3,6 @@
 
 void proc_common_init(const char* root, int highest_fd);
 
-int daemonise(void);
+int proc_daemonise(void);
 
 #endif

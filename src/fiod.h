@@ -41,6 +41,7 @@ extern "C" {
        @param maxfiles The maximum number of open files
 
        @retval >0 The process id
+       @retval 0 Process of same name was already running
        @retval -1 An error occurred (see @a errno)
      */
     pid_t fiod_spawn(const char* name,

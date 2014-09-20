@@ -13,7 +13,7 @@ struct FiodFix : public ::testing::Test {
         const std::string srvname {"testing123"};
 
         srv_pid = fiod_spawn(srvname.c_str(), "/tmp", 10);
-        if (srv_pid <= 0)
+        if (srv_pid == -1)
             throw std::runtime_error("Couldn't start daemon");
 
         srv_fd = fiod_connect(srvname.c_str());
@@ -22,12 +22,15 @@ struct FiodFix : public ::testing::Test {
     }
 
     ~FiodFix() {
-        const int status = fiod_shutdown(srv_pid);
+        if (srv_pid > 0) {
+            const int status = fiod_shutdown(srv_pid);
+            if (!WIFEXITED(status))
+                std::fprintf(stderr, "Daemon has not exited\n");
+            if (WEXITSTATUS(status) != EXIT_SUCCESS)
+                std::fprintf(stderr, "Daemon did not shut down cleanly\n");
+        }
+
         close(srv_fd);
-        if (!WIFEXITED(status))
-            std::fprintf(stderr, "Daemon has not exited\n");
-        if (WEXITSTATUS(status) != EXIT_SUCCESS)
-            std::fprintf(stderr, "Daemon did not shut down cleanly\n");
     }
 
     int srv_fd;

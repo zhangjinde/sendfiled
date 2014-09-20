@@ -17,8 +17,15 @@ void proc_common_init(const char* root, const int highest_fd)
         fprintf(stderr, "%s: can’t change directory to %s", __func__, root);
 
     /* Close all open file descriptors */
-    if (rl.rlim_max == RLIM_INFINITY)
-        rl.rlim_max = 1024;
-    for (int i = highest_fd + 1; i < (int)rl.rlim_max; i++)
-        close(i);
+    if (highest_fd >= 0) {
+        if (rl.rlim_max == RLIM_INFINITY)
+            rl.rlim_max = 1024;
+        for (int i = highest_fd + 1; i < (int)rl.rlim_max; i++)
+            close(i);
+    }
+}
+
+int proc_daemonise(void)
+{
+    return -1;
 }

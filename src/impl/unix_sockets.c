@@ -13,6 +13,7 @@
 #include <time.h>
 
 #include "../attributes.h"
+#include "errors.h"
 #include "unix_sockets.h"
 
 #define MAXFDS 2
@@ -35,8 +36,6 @@ int us_serve(const char* name)
         return -1;
     }
 
-    unlink(name);
-
     const int fd = us_socket(AF_UNIX, SOCK_DGRAM, 0);
     if (fd == -1)
         return -1;
@@ -51,9 +50,12 @@ int us_serve(const char* name)
 
     return fd;
 
- fail:                          /* socket() */
-    close(fd);
-    return -1;
+ fail: {
+        const int tmp = errno;
+        close(fd);
+        errno = tmp;
+        return -1;
+    }
 }
 
 void us_stop_serving(const char* name, const int listenfd)

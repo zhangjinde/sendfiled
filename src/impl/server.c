@@ -113,6 +113,11 @@ bool srv_run(const int listenfd, const int maxfds)
     for (;;) {
         const int n = syspoll_poll(ctx.poller);
 
+        if (n == -1) {
+            LOGERRNO("syspoll_poll() failed");
+            break;
+        }
+
         if (!process_events(&ctx, n, recvbuf, PROT_REQ_MAXSIZE))
             break;
     }

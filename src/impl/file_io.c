@@ -18,8 +18,6 @@ static bool set_info(struct file* file)
     file->size = (size_t)st.st_size;
     file->blksize = (int)st.st_blksize;
 
-    printf("XXX %s: size: %ld; blksize: %d\n", __func__, file->size, file->blksize);
-
     return true;
 }
 
@@ -33,16 +31,14 @@ bool file_open_read(struct file* file, const char* name, const loff_t offset)
         return false;
 
     if (!set_info(file))
-        goto fail1;
+        goto fail;
 
-    if (offset > 0) {
-        if (fseeko(file->ptr, offset, SEEK_SET) == -1)
-            goto fail1;
-    }
+    if (offset > 0 && fseeko(file->ptr, offset, SEEK_SET) == -1)
+        goto fail;
 
     return true;
 
- fail1:
+ fail:
     fclose(file->ptr);
     file->ptr = NULL;
 
