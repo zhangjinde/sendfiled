@@ -517,12 +517,13 @@ static void remove_xfer(struct context* ctx, struct xfer* xfer)
 
     ctx->nxfers--;
 
-    /* Manually deregister because it doesn't look like closing the descriptor
-       removes it from epoll in a timely fashion, despite what the manpage
-       says. (I may very well be wrong; I haven't really investigated yet;
-       perhaps there's a dup-like operation being done somewhere, such as
-       sending the fd over a UNIX socket, perhaps? Either way, this fixes the
-       problem for the time being.) */
+    /* The client and server processes share the dest fd's file table entry (it
+       was sent over a UNIX socket), so closing it here will not cause it to be
+       automatically removed from the system poller if the client process has
+       not yet closed *its* copy, and therefore it may be returned again by the
+       next call to syspoll_poll(), *after* the memory associated with it has
+       been freed here.
+    */
     syspoll_deregister(ctx->poller, xfer->dest_fd);
 
     delete_xfer(xfer);
