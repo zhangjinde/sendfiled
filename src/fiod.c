@@ -41,17 +41,21 @@ pid_t fiod_spawn(const char* name, const char* root, const int maxfiles)
         return -1;
 
     } else if (pid > 0) {
+        /* Parent process */
+
         close(pfd[1]);
 
-        int err;
-        if (read(pfd[0], &err, sizeof(int)) != sizeof(int)) {
+        int child_err = 0;
+        if (read(pfd[0], &child_err, sizeof(child_err)) != sizeof(child_err)) {
             LOGERRNO("Read error synching with child\n");
             close(pfd[0]);
             return -1;
         }
 
-        if (err != 0) {
-            if (err == EADDRINUSE) {
+        close(pfd[0]);
+
+        if (child_err != 0) {
+            if (child_err == EADDRINUSE) {
                 printf("%s: daemon named '%s' already running"
                        " (UNIX socket exists)\n",
                        __func__, name);
@@ -60,16 +64,16 @@ pid_t fiod_spawn(const char* name, const char* root, const int maxfiles)
 
             } else {
                 fprintf(stderr, "%s: child failed with errno %d [%s]\n",
-                        __func__, err, strerror(err));
-                close(pfd[0]);
+                        __func__, child_err, strerror(child_err));
                 wait_child(pid);
                 return -1;
             }
         }
 
-        close(pfd[0]);
         return pid;
     }
+
+    /* Child process */
 
     close(pfd[0]);
 

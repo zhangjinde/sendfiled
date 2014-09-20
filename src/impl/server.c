@@ -517,6 +517,14 @@ static void remove_xfer(struct context* ctx, struct xfer* xfer)
 
     ctx->nxfers--;
 
+    /* Manually deregister because it doesn't look like closing the descriptor
+       removes it from epoll in a timely fashion, despite what the manpage
+       says. (I may very well be wrong; I haven't really investigated yet;
+       perhaps there's a dup-like operation being done somewhere, such as
+       sending the fd over a UNIX socket, perhaps? Either way, this fixes the
+       problem for the time being.) */
+    syspoll_deregister(ctx->poller, xfer->dest_fd);
+
     delete_xfer(xfer);
 }
 
