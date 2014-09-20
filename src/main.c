@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <unistd.h>
 
 #include <limits.h>
@@ -15,27 +17,47 @@ static void print_usage(const char* progname);
 
 int main(const int argc, char** argv)
 {
-    if (argc < 4) {
+    const char* root_dir = NULL;
+    const char* name = NULL;
+    long maxfiles = 0;
+
+    int opt;
+    while ((opt = getopt(argc, argv, "+d:s:n:")) != -1) {
+        switch (opt) {
+        case 'd':
+            root_dir = optarg;
+            break;
+        case 's':
+            name = optarg;
+            break;
+        case 'n': {
+            errno = 0;
+            maxfiles = strtol(optarg, NULL, 10);
+            if (errno != 0 || maxfiles == 0 ||
+                maxfiles == LONG_MIN || maxfiles == LONG_MAX) {
+                const int tmp = errno;
+                fprintf(stderr, "Invalid value '%s' for max files\n", optarg);
+                errno = tmp;
+                if (errno != 0)
+                    LOGERRNO("\n");
+                return EXIT_FAILURE;
+            }
+        } break;
+
+        case '?':
+            return EXIT_FAILURE;
+        default:
+            print_usage(argv[0]);
+            return EXIT_FAILURE;
+        }
+    }
+
+    if (!root_dir || !name || (maxfiles == 0)) {
         print_usage(argv[0]);
         return EXIT_FAILURE;
     }
 
-    const char* root_dir = argv[1];
-    const char* name = argv[2];
-
-    errno = 0;
-    const long maxfiles = strtol(argv[3], NULL, 10);
-    if (errno != 0 || maxfiles == 0 ||
-        maxfiles == LONG_MIN || maxfiles == LONG_MAX) {
-        const int tmp = errno;
-        fprintf(stderr, "Invalid value '%s' for max files\n", argv[3]);
-        errno = tmp;
-        if (errno != 0)
-            LOGERRNO("\n");
-        return EXIT_FAILURE;
-    }
-
-    printf("root dir: %s; name: %s\n", root_dir, name);
+    printf("root dir: %s; name: %s; maxfiles: %ld\n", root_dir, name, maxfiles);
 
     proc_common_init(root_dir, -1);
 
@@ -56,5 +78,6 @@ int main(const int argc, char** argv)
 
 static void print_usage(const char* progname)
 {
-    printf("Usage: %s <root_directory> <server_name>\n", progname);
+    printf("Usage: %s -r <root_directory> -s <server_name> -n <maxfiles>\n",
+           progname);
 }
