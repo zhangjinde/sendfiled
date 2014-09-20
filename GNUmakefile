@@ -61,6 +61,9 @@ $(builddir)/test_%.cpp.o: CXXFLAGS += -Wno-error
 .PHONY: all
 all: $(builddir)/$(target) $(builddir)/$(target_so)
 
+.PHONY: build_tests
+build_tests: $(builddir)/$(test_target)
+
 ifneq ($(MAKECMDGOALS), clean)
 -include $(src_all:%=$(builddir)/%.d)
 endif

@@ -5,23 +5,23 @@
 #include "fiod.h"
 #include "impl/protocol.h"
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wexit-time-destructors"
+#pragma GCC diagnostic ignored "-Wpadded"
+
 namespace {
 struct FiodFix : public ::testing::Test {
+    static const std::string srvname;
+    static pid_t srv_pid;
     static const std::string file_contents;
 
-    FiodFix() : file(file_contents) {
-        const std::string srvname {"testing123"};
-
+    static void SetUpTestCase() {
         srv_pid = fiod_spawn(srvname.c_str(), "/tmp", 10);
         if (srv_pid == -1)
             throw std::runtime_error("Couldn't start daemon");
-
-        srv_fd = fiod_connect(srvname.c_str());
-        if (srv_fd == -1)
-            throw std::runtime_error("Couldn't connect to daemon");
     }
 
-    ~FiodFix() {
+    static void TearDownTestCase() {
         if (srv_pid > 0) {
             const int status = fiod_shutdown(srv_pid);
             if (!WIFEXITED(status))
@@ -29,18 +29,24 @@ struct FiodFix : public ::testing::Test {
             if (WEXITSTATUS(status) != EXIT_SUCCESS)
                 std::fprintf(stderr, "Daemon did not shut down cleanly\n");
         }
+    }
 
+    FiodFix() : file(file_contents) {
+        srv_fd = fiod_connect(srvname.c_str());
+        if (srv_fd == -1)
+            throw std::runtime_error("Couldn't connect to daemon");
+    }
+
+    ~FiodFix() {
         close(srv_fd);
     }
 
     int srv_fd;
-    pid_t srv_pid;
     test::TmpFile file;
 };
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wexit-time-destructors"
-
+const std::string FiodFix::srvname {"testing123"};
+pid_t FiodFix::srv_pid;
 const std::string FiodFix::file_contents {"1234567890"};
 
 #pragma GCC diagnostic pop
