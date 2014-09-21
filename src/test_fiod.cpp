@@ -18,17 +18,16 @@ namespace {
 struct FiodFix : public ::testing::Test {
     static const std::string srvname;
     static pid_t srv_pid;
-    static const std::string file_contents;
 
     static void SetUpTestCase() {
-        srv_pid = fiod_spawn(srvname.c_str(), "/tmp", 10);
+        srv_pid = fiod_spawn(srvname.c_str(), "/tmp", 1000);
         if (srv_pid == -1)
             throw std::runtime_error("Couldn't start daemon");
     }
 
     static void TearDownTestCase() {
         if (srv_pid > 0) {
-            const int status = fiod_shutdown(srv_pid);
+            const int status {fiod_shutdown(srv_pid)};
             if (!WIFEXITED(status))
                 std::fprintf(stderr, "Daemon has not exited\n");
             if (WEXITSTATUS(status) != EXIT_SUCCESS)
@@ -36,8 +35,7 @@ struct FiodFix : public ::testing::Test {
         }
     }
 
-    FiodFix() : file(file_contents) {
-        srv_fd = fiod_connect(srvname.c_str());
+    FiodFix() : srv_fd(fiod_connect(srvname.c_str())) {
         if (srv_fd == -1)
             throw std::runtime_error("Couldn't connect to daemon");
     }
@@ -47,12 +45,49 @@ struct FiodFix : public ::testing::Test {
     }
 
     int srv_fd;
-    test::TmpFile file;
 };
 
 const std::string FiodFix::srvname {"testing123"};
 pid_t FiodFix::srv_pid;
-const std::string FiodFix::file_contents {"1234567890"};
+
+struct FiodFixSmallFile : public FiodFix {
+    static const std::string file_contents;
+
+    FiodFixSmallFile() : file(file_contents) {
+    }
+
+    ~FiodFixSmallFile() {
+    }
+
+    test::TmpFile file;
+};
+
+const std::string FiodFixSmallFile::file_contents {"1234567890"};
+
+struct FiodFixLargeFile : public FiodFix {
+    static constexpr int NCHUNKS {1024};
+
+    static void SetUpTestCase() {
+        FiodFix::SetUpTestCase();
+        std::iota(file_chunk.begin(), file_chunk.end(), 0);
+    }
+
+    FiodFixLargeFile() {
+        for (int i = 0; i < NCHUNKS; i++)
+            std::fwrite(file_chunk.data(), 1, file_chunk.size(), file);
+
+        file.close();
+    }
+
+    ~FiodFixLargeFile() {
+    }
+
+    test::TmpFile file;
+    static std::vector<std::uint8_t> file_chunk;
+};
+
+constexpr int FiodFixLargeFile::NCHUNKS;
+std::vector<std::uint8_t> FiodFixLargeFile::file_chunk(1024);
 
 #pragma GCC diagnostic pop
 
@@ -60,7 +95,7 @@ const std::string FiodFix::file_contents {"1234567890"};
 
 // Non-existent file should respond to request with status message containing
 // ENOENT.
-TEST_F(FiodFix, file_not_found)
+TEST_F(FiodFixSmallFile, file_not_found)
 {
     int data_pipe[2];
 
@@ -89,7 +124,7 @@ TEST_F(FiodFix, file_not_found)
     close(data_pipe[0]);
 }
 
-TEST_F(FiodFix, send)
+TEST_F(FiodFixSmallFile, send)
 {
     // Pipe to which file will be written
     int data_pipe[2];
@@ -138,7 +173,7 @@ TEST_F(FiodFix, send)
     close(stat_fd);
 }
 
-TEST_F(FiodFix, read)
+TEST_F(FiodFixSmallFile, read)
 {
     const int data_fd = fiod_read(srv_fd, file.name().c_str(), 0, 0);
     ASSERT_NE(-1, data_fd);
@@ -166,7 +201,7 @@ TEST_F(FiodFix, read)
     close(data_fd);
 }
 
-TEST_F(FiodFix, read_range)
+TEST_F(FiodFixSmallFile, read_range)
 {
     constexpr loff_t offset {3};
     constexpr size_t len {5};
@@ -197,20 +232,9 @@ TEST_F(FiodFix, read_range)
     close(data_fd);
 }
 
-TEST_F(FiodFix, read_large_file)
+TEST_F(FiodFixLargeFile, read_large_file)
 {
-    test::TmpFile file2;
-
-    std::vector<std::uint8_t> file_chunk(1024);
-    std::iota(file_chunk.begin(), file_chunk.end(), 0);
-
-    for (int i = 0; i < 1024; i++) {
-        std::fwrite(file_chunk.data(), 1, file_chunk.size(), file2);
-    }
-
-    file2.close();
-
-    const int data_fd = fiod_read(srv_fd, file2.name().c_str(), 0, 0);
+    const int data_fd = fiod_read(srv_fd, file.name().c_str(), 0, 0);
     ASSERT_NE(-1, data_fd);
 
     uint8_t buf [PROT_PDU_MAXSIZE];
@@ -224,7 +248,7 @@ TEST_F(FiodFix, read_large_file)
     EXPECT_EQ(PROT_CMD_STAT, ack.cmd);
     EXPECT_EQ(PROT_STAT_OK, ack.stat);
     EXPECT_EQ(8, ack.body_len);
-    EXPECT_EQ(1024 * 1024, ack.size);
+    EXPECT_EQ(file_chunk.size() * NCHUNKS, ack.size);
 
     // File content
     size_t nchunks {};
@@ -247,12 +271,12 @@ TEST_F(FiodFix, read_large_file)
             nchunks++;
         }
 
-        if (nchunks == 1024) {
+        if (nchunks == NCHUNKS) {
             break;
         }
     }
 
-    EXPECT_EQ(1024, nchunks);
+    EXPECT_EQ(NCHUNKS, nchunks);
 
     close(data_fd);
 }
