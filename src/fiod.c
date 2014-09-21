@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/uio.h>
@@ -12,6 +13,7 @@
 #include <string.h>
 
 #include "impl/errors.h"
+#include "impl/fiod.h"
 #include "impl/process.h"
 #include "impl/protocol.h"
 #include "impl/server.h"
@@ -20,8 +22,7 @@
 #include "attributes.h"
 #include "fiod.h"
 
-int fiod_pipe(int fds[2], int flags);
-
+static int set_blocking(int fd);
 static int wait_child(pid_t pid);
 
 pid_t fiod_spawn(const char* name, const char* root, const int maxfiles)
@@ -29,7 +30,7 @@ pid_t fiod_spawn(const char* name, const char* root, const int maxfiles)
     /* Pipe used to sync with child */
     int pfd[2];
 
-    if (fiod_pipe(pfd, 0) == -1)
+    if (fiod_pipe(pfd, O_CLOEXEC) == -1)
         return -1;
 
     const pid_t pid = fork();
@@ -124,28 +125,32 @@ int fiod_send(int srv_sockfd,
               const char* filename,
               int dest_sockfd,
               const loff_t offset,
-              const size_t len)
+              const size_t len,
+              const bool stat_fd_nonblock)
 {
     int fds[3];
 
-    if (pipe(fds) == -1)
+    if (fiod_pipe(fds, O_NONBLOCK | O_CLOEXEC) == -1)
         return -1;
+
+    if (!stat_fd_nonblock && set_blocking(fds[0]) == -1)
+        goto fail;
 
     fds[2] = dest_sockfd;
 
     struct prot_request_m req;
     if (!prot_marshal_send(&req, filename, offset, len))
-        goto fail1;
+        goto fail;
 
     if (us_sendv(srv_sockfd, req.iovs, 2, &fds[1], 2) == -1)
-        goto fail1;
+        goto fail;
 
     /* No use for the write end of the pipe in this process */
     close (fds[1]);
 
     return fds[0];
 
- fail1:
+ fail:
     close(fds[0]);
     close(fds[1]);
 
@@ -155,26 +160,31 @@ int fiod_send(int srv_sockfd,
 int fiod_read(const int sockfd,
               const char* filename,
               const loff_t offset,
-              const size_t len)
+              const size_t len,
+              const bool dest_fd_nonblock)
 {
     int fds[2];
 
-    if (pipe(fds) == -1)
+    if (fiod_pipe(fds, O_NONBLOCK | O_CLOEXEC) == -1)
         return -1;
+
+    if (!dest_fd_nonblock && set_blocking(fds[0]) == -1)
+        goto fail;
 
     struct prot_request_m req;
     if (!prot_marshal_read(&req, filename, offset, len))
-        goto fail1;
+        goto fail;
 
-    if (us_sendv(sockfd, req.iovs, 2, &fds[1], 1) == -1)
-        goto fail1;
+    const ssize_t nsent = us_sendv(sockfd, req.iovs, 2, &fds[1], 1);
+    if (nsent == -1)
+        goto fail;
 
     /* No use for the write end of the pipe in this process */
     close (fds[1]);
 
     return fds[0];
 
- fail1:
+ fail:
     close(fds[0]);
     close(fds[1]);
 
@@ -182,6 +192,17 @@ int fiod_read(const int sockfd,
 }
 
 /* -------------- Internal implementations ------------ */
+
+static int set_blocking(const int fd)
+{
+    int val = fcntl(fd, F_GETFL, 0);
+    if (val == -1)
+        return -1;
+
+    val &= ~O_NONBLOCK;
+
+    return fcntl(fd, F_SETFL, val);
+}
 
 static int wait_child(pid_t pid)
 {

@@ -82,7 +82,8 @@ extern "C" {
     int fiod_send(int srv_sockfd,
                   const char* filename,
                   int dest_sockfd,
-                  loff_t offset, size_t len) DSO_EXPORT;
+                  loff_t offset, size_t len,
+                  const bool stat_fd_nonblock) DSO_EXPORT;
 
     /**
        Reads a file into a pipe.
@@ -102,7 +103,8 @@ extern "C" {
      */
     int fiod_read(int sockfd,
                   const char* filename,
-                  loff_t offset, size_t len) DSO_EXPORT;
+                  loff_t offset, size_t len,
+                  bool dest_fd_nonblock) DSO_EXPORT;
 
     /**
        @}

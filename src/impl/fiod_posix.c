@@ -1,9 +1,9 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-int fiod_pipe(int fds[2]);
+#include "fiod.h"
 
-int fiod_pipe(int fds[2])
+int fiod_pipe(int fds[2], const int flags)
 {
     if (pipe(fds) == -1)
         return -1;

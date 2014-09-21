@@ -173,7 +173,6 @@ static bool process_events(struct context* ctx,
                 remove_xfer(ctx, xfer);
 
             } else if (!process_file_op(xfer) || xfer_complete(xfer)) {
-                printf("%s: file operation complete; removing\n", __func__);
                 remove_xfer(ctx, xfer);
             }
         }

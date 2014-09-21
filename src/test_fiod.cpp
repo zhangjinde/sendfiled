@@ -104,7 +104,7 @@ TEST_F(FiodFixSmallFile, file_not_found)
     const int stat_fd = fiod_send(srv_fd,
                                   (file.name() + "XXXXXXXXX").c_str(),
                                   data_pipe[1],
-                                  0, 0);
+                                  0, 0, false);
     ASSERT_NE(-1, stat_fd);
 
     close(data_pipe[1]);
@@ -134,7 +134,7 @@ TEST_F(FiodFixSmallFile, send)
     const int stat_fd = fiod_send(srv_fd,
                                   file.name().c_str(),
                                   data_pipe[1],
-                                  0, 0);
+                                  0, 0, false);
     ASSERT_NE(-1, stat_fd);
 
     close(data_pipe[1]);
@@ -175,7 +175,7 @@ TEST_F(FiodFixSmallFile, send)
 
 TEST_F(FiodFixSmallFile, read)
 {
-    const int data_fd = fiod_read(srv_fd, file.name().c_str(), 0, 0);
+    const int data_fd = fiod_read(srv_fd, file.name().c_str(), 0, 0, false);
     ASSERT_NE(-1, data_fd);
 
     uint8_t buf [PROT_PDU_MAXSIZE];
@@ -206,7 +206,7 @@ TEST_F(FiodFixSmallFile, read_range)
     constexpr loff_t offset {3};
     constexpr size_t len {5};
 
-    const int data_fd = fiod_read(srv_fd, file.name().c_str(), offset, len);
+    const int data_fd = fiod_read(srv_fd, file.name().c_str(), offset, len, false);
     ASSERT_NE(-1, data_fd);
 
     uint8_t buf [PROT_PDU_MAXSIZE];
@@ -234,7 +234,7 @@ TEST_F(FiodFixSmallFile, read_range)
 
 TEST_F(FiodFixLargeFile, read_large_file)
 {
-    const int data_fd = fiod_read(srv_fd, file.name().c_str(), 0, 0);
+    const int data_fd = fiod_read(srv_fd, file.name().c_str(), 0, 0, false);
     ASSERT_NE(-1, data_fd);
 
     uint8_t buf [PROT_PDU_MAXSIZE];
@@ -279,4 +279,73 @@ TEST_F(FiodFixLargeFile, read_large_file)
     EXPECT_EQ(NCHUNKS, nchunks);
 
     close(data_fd);
+}
+
+TEST_F(FiodFixLargeFile, multiple_clients)
+{
+    constexpr int nclients {10};
+
+    struct client {
+        int data_fd {};
+        std::size_t nchunks {};
+        std::size_t nread_chunk {};
+    };
+
+    client clients [nclients];
+
+    for (int i = 0; i < nclients; i++) {
+        client& cli {clients[i]};
+        cli.data_fd = fiod_read(srv_fd, file.name().c_str(), 0, 0, false);
+        ASSERT_NE(-1, cli.data_fd);
+
+        uint8_t buf [PROT_PDU_MAXSIZE];
+        ssize_t nread;
+        struct prot_file_stat ack;
+
+        // Request ACK
+        nread = read(cli.data_fd, buf, PROT_STAT_SIZE);
+        ASSERT_EQ(PROT_STAT_SIZE, nread);
+        ASSERT_EQ(0, prot_unmarshal_stat(&ack, buf));
+        EXPECT_EQ(PROT_CMD_STAT, ack.cmd);
+        EXPECT_EQ(PROT_STAT_OK, ack.stat);
+        EXPECT_EQ(8, ack.body_len);
+        EXPECT_EQ(file_chunk.size() * NCHUNKS, ack.size);
+    }
+
+    // File content
+    int ndone {};
+    while (ndone < nclients) {
+        for (int i = 0; i < nclients; i++) {
+            client& cli {clients[i]};
+
+            if (cli.nchunks == NCHUNKS)
+                continue;
+
+            ssize_t n = read(cli.data_fd,
+                             file_chunk.data() + cli.nread_chunk,
+                             file_chunk.size() - cli.nread_chunk);
+
+            ASSERT_NE(-1, n);
+            ASSERT_NE(0, n);
+
+            cli.nread_chunk += (size_t)n;
+
+            if (cli.nread_chunk == file_chunk.size()) {
+                for (size_t j = 0; j < file_chunk.size(); j++)
+                    ASSERT_EQ((uint8_t)j, (uint8_t)file_chunk[j]);
+                cli.nread_chunk = 0;
+                cli.nchunks++;
+            }
+
+            if (cli.nchunks == NCHUNKS)
+                ndone++;
+        }
+    }
+
+    for (int i = 0; i < nclients; i++) {
+        client& cli {clients[i]};
+
+        EXPECT_EQ(NCHUNKS, cli.nchunks);
+        close(cli.data_fd);
+    }
 }

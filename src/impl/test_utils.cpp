@@ -5,18 +5,21 @@
 #include "test_utils.hpp"
 
 test::TmpFile::TmpFile() :
-    name_(),
+    name_{},
     fp_{}
 {
-    char name[]{"/tmp/unittesttmpXXXXXX"};
-    const int fd{::mkstemp(name)};
+    char name[] {"/tmp/unittesttmpXXXXXX"};
+
+    const int fd {::mkstemp(name)};
     if (fd == -1)
-        throw std::runtime_error("Couldn't create temporary file (mkstemp)");
+        throw std::runtime_error{"Couldn't create temporary file (mkstemp)"};
+
     name_ = name;
+
     fp_ = ::fdopen(fd, "w");
-    if (fp_ == nullptr) {
+    if (!fp_) {
         this->close();
-        throw std::runtime_error("Couldn't create temporary file (fdopen)");
+        throw std::runtime_error{"Couldn't create temporary file (fdopen)"};
     }
 }
 
