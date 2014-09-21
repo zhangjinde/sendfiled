@@ -315,14 +315,13 @@ static bool process_file_op(struct xfer* xfer)
                 /* FIXME Not sure how to deal with this properly */
                 return true;
 
-            } else {
-                xfer->len -= (size_t)nwritten;
+            }
 
-                if (needs_stat(xfer))
-                    return send_stat(xfer->stat_fd, (size_t)nwritten);
+            xfer->len -= (size_t)nwritten;
 
-                if (xfer->len == 0)
-                    return true;
+            if (xfer->len == 0) {
+                return (!needs_stat(xfer) ||
+                        send_stat(xfer->stat_fd, (size_t)nwritten));
             }
         }
 
