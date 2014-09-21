@@ -64,65 +64,6 @@ void us_stop_serving(const char* name, const int listenfd)
     unlink(name);
 }
 
-static bool cli_sockfile_ok(const char* name, uid_t* uid)
-{
-    struct stat st;
-
-    if (stat(name, &st) == -1)
-        return false;
-
-    if (S_ISSOCK(st.st_mode) == 0 ||
-        (st.st_mode & (S_IRWXG | S_IRWXO)) ||
-        (st.st_mode & S_IRWXU) != S_IRWXU) {
-        return false;
-    }
-
-    const time_t staletime = time(NULL) - 30;
-    if (st.st_atime < staletime ||
-        st.st_ctime < staletime ||
-        st.st_mtime < staletime) {
-        return false;
-    }
-
-    if (uid)
-        *uid = st.st_uid;
-
-    return true;
-}
-
-int us_accept(int listenfd, uid_t* uid)
-{
-    struct sockaddr_un un;
-
-    socklen_t len = sizeof(un);
-
-    const int fd = accept(listenfd, (struct sockaddr*)&un, &len);
-    if (fd == -1)
-        return -1;
-
-    char* name = malloc(sizeof(un.sun_path) + 1);
-    if (!name)
-        goto fail1;
-
-    len -= offsetof(struct sockaddr_un, sun_path);
-    memcpy(name, un.sun_path, len);
-    name[len] = '\0';
-
-    if (!cli_sockfile_ok(name, uid))
-        goto fail2;
-
-    unlink(name);
-    free(name);
-
-    return fd;
-
- fail2:                         /* malloc() */
-    free(name);
- fail1:                         /* accept() */
-    close(fd);
-    return -1;
-}
-
 int us_connect(const char* srvname)
 {
     struct sockaddr_un srv_addr = {

@@ -13,8 +13,6 @@ int us_serve(const char* name);
 
 void us_stop_serving(const char* name, int listenfd);
 
-int us_accept(int fd, uid_t* uid);
-
 int us_connect(const char* server_name);
 
 ssize_t us_sendv(int srv_fd,
