@@ -1,3 +1,8 @@
+#include <unistd.h>
+
+#include <numeric>
+#include <vector>
+
 #include <gtest/gtest.h>
 
 #include "impl/test_utils.hpp"
@@ -188,6 +193,66 @@ TEST_F(FiodFix, read_range)
     const std::string recvd_file(reinterpret_cast<const char*>(buf), len);
     std::printf("recvd_file: %s\n", recvd_file.c_str());
     EXPECT_EQ(0, memcmp(buf, file_contents.c_str() + offset, len));
+
+    close(data_fd);
+}
+
+TEST_F(FiodFix, read_large_file)
+{
+    test::TmpFile file2;
+
+    std::vector<std::uint8_t> file_chunk(1024);
+    std::iota(file_chunk.begin(), file_chunk.end(), 0);
+
+    for (int i = 0; i < 1024; i++) {
+        std::fwrite(file_chunk.data(), 1, file_chunk.size(), file2);
+    }
+
+    file2.close();
+
+    const int data_fd = fiod_read(srv_fd, file2.name().c_str(), 0, 0);
+    ASSERT_NE(-1, data_fd);
+
+    uint8_t buf [PROT_PDU_MAXSIZE];
+    ssize_t nread;
+    struct prot_file_stat ack;
+
+    // Request ACK
+    nread = read(data_fd, buf, PROT_STAT_SIZE);
+    ASSERT_EQ(PROT_STAT_SIZE, nread);
+    ASSERT_EQ(0, prot_unmarshal_stat(&ack, buf));
+    EXPECT_EQ(PROT_CMD_STAT, ack.cmd);
+    EXPECT_EQ(PROT_STAT_OK, ack.stat);
+    EXPECT_EQ(8, ack.body_len);
+    EXPECT_EQ(1024 * 1024, ack.size);
+
+    // File content
+    size_t nchunks {};
+    size_t nread_chunk {};
+
+    for (;;) {
+        ssize_t n = read(data_fd,
+                         file_chunk.data() + nread_chunk,
+                         file_chunk.size() - nread_chunk);
+
+        ASSERT_NE(-1, n);
+        ASSERT_NE(0, n);
+
+        nread_chunk += (size_t)n;
+
+        if (nread_chunk == file_chunk.size()) {
+            for (size_t i = 0; i < file_chunk.size(); i++)
+                ASSERT_EQ((uint8_t)i, (uint8_t)file_chunk[i]);
+            nread_chunk = 0;
+            nchunks++;
+        }
+
+        if (nchunks == 1024) {
+            break;
+        }
+    }
+
+    EXPECT_EQ(1024, nchunks);
 
     close(data_fd);
 }

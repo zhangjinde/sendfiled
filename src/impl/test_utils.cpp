@@ -38,8 +38,10 @@ test::TmpFile::~TmpFile()
 
 void test::TmpFile::close()
 {
-    if (fp_ != nullptr)
+    if (fp_ != nullptr) {
         std::fclose(fp_);
+        fp_ = nullptr;
+    }
 }
 
 const std::string& test::TmpFile::name() const noexcept

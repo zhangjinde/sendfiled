@@ -271,11 +271,12 @@ static bool process_request(struct context* ctx,
                                            pdu.filename,
                                            (loff_t)pdu.offset, pdu.len,
                                            fds[0], fds[1]);
-        printf("XXX fsize: %lu\n", fsize);
+
         if (fsize == 0) {
             send_err(fds[0], errno);
             return false;
         }
+
         send_stat(fds[0], fsize);
     } break;
 
@@ -296,29 +297,34 @@ static bool process_file_op(struct xfer* xfer)
 {
     switch (xfer->cmd) {
     case PROT_CMD_READ:
-    case PROT_CMD_SEND: {
-        const ssize_t nwritten = file_splice(&xfer->file,
-                                             xfer->dest_fd,
-                                             xfer->len);
+    case PROT_CMD_SEND:
+        for (;;) {
+            const ssize_t nwritten = file_splice(&xfer->file,
+                                                 xfer->dest_fd,
+                                                 xfer->len);
 
-        if (nwritten < 0) {
-            if (errno_is_fatal(errno)) {
+            if (nwritten < 0) {
+                if (errno_is_fatal(errno)) {
+                    if (needs_stat(xfer))
+                        send_err(xfer->stat_fd, errno);
+                    return false;
+                }
+                return true;
+
+            } else if (nwritten == 0) {
+                /* FIXME Not sure how to deal with this properly */
+                return true;
+
+            } else {
+                xfer->len -= (size_t)nwritten;
+
                 if (needs_stat(xfer))
-                    send_err(xfer->stat_fd, errno);
-                return false;
+                    return send_stat(xfer->stat_fd, (size_t)nwritten);
+
+                if (xfer->len == 0)
+                    return true;
             }
-            return true;
-
-        } else if (nwritten == 0) {
-            /* FIXME Not sure how to deal with this properly */
-            return false;
-
-        } else {
-            xfer->len -= (size_t)nwritten;
-            return (needs_stat(xfer) &&
-                    send_stat(xfer->stat_fd, (size_t)nwritten));
         }
-    }
 
     case PROT_CMD_CANCEL:
         break;

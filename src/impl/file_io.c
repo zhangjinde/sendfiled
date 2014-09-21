@@ -52,5 +52,5 @@ void file_close(struct file* f)
 
 off_t file_offset(const struct file* file)
 {
-    return ftello(file->ptr);
+    return lseek(fileno(file->ptr), 0, SEEK_CUR);
 }

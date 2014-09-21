@@ -59,7 +59,7 @@ obj_test:=$(src_test:%=$(builddir)/%.o)
 $(builddir)/test_%.cpp.o: CXXFLAGS += -Wno-error
 
 .PHONY: all
-all: $(builddir)/$(target) $(builddir)/$(target_so)
+all: $(builddir)/$(target) $(builddir)/$(target_so) build_tests
 
 .PHONY: build_tests
 build_tests: $(builddir)/$(test_target)
