@@ -84,9 +84,6 @@ int us_connect(const char* srvname)
     strcpy(srv_addr.sun_path, TMPDIR);
     memcpy(srv_addr.sun_path + strlen(TMPDIR), srvname, namelen);
 
-    char xxx[256] = {0};
-    memcpy(xxx, srv_addr.sun_path, strlen(TMPDIR) + namelen);
-
     socklen_t len = (socklen_t)(offsetof(struct sockaddr_un, sun_path) +
                                 strlen(TMPDIR) + namelen);
 
