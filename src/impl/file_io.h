@@ -6,18 +6,13 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpadded"
-
 struct file {
-    FILE* ptr;
     size_t size;
+    int fd;
     int blksize;
 };
 
-#pragma GCC diagnostic pop
-
-bool file_open_read(struct file* file, const char* name, loff_t offset);
+bool file_open_read(struct file* file, const char* name, off_t offset);
 
 void file_close(struct file*);
 

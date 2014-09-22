@@ -373,7 +373,11 @@ static void context_destruct(struct context* ctx)
 
 static bool xfer_complete(const struct xfer* x)
 {
-    return ((size_t)file_offset(&x->file) == x->file.size);
+    const off_t offset = file_offset(&x->file);
+    if (offset == -1)
+        return false;
+
+    return ((size_t)offset == x->file.size);
 }
 
 static bool errno_is_fatal(const int err)

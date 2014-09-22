@@ -1,56 +1,59 @@
 #define _POSIX_C_SOURCE 200809L /* for fileno */
 
+#include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include <stdio.h>
-
 #include "file_io.h"
 
-static bool set_info(struct file* file)
-{
-    struct stat st;
+static bool set_fstat(struct file* file);
 
-    if (fstat(fileno(file->ptr), &st) == -1)
-        return false;
-
-    file->size = (size_t)st.st_size;
-    file->blksize = (int)st.st_blksize;
-
-    return true;
-}
-
-bool file_open_read(struct file* file, const char* name, const loff_t offset)
+bool file_open_read(struct file* file, const char* name, const off_t offset)
 {
     *file = (struct file) {
-        .ptr = fopen(name, "rb")
+        .fd = open(name, O_RDONLY)
     };
 
-    if (!file->ptr)
+    if (file->fd == -1)
         return false;
 
-    if (!set_info(file))
+    if (!set_fstat(file))
         goto fail;
 
-    if (offset > 0 && fseeko(file->ptr, offset, SEEK_SET) == -1)
+    if (offset > 0 && lseek(file->fd, offset, SEEK_SET) == -1)
         goto fail;
 
     return true;
 
  fail:
-    fclose(file->ptr);
-    file->ptr = NULL;
+    close(file->fd);
+    file->fd = -1;
 
     return false;
 }
 
 void file_close(struct file* f)
 {
-    fclose(f->ptr);
+    close(f->fd);
 }
 
 off_t file_offset(const struct file* file)
 {
-    return lseek(fileno(file->ptr), 0, SEEK_CUR);
+    return lseek(file->fd, 0, SEEK_CUR);
+}
+
+/* ------------------ Internal implementations ---------------- */
+
+static bool set_fstat(struct file* file)
+{
+    struct stat st;
+
+    if (fstat(file->fd, &st) == -1)
+        return false;
+
+    file->size = (size_t)st.st_size;
+    file->blksize = (int)st.st_blksize;
+
+    return true;
 }
