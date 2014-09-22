@@ -169,9 +169,9 @@ ssize_t us_recv(int srv_fd,
                                              (char*)cmsg);
             const size_t payload_size = (cmsg->cmsg_len - data_off);
 
-            memcpy(recvd_fds, CMSG_DATA(cmsg), sizeof(int) * *nfds);
-
             *nfds = (payload_size / sizeof(int));
+
+            memcpy(recvd_fds, CMSG_DATA(cmsg), sizeof(int) * *nfds);
         }
     }
 
