@@ -123,7 +123,7 @@ int fiod_shutdown(const pid_t pid)
 
 int fiod_send(int srv_sockfd,
               const char* filename,
-              int dest_sockfd,
+              int dest_fd,
               const loff_t offset,
               const size_t len,
               const bool stat_fd_nonblock)
@@ -136,7 +136,7 @@ int fiod_send(int srv_sockfd,
     if (!stat_fd_nonblock && set_blocking(fds[0]) == -1)
         goto fail;
 
-    fds[2] = dest_sockfd;
+    fds[2] = dest_fd;
 
     struct prot_request_m req;
     if (!prot_marshal_send(&req, filename, offset, len))

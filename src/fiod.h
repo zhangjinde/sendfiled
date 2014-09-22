@@ -54,7 +54,7 @@ extern "C" {
        @param name The server instance name
 
        @retval >0 The request channel socket file descriptor
-       @retval <0 An error occurred
+       @retval -1 An error occurred
      */
     int fiod_connect(const char* name) DSO_EXPORT;
 
@@ -70,38 +70,64 @@ extern "C" {
     */
 
     /**
-       Sends a file over a socket.
+       Sends a file over a user-supplied file descriptor.
 
-       The result of each I/O operation will be reported on the returned pipe
-       file descriptor.
+       The result of each I/O operation will be reported on the status channel
+       (the returned file descriptor).
 
-       @param[in] sockfd The socket over which to send the file.
+       @param srv_sockfd A socket connected to the server (see fiod_connect())
 
-       @return The read end of the pipe on which status will be reported.
+       @param filename The name of the file to be sent
+
+       @param dest_fd The descriptor to which the file will be written (the
+       'data channel')
+
+       @param offset The start file offset
+
+       @param len The number of bytes from the file to be sent
+
+       @param stat_fd_nonblock Whether or not the status channel file descriptor
+       should be non-blocking.
+
+       @retval >0 The status channel file descriptor
+       @retval -1 An error occurred
+
+       @note This operation is implemented in terms of @a sendfile(2), which
+       places certain constraints on @a dest_fd on some platforms. E.g., on OS X
+       and FreeBSD, the destination descriptor must refer to a socket.
      */
     int fiod_send(int srv_sockfd,
                   const char* filename,
-                  int dest_sockfd,
+                  int dest_fd,
                   loff_t offset, size_t len,
                   const bool stat_fd_nonblock) DSO_EXPORT;
 
     /**
-       Reads a file into a pipe.
+       Splices a file into a pipe.
+
+       The server will write data read from the file into a pipe of which the
+       read end is returned to the caller.
 
        On Linux, this will be achieved by calling @a splice(2), while on other
-       systems this call equates to a read into a userspace buffer followed by a
-       write from the userspace buffer to the pipe, so it is advised to use
-       fiod_send() on such systems.
+       systems this call equates to a @a read(2) into a userspace buffer
+       followed by a @a write(2) from the userspace buffer to the pipe, so it
+       would be better to use fiod_send() on such systems.
 
-       @param sockfd A socket connected to the fiod.
+       @param srv_sockfd A socket connected to the server (see fiod_connect())
 
-       @param filename The name of the file to be read.
+       @param filename The name of the file to be read
 
-       @retval >0 The read end of the pipe to which the file will be written.
+       @param offset The start file offset
 
-       @retval <0 An error occurred
+       @param len The number of bytes from the file to be sent
+
+       @param dest_fd_nonblock Whether or not the destination file descriptor
+       should be non-blocking.
+
+       @retval >0 The destination file descriptor
+       @retval -1 An error occurred
      */
-    int fiod_read(int sockfd,
+    int fiod_read(int srv_sockfd,
                   const char* filename,
                   loff_t offset, size_t len,
                   bool dest_fd_nonblock) DSO_EXPORT;
