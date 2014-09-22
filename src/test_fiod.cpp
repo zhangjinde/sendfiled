@@ -66,6 +66,7 @@ const std::string FiodFixSmallFile::file_contents {"1234567890"};
 
 struct FiodFixLargeFile : public FiodFix {
     static constexpr int NCHUNKS {1024};
+    static constexpr int CHUNK_SIZE {1024};
 
     static void SetUpTestCase() {
         FiodFix::SetUpTestCase();
@@ -87,9 +88,7 @@ struct FiodFixLargeFile : public FiodFix {
 };
 
 constexpr int FiodFixLargeFile::NCHUNKS;
-std::vector<std::uint8_t> FiodFixLargeFile::file_chunk(1024);
-
-#pragma GCC diagnostic pop
+std::vector<std::uint8_t> FiodFixLargeFile::file_chunk(FiodFixLargeFile::CHUNK_SIZE);
 
 } // namespace
 
@@ -349,3 +348,90 @@ TEST_F(FiodFixLargeFile, multiple_clients)
         close(cli.data_fd);
     }
 }
+
+TEST_F(FiodFix, multiple_clients_different_large_files)
+{
+    constexpr int NCLIENTS {10};
+    constexpr int NCHUNKS {1024};
+    constexpr int CHUNK_SIZE {1024};
+
+    struct client {
+        test::TmpFile file {};
+        int data_fd {};
+        std::size_t nchunks {};
+        std::size_t nread_chunk {};
+    };
+
+    std::vector<std::uint8_t> file_chunk(CHUNK_SIZE);
+    std::iota(file_chunk.begin(), file_chunk.end(), 0);
+
+    client clients [NCLIENTS];
+
+    // Write file contents
+    for (int i = 0; i < NCLIENTS; i++) {
+        client& cli {clients[i]};
+        for (int j = 0; j < NCHUNKS; j++)
+            std::fwrite(file_chunk.data(), 1, file_chunk.size(), cli.file);
+        cli.file.close();
+    }
+
+    // Send requests
+    for (int i = 0; i < NCLIENTS; i++) {
+        client& cli {clients[i]};
+
+        cli.data_fd = fiod_read(srv_fd, cli.file.name().c_str(), 0, 0, false);
+        ASSERT_NE(-1, cli.data_fd);
+
+        uint8_t buf [PROT_PDU_MAXSIZE];
+        ssize_t nread;
+        struct prot_file_stat ack;
+
+        // Request ACK
+        nread = read(cli.data_fd, buf, PROT_STAT_SIZE);
+        ASSERT_EQ(PROT_STAT_SIZE, nread);
+        ASSERT_EQ(0, prot_unmarshal_stat(&ack, buf));
+        EXPECT_EQ(PROT_CMD_STAT, ack.cmd);
+        EXPECT_EQ(PROT_STAT_OK, ack.stat);
+        EXPECT_EQ(8, ack.body_len);
+        EXPECT_EQ(file_chunk.size() * NCHUNKS, ack.size);
+    }
+
+    // Read file content
+    int ndone {};
+    while (ndone < NCLIENTS) {
+        for (int i = 0; i < NCLIENTS; i++) {
+            client& cli {clients[i]};
+
+            if (cli.nchunks == NCHUNKS)
+                continue;
+
+            ssize_t n = read(cli.data_fd,
+                             file_chunk.data() + cli.nread_chunk,
+                             file_chunk.size() - cli.nread_chunk);
+
+            ASSERT_NE(-1, n);
+            ASSERT_NE(0, n);
+
+            cli.nread_chunk += (size_t)n;
+
+            if (cli.nread_chunk == file_chunk.size()) {
+                for (size_t j = 0; j < file_chunk.size(); j++)
+                    ASSERT_EQ((uint8_t)j, (uint8_t)file_chunk[j]);
+                cli.nread_chunk = 0;
+                cli.nchunks++;
+            }
+
+            if (cli.nchunks == NCHUNKS)
+                ndone++;
+        }
+    }
+
+    for (int i = 0; i < NCLIENTS; i++) {
+        client& cli {clients[i]};
+
+        EXPECT_EQ(NCHUNKS, cli.nchunks);
+        close(cli.data_fd);
+    }
+}
+
+#pragma GCC diagnostic pop
