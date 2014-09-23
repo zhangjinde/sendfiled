@@ -33,7 +33,7 @@ bool file_open_read(struct file* file, const char* name, const off_t offset)
     return false;
 }
 
-void file_close(struct file* f)
+void file_close(const struct file* f)
 {
     close(f->fd);
 }

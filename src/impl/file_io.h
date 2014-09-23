@@ -14,7 +14,7 @@ struct file {
 
 bool file_open_read(struct file* file, const char* name, off_t offset);
 
-void file_close(struct file*);
+void file_close(const struct file*);
 
 off_t file_offset(const struct file*);
 
