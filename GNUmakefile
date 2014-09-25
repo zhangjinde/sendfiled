@@ -49,7 +49,7 @@ util.c\
 
 src_test:=\
 test_fiod.cpp\
-test_interpose.c \
+test_interpose_linux.c \
 test_protocol.cpp\
 test_utils.cpp\
 
