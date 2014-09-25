@@ -1,5 +1,4 @@
 #include <sys/types.h>
-
 #include <unistd.h>
 
 #include <assert.h>
@@ -166,10 +165,9 @@ static bool process_events(struct context* ctx,
             struct xfer* const xfer = (struct xfer*)resrc.udata;
 
             if (resrc.events & SYSPOLL_ERROR) {
-                fprintf(stderr,
-                        "%s: fatal error on"
-                        " xfer {statfd: %d; destfd: %d}; terminating it\n",
-                        __func__, xfer->stat_fd, xfer->dest_fd);
+                LOGERRNOV("Fatal error on"
+                          " xfer {statfd: %d; destfd: %d}; terminating it\n",
+                          xfer->stat_fd, xfer->dest_fd);
                 remove_xfer(ctx, xfer);
 
             } else if (!process_file_op(xfer) || xfer_complete(xfer)) {

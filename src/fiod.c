@@ -18,11 +18,11 @@
 #include "impl/protocol.h"
 #include "impl/server.h"
 #include "impl/unix_sockets.h"
+#include "impl/util.h"
 
 #include "attributes.h"
 #include "fiod.h"
 
-static int set_blocking(int fd);
 static int wait_child(pid_t pid);
 
 pid_t fiod_spawn(const char* name, const char* root, const int maxfiles)
@@ -133,7 +133,7 @@ int fiod_send(int srv_sockfd,
     if (fiod_pipe(fds, O_NONBLOCK | O_CLOEXEC) == -1)
         return -1;
 
-    if (!stat_fd_nonblock && set_blocking(fds[0]) == -1)
+    if (!stat_fd_nonblock && !set_nonblock(fds[0], false))
         goto fail;
 
     fds[2] = dest_fd;
@@ -168,7 +168,7 @@ int fiod_read(const int sockfd,
     if (fiod_pipe(fds, O_NONBLOCK | O_CLOEXEC) == -1)
         return -1;
 
-    if (!dest_fd_nonblock && set_blocking(fds[0]) == -1)
+    if (!dest_fd_nonblock && !set_nonblock(fds[0], false))
         goto fail;
 
     struct prot_request_m req;
@@ -192,17 +192,6 @@ int fiod_read(const int sockfd,
 }
 
 /* -------------- Internal implementations ------------ */
-
-static int set_blocking(const int fd)
-{
-    int val = fcntl(fd, F_GETFL, 0);
-    if (val == -1)
-        return -1;
-
-    val &= ~O_NONBLOCK;
-
-    return fcntl(fd, F_SETFL, val);
-}
 
 static int wait_child(pid_t pid)
 {

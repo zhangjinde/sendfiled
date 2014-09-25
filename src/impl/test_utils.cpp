@@ -1,8 +1,11 @@
 #include <unistd.h>
 
 #include <cstdlib>
+#include <signal.h>
 
 #include "test_utils.hpp"
+
+// --------------- test::TmpFile ---------------------
 
 test::TmpFile::TmpFile() :
     name_{},
@@ -60,4 +63,30 @@ test::TmpFile::operator int()
 test::TmpFile::operator FILE*()
 {
     return fp_;
+}
+
+// ------------ test::thread_barrier ----------------
+
+test::thread_barrier::thread_barrier(const int nthreads_in) noexcept :
+    nthreads {nthreads_in},
+    nwaiting {0}
+{}
+
+void test::thread_barrier::wait()
+{
+    std::unique_lock<std::mutex> l {mtx};
+
+    nwaiting++;
+
+    if (nwaiting >= nthreads)
+        cv.notify_all();
+    else
+        cv.wait(l, [this] {return (nwaiting >= nthreads);});
+}
+
+// ----------------- test namespace --------------------
+
+void test::kill_thread(std::thread& t, int signum)
+{
+    pthread_kill(t.native_handle(), signum);
 }

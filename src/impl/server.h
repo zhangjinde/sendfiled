@@ -3,6 +3,14 @@
 
 #include <stdbool.h>
 
-bool srv_run(const int listenfd, int maxfds);
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+    bool srv_run(const int listenfd, int maxfds);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

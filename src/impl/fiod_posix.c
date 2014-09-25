@@ -15,10 +15,10 @@ int fiod_pipe(int fds[2], const int flags)
         goto fail;
 
     /* Set NONBLOCK */
-    if (fcntl(fds[0], F_SETFL, FD_NONBLOCK) == -1)
+    if (!set_nonblock(fds[0], true) ||
+        !set_nonblock(fds[1], true)) {
         goto fail;
-    if (fcntl(fds[1], F_SETFL, FD_NONBLOCK) == -1)
-        goto fail;
+    }
 
     return 0;
 

@@ -45,9 +45,11 @@ server.c\
 syspoll_linux.c \
 unix_sockets.c \
 unix_sockets_linux.c \
+util.c\
 
 src_test:=\
 test_fiod.cpp\
+test_interpose.c \
 test_protocol.cpp\
 test_utils.cpp\
 
@@ -87,7 +89,7 @@ $(builddir)/$(target_so): $(obj_c)
 	$(CC) $(CFLAGS) $(lib_search_dirs) -shared -o $@ $^ $(linkflags)
 
 $(builddir)/$(test_target): $(obj_c) $(obj_test)
-	$(CXX) $(CXXFLAGS) $(lib_search_dirs) -o $@ $^ $(linkflags) -lgtest -lgtest_main
+	$(CXX) $(CXXFLAGS) $(lib_search_dirs) -o $@ $^ $(linkflags) -ldl -lgtest -lgtest_main
 
 .PHONY: clean
 clean:
