@@ -8,17 +8,20 @@ CXX := /usr/local/llvm342/bin/clang++
 
 lib_search_dirs := -L/usr/local/llvm342/lib
 
-header_search_dirs := \
-	-isystem/usr/local/llvm342/include \
-	-isystem/usr/local/llvm342/include/c++/v1 \
+header_search_dirs :=\
+-isystem/usr/local/llvm342/include\
+-isystem/usr/local/llvm342/include/c++/v1\
 
-warnflags := -Weverything \
--Wno-documentation \
--Wno-global-constructors \
--Wno-c++98-compat \
+warnflags := -Weverything\
+-Wno-documentation\
+-Wno-global-constructors\
 
-CFLAGS := -std=c99 -g -O0 $(warnflags) -fPIC -fvisibility=hidden $(header_search_dirs)
-CXXFLAGS := -std=c++11 -stdlib=libc++ -g -O0 $(warnflags) -fPIC -fvisibility=hidden $(header_search_dirs)
+warnflags_cxx := $(warnflags)\
+-Wno-c++98-compat\
+
+CFLAGS := -std=c99 -g -O0 -fPIC -fvisibility=hidden $(warnflags) $(header_search_dirs)
+CXXFLAGS := -std=c++11 -stdlib=libc++ -g -O0 -fPIC -fvisibility=hidden\
+$(warnflags_cxx) $(header_search_dirs)
 
 DOXYGEN ?= doxygen
 
@@ -34,7 +37,7 @@ vpath %.cpp $(srcdir) $(srcdir)/impl
 vpath %.odg $(docdir)/img
 vpath %.png $(htmldir)/img
 
-src_c:=\
+src:=\
 fiod.c \
 file_io.c\
 file_io_linux.c\
@@ -53,9 +56,9 @@ test_interpose_linux.c \
 test_protocol.cpp\
 test_utils.cpp\
 
-src_all := $(src_c) $(src_test)
+src_all := $(src) $(src_test)
 
-obj_c:=$(src_c:%=$(builddir)/%.o)
+obj_c:=$(src:%=$(builddir)/%.o)
 obj_test:=$(src_test:%=$(builddir)/%.o)
 
 $(builddir)/test_%.cpp.o: CXXFLAGS += -Wno-error

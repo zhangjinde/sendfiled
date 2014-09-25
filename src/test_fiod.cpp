@@ -1,5 +1,6 @@
 #include <unistd.h>
 
+#include <cstdint>
 #include <numeric>
 #include <vector>
 
@@ -19,7 +20,8 @@
 #pragma GCC diagnostic ignored "-Wpadded"
 
 namespace {
-bool wouldblock(const ssize_t err) {
+bool wouldblock(const ssize_t err) noexcept
+{
     return (err == -1 && (errno == EWOULDBLOCK || errno == EAGAIN));
 }
 
@@ -303,7 +305,7 @@ TEST_F(FiodProcSmallFileFix, read_range)
     EXPECT_EQ(0, memcmp(buf, file_contents.c_str() + offset, len));
 }
 
-TEST_F(FiodProcLargeFileFix, multiple_clients)
+TEST_F(FiodProcLargeFileFix, multiple_reading_clients)
 {
     constexpr int nclients {10};
 
@@ -370,7 +372,7 @@ TEST_F(FiodProcLargeFileFix, multiple_clients)
         EXPECT_EQ(NCHUNKS, clients[i].nchunks);
 }
 
-TEST_F(FiodProcFix, multiple_clients_different_large_files)
+TEST_F(FiodProcFix, multiple_clients_reading_different_large_files)
 {
     constexpr int NCLIENTS {10};
     constexpr int NCHUNKS {1024};
@@ -508,8 +510,6 @@ TEST_F(FiodThreadLargeFileFix, read_io_error)
 
 TEST_F(FiodThreadLargeFileFix, send_io_error)
 {
-    constexpr int expected_errno {EIO};
-
     int data_pipe [2];
     ASSERT_NE(-1, pipe(data_pipe));
 
@@ -546,7 +546,7 @@ TEST_F(FiodThreadLargeFileFix, send_io_error)
 
     for (;;) {
         if (nchunks > NCHUNKS / 2)
-            mock_splice_set_retval(-expected_errno);
+            mock_splice_set_retval(-EIO);
 
         nread = read(data_fd,
                      data_buf.data() + nread_chunk,
@@ -575,7 +575,7 @@ TEST_F(FiodThreadLargeFileFix, send_io_error)
         ASSERT_NE(-1, prot_unmarshal_stat(&xfer_stat, stat_buf.data()));
         ASSERT_EQ(PROT_CMD_STAT, xfer_stat.cmd);
         if (xfer_stat.stat != PROT_STAT_OK) {
-            got_errno = (xfer_stat.stat == expected_errno);
+            got_errno = (xfer_stat.stat == EIO);
             break;
         }
     }
@@ -594,7 +594,7 @@ TEST_F(FiodThreadLargeFileFix, send_io_error)
             ASSERT_EQ(PROT_CMD_STAT, xfer_stat.cmd);
 
             if (xfer_stat.stat != PROT_STAT_OK)
-                got_errno = (xfer_stat.stat == expected_errno);
+                got_errno = (xfer_stat.stat == EIO);
         }
     }
 
