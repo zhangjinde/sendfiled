@@ -9,7 +9,7 @@
 #include "impl/test_utils.hpp"
 
 #include "fiod.h"
-#include "impl/protocol.h"
+#include "impl/protocol_client.h"
 #include "impl/server.h"
 #include "impl/test_interpose.h"
 #include "impl/unix_sockets.h"

@@ -10,7 +10,7 @@
 #include "../attributes.h"
 #include "errors.h"
 #include "file_io.h"
-#include "protocol.h"
+#include "protocol_server.h"
 #include "server.h"
 #include "syspoll.h"
 #include "unix_sockets.h"
@@ -165,7 +165,7 @@ static bool process_events(struct context* ctx,
             struct xfer* const xfer = (struct xfer*)resrc.udata;
 
             if (resrc.events & SYSPOLL_ERROR) {
-                LOGERRNOV("Fatal error on"
+                fprintf(stderr, "System poller got error on "
                           " xfer {statfd: %d; destfd: %d}; terminating it\n",
                           xfer->stat_fd, xfer->dest_fd);
                 remove_xfer(ctx, xfer);
@@ -500,7 +500,7 @@ static bool send_stat(int fd, size_t file_size)
 static bool send_err(int fd, const int stat)
 {
     struct prot_hdr_m pdu;
-    prot_marshal_hdr(&pdu, PROT_CMD_STAT, (int)stat, 0);
+    prot_marshal_hdr(pdu.data, PROT_CMD_STAT, (int)stat, 0);
     return send_pdu(fd, pdu.data, sizeof(pdu.data));
 }
 

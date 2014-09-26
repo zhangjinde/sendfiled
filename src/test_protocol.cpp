@@ -2,7 +2,8 @@
 
 #include <gtest/gtest.h>
 
-#include "impl/protocol.h"
+#include "impl/protocol_client.h"
+#include "impl/protocol_server.h"
 
 TEST(Protocol, marshal_send)
 {

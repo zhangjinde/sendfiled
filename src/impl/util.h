@@ -11,7 +11,7 @@
 extern "C" {
 #endif
 
-bool set_nonblock(int fd, bool enabled);
+    bool set_nonblock(int fd, bool enabled);
 
 #ifdef __cplusplus
 }

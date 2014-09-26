@@ -12,18 +12,24 @@ header_search_dirs :=\
 -isystem/usr/local/llvm342/include\
 -isystem/usr/local/llvm342/include/c++/v1\
 
-warnflags := -Weverything\
+warnflags :=\
+-Weverything\
+-Werror\
 -Wno-documentation\
 -Wno-global-constructors\
 
-warnflags_cxx := $(warnflags)\
--Wno-c++98-compat\
+warnflags_cxx := $(warnflags) -Wno-c++98-compat
 
-CFLAGS := -std=c99 -g -O0 -fPIC -fvisibility=hidden $(warnflags) $(header_search_dirs)
-CXXFLAGS := -std=c++11 -stdlib=libc++ -g -O0 -fPIC -fvisibility=hidden\
-$(warnflags_cxx) $(header_search_dirs)
+dbgflags := -g -O0
+soflags := -fPIC -fvisibility=hidden
+
+CFLAGS := -std=c99 $(dbgflags) $(warnflags) $(header_search_dirs)
+CXXFLAGS := -std=c++11 -stdlib=libc++\
+$(dbgflags) $(warnflags_cxx) $(header_search_dirs)
 
 DOXYGEN ?= doxygen
+NM ?= nm
+VALGRIND ?= valgrind
 
 GTEST_FILTER ?= *
 
@@ -37,31 +43,38 @@ vpath %.cpp $(srcdir) $(srcdir)/impl
 vpath %.odg $(docdir)/img
 vpath %.png $(htmldir)/img
 
-src:=\
-fiod.c \
-file_io.c\
-file_io_linux.c\
-fiod_linux.c \
+src_common :=\
 process.c \
 protocol.c \
-server.c\
-syspoll_linux.c \
-unix_sockets.c \
-unix_sockets_linux.c \
+unix_sockets_linux.c\
 util.c\
 
+src_client := $(src_common)\
+fiod.c\
+fiod_linux.c\
+protocol_client.c\
+unix_socket_client.c\
+
+src_server := $(src_common)\
+file_io.c\
+file_io_linux.c\
+protocol_server.c\
+server.c\
+syspoll_linux.c \
+unix_socket_server.c\
+
 src_test:=\
+protocol_client.c\
 test_fiod.cpp\
 test_interpose_linux.c \
 test_protocol.cpp\
 test_utils.cpp\
 
-src_all := $(src) $(src_test)
+obj_c_client:=$(src_client:%=$(builddir)/%.cli.o)
+obj_c_server:=$(src_server:%=$(builddir)/%.srv.o)
+obj_test:=$(src_test:%=$(builddir)/%.tst.o)
 
-obj_c:=$(src:%=$(builddir)/%.o)
-obj_test:=$(src_test:%=$(builddir)/%.o)
-
-$(builddir)/test_%.cpp.o: CXXFLAGS += -Wno-error
+$(builddir)/test_%.cpp.tst.o: CXXFLAGS += -Wno-error
 
 .PHONY: all
 all: $(builddir)/$(target) $(builddir)/$(target_so) build_tests
@@ -70,39 +83,58 @@ all: $(builddir)/$(target) $(builddir)/$(target_so) build_tests
 build_tests: $(builddir)/$(test_target)
 
 ifneq ($(MAKECMDGOALS), clean)
--include $(src_all:%=$(builddir)/%.d)
+-include $(src_server:%=$(builddir)/%.srv.d)
+-include $(src_client:%=$(builddir)/%.cli.d)
+-include $(src_test:%=$(builddir)/%.tst.d)
 endif
 
-$(builddir)/%.c.d: %.c
-	$(CC) $(CFLAGS) -MM -MT "$(builddir)/$*.c.o $(builddir)/$*.c.d" $< > $@
+$(builddir)/%.c.srv.d: %.c
+	$(CC) $(CFLAGS) -MM -MT "$(builddir)/$*.c.srv.o $(builddir)/$*.c.srv.d" $< > $@
 
-$(builddir)/%.cpp.d: %.cpp
-	$(CXX) $(CXXFLAGS) -MM -MT "$(builddir)/$*.cpp.o $(builddir)/$*.cpp.d" $< > $@
+$(builddir)/%.c.cli.d: %.c
+	$(CC) $(CFLAGS) -MM -MT "$(builddir)/$*.c.cli.o $(builddir)/$*.c.cli.d" $< > $@
 
-$(builddir)/%.c.o: %.c
+$(builddir)/%.cpp.tst.d: %.cpp
+	$(CXX) $(CXXFLAGS) -MM -MT "$(builddir)/$*.cpp.tst.o $(builddir)/$*.cpp.tst.d" $< > $@
+
+$(builddir)/%.c.tst.d: %.c
+	$(CC) $(CFLAGS) -MM -MT "$(builddir)/$*.c.tst.o $(builddir)/$*.c.tst.d" $< > $@
+
+$(builddir)/%.c.srv.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(builddir)/%.cpp.o: %.cpp
+$(builddir)/%.c.cli.o: %.c
+	$(CC) $(CFLAGS) $(soflags) -c -o $@ $<
+
+$(builddir)/%.cpp.tst.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-$(builddir)/$(target): $(obj_c) $(builddir)/main.c.o
+$(builddir)/%.c.tst.o: %.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(builddir)/$(target): $(obj_c_server) $(builddir)/main.c.srv.o
 	$(CC) $(CFLAGS) $(lib_search_dirs) -o $@ $^ $(linkflags)
 
-$(builddir)/$(target_so): $(obj_c)
-	$(CC) $(CFLAGS) $(lib_search_dirs) -shared -o $@ $^ $(linkflags)
+$(builddir)/$(target_so): $(obj_c_client)
+	$(CC) $(CFLAGS) $(soflags) $(lib_search_dirs) -shared -o $@ $^ $(linkflags)
 
-$(builddir)/$(test_target): $(obj_c) $(obj_test)
-	$(CXX) $(CXXFLAGS) $(lib_search_dirs) -o $@ $^ $(linkflags) -ldl -lgtest -lgtest_main
+$(builddir)/$(test_target): $(obj_c_server) $(obj_test) $(builddir)/$(target_so)
+	$(CXX) $(CXXFLAGS) $(lib_search_dirs) -o $@ $^ \
+	$(linkflags) -ldl -lgtest -lgtest_main
 
 .PHONY: clean
 clean:
-	rm -f $(builddir)/*
+ifdef builddir
+	$(RM) $(builddir)/*
+else
+	$(warning 'builddir' undefined)
+endif
 
 .PHONY: test
 test: $(builddir)/$(test_target) $(builddir)/$(target)
-	@echo "-----------------------------"
-	@echo "T E S T S"
-	@echo "-----------------------------"
+	$(info --------------)
+	$(info T E S T S)
+	$(info --------------)
 	@- $< $(GTEST_FLAGS) --gtest_filter=$(GTEST_FILTER)
 
 archive_name := $(projectname)_`date +%Y-%m-%d_%H%M%S`
@@ -122,11 +154,11 @@ doc: $(doc_img_src:%.odg=%.png)
 
 .PHONY: exports
 exports: $(builddir)/$(target_so)
-	nm -gC --defined-only $<
+	$(NM) -gC --defined-only $<
 
 .PHONY: memcheck
 memcheck: $(builddir)/$(test_target) $(builddir)/$(target)
-	valgrind \
+	$(VALGRIND) \
 	--track-origins=yes \
 	--tool=memcheck \
 	--leak-check=full \

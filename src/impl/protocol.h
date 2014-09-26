@@ -2,10 +2,7 @@
 #define FIOD_PROTOCOL_H
 
 #include <sys/types.h>
-#include <sys/uio.h>
 
-#include <stdbool.h>
-#include <stddef.h>
 #include <stdint.h>
 
 enum prot_cmd {
@@ -40,44 +37,16 @@ enum {
 /* Maximum PDU size */
 #define PROT_PDU_MAXSIZE PROT_REQ_MAXSIZE
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpadded"
-
-/* ---------------- Unmarshaled PDUs --------------- */
-
 #define PROT_HDR_FIELDS                         \
     uint8_t cmd;                                \
     uint8_t stat;                               \
     size_t body_len
 
-struct prot_request {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpadded"
+
+struct prot_hdr {
     PROT_HDR_FIELDS;
-    loff_t offset;
-    size_t len;
-    const char* filename;
-};
-
-struct prot_file_stat {
-    PROT_HDR_FIELDS;
-    size_t size;
-};
-
-/* ---------------- Marshaled PDUs --------------- */
-
-struct prot_hdr_m {
-    uint8_t data [PROT_HDR_SIZE];
-};
-
-/* A marshaled request PDU */
-struct prot_request_m {
-    uint8_t hdr [PROT_REQ_BASE_SIZE];
-    const char* filename;
-    struct iovec iovs[2];
-};
-
-/* A marshaled file status PDU */
-struct prot_file_stat_m {
-    uint8_t data [PROT_STAT_SIZE];
 };
 
 #pragma GCC diagnostic pop
@@ -86,32 +55,12 @@ struct prot_file_stat_m {
 extern "C" {
 #endif
 
-    void prot_marshal_hdr(struct prot_hdr_m* hdr,
-                          enum prot_cmd cmd,
-                          int stat,
-                          size_t len);
+    uint8_t* prot_marshal_hdr(void* buf,
+                              enum prot_cmd cmd,
+                              int stat,
+                              size_t len);
 
-    bool prot_marshal_send(struct prot_request_m* req, const char* filename,
-                           loff_t offset, size_t len);
-
-    bool prot_marshal_read(struct prot_request_m* req, const char* filename,
-                           loff_t offset, size_t len);
-
-    void prot_marshal_stat(struct prot_file_stat_m* pdu, size_t val);
-
-    /**
-       @retval 0 Success
-       @retval -1 Malformed PDU
-       @retval >0 Error code from PDU header
-    */
-    int prot_unmarshal_request(struct prot_request*, const void* buf);
-
-    /**
-       @retval 0 Success
-       @retval -1 Malformed PDU
-       @retval >0 Error code from PDU header
-    */
-    int prot_unmarshal_stat(struct prot_file_stat* pdu, const void* buf);
+    const uint8_t* prot_unmarshal_hdr(struct prot_hdr* hdr, const void* buf);
 
 #ifdef __cplusplus
 }

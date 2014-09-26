@@ -3,6 +3,7 @@
 #include <unistd.h>
 
 #include <limits.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -13,23 +14,35 @@
 #include "impl/server.h"
 #include "impl/unix_sockets.h"
 
+/*
+  File descriptor (opened in parent process by fiod_spawn()) to which server
+  startup success (0) or error code is to be written in order to sync with
+  parent and to facilitate error reporting in the parent process.
+ */
+static const int syncfd = 3;
+
 static void print_usage(const char* progname);
+
+static bool sync_parent(int stat);
 
 int main(const int argc, char** argv)
 {
     const char* root_dir = NULL;
     const char* name = NULL;
     long maxfiles = 0;
+    bool do_sync = false;
 
     int opt;
-    while ((opt = getopt(argc, argv, "+d:s:n:")) != -1) {
+    while ((opt = getopt(argc, argv, "+r:s:n:p")) != -1) {
         switch (opt) {
-        case 'd':
+        case 'r':
             root_dir = optarg;
             break;
+
         case 's':
             name = optarg;
             break;
+
         case 'n': {
             errno = 0;
             maxfiles = strtol(optarg, NULL, 10);
@@ -44,8 +57,13 @@ int main(const int argc, char** argv)
             }
         } break;
 
+        case 'p':
+            do_sync = true;
+            break;
+
         case '?':
             return EXIT_FAILURE;
+
         default:
             print_usage(argv[0]);
             return EXIT_FAILURE;
@@ -59,13 +77,22 @@ int main(const int argc, char** argv)
 
     printf("root dir: %s; name: %s; maxfiles: %ld\n", root_dir, name, maxfiles);
 
-    proc_common_init(root_dir, -1);
+    proc_common_init(root_dir, &syncfd, 1);
 
     /* proc_daemonise(); */
 
     const int listenfd = us_serve(name);
-    if (listenfd == -1)
+    if (listenfd == -1) {
+        if (do_sync && !sync_parent(errno))
+            perror("Failed to write errno to sync fd");
         exit(EXIT_FAILURE);
+    }
+
+    if (do_sync) {
+        if (!sync_parent(0))
+            perror("Failed to sync with parent");
+        close (syncfd);
+    }
 
     const bool success = srv_run(listenfd, (int)maxfiles);
 
@@ -78,6 +105,12 @@ int main(const int argc, char** argv)
 
 static void print_usage(const char* progname)
 {
-    printf("Usage: %s -r <root_directory> -s <server_name> -n <maxfiles>\n",
+    printf("Usage %s -r <root_directory> -s <server_name> -n <maxfiles>"
+           " [-p (sync with parent process)]\n",
            progname);
+}
+
+static bool sync_parent(const int status)
+{
+    return (write(syncfd, &status, sizeof(status)) == sizeof(status));
 }

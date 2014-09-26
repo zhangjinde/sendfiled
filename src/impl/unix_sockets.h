@@ -7,6 +7,8 @@
 
 #include <stdbool.h>
 
+#define US_MAXFDS 2
+
 struct iovec;
 
 #ifdef __cplusplus

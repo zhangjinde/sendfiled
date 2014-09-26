@@ -15,7 +15,7 @@
 #include "impl/errors.h"
 #include "impl/fiod.h"
 #include "impl/process.h"
-#include "impl/protocol.h"
+#include "impl/protocol_client.h"
 #include "impl/server.h"
 #include "impl/unix_sockets.h"
 #include "impl/util.h"
@@ -78,29 +78,27 @@ pid_t fiod_spawn(const char* name, const char* root, const int maxfiles)
 
     close(pfd[0]);
 
-    proc_common_init(root, pfd[1]);
+    /* Descriptor to which status codes (0 or errno) is written (the write end
+       of the pipe shared with the parent) */
+    int statfd = pfd[1];
 
-    int err = 0;
+    if (!proc_close_all_fds_except(&statfd, 1))
+        goto fail;
 
-    const int listenfd = us_serve(name);
-    if (listenfd == -1)
-        err = errno;
-
-    if (write(pfd[1], &err, sizeof(int)) != sizeof(int)) {
-        LOGERRNO("Write error synching with parent\n");
-        exit(EXIT_FAILURE);
+    /* Dupe the status fd to fd 3 and then close it */
+    if (statfd != 3) {
+        if (dup2(statfd, 3) == -1)
+            goto fail;
+        close(statfd);
+        statfd = 3;
     }
 
-    close(pfd[1]);
+    if (!fiod_exec_server("build/fiod", name, root, maxfiles))
+        LOGERRNO("Couldn't exec server process\n");
 
-    if (err != 0)
-        exit(EXIT_FAILURE);
-
-    const bool success = srv_run(listenfd, maxfiles);
-
-    us_stop_serving(name, listenfd);
-
-    exit(success ? EXIT_SUCCESS : EXIT_FAILURE);
+ fail:
+    write(statfd, &errno, sizeof(errno));
+    exit(EXIT_FAILURE);
 }
 
 int fiod_connect(const char* name)
