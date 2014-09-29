@@ -19,7 +19,7 @@
 #pragma GCC diagnostic ignored "-Wpadded"
 
 struct xfer {
-    /* The syspoll-registered fd *must* come first! */
+    /* The syspoll-registered fd (must be the first field of this struct) */
     int dest_fd;
     int stat_fd;
     enum prot_cmd cmd;
@@ -260,6 +260,7 @@ static bool process_request(struct context* ctx,
             send_err(fds[0], errno);
             return false;
         }
+
         send_stat(fds[0], fsize);
     } break;
 
@@ -446,7 +447,7 @@ static size_t add_read_xfer(struct context* ctx,
                             const int dest_fd)
 {
     struct file file;
-    if (!file_open_read(&file, filename, offset))
+    if (!file_open_read(&file, filename, offset, len))
         return 0;
 
     const struct xfer* const x = add_xfer(ctx,
@@ -464,7 +465,7 @@ static size_t add_send_xfer(struct context* ctx,
                             const int dest_fd)
 {
     struct file file;
-    if (!file_open_read(&file, filename, offset))
+    if (!file_open_read(&file, filename, offset, len))
         return 0;
 
     const struct xfer* const x = add_xfer(ctx,
