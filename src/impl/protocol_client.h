@@ -18,7 +18,15 @@ struct prot_request_m {
     struct iovec iovs[2];
 };
 
-struct prot_file_stat {
+struct prot_file_info {
+    PROT_HDR_FIELDS;
+    size_t size;
+    time_t atime;
+    time_t mtime;
+    time_t ctime;
+};
+
+struct prot_xfer_stat {
     PROT_HDR_FIELDS;
     size_t size;
 };
@@ -40,7 +48,14 @@ extern "C" {
        @retval -1 Malformed PDU
        @retval >0 Error code from PDU header
     */
-    int prot_unmarshal_stat(struct prot_file_stat* pdu, const void* buf);
+    int prot_unmarshal_file_info(struct prot_file_info* pdu, const void* buf);
+
+    /**
+       @retval 0 Success
+       @retval -1 Malformed PDU
+       @retval >0 Error code from PDU header
+    */
+    int prot_unmarshal_xfer_stat(struct prot_xfer_stat* pdu, const void* buf);
 
 #ifdef __cplusplus
 }

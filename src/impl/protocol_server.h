@@ -21,9 +21,16 @@ struct prot_request {
     const char* filename;
 };
 
-/* A marshaled file status PDU */
-struct prot_file_stat_m {
-    uint8_t data [PROT_STAT_SIZE];
+/**
+   A marshaled file info PDU
+ */
+struct prot_file_info_m {
+    uint8_t data [PROT_FILE_INFO_SIZE];
+};
+
+/* A marshaled tranfer status PDU */
+struct prot_xfer_stat_m {
+    uint8_t data [PROT_XFER_STAT_SIZE];
 };
 
 #pragma GCC diagnostic pop
@@ -39,7 +46,13 @@ extern "C" {
     */
     int prot_unmarshal_request(struct prot_request*, const void* buf);
 
-    void prot_marshal_stat(struct prot_file_stat_m* pdu, size_t val);
+    void prot_marshal_file_info(struct prot_file_info_m* pdu,
+                                size_t size,
+                                const time_t atime,
+                                const time_t mtime,
+                                const time_t ctime);
+
+    void prot_marshal_xfer_stat(struct prot_xfer_stat_m* pdu, size_t val);
 
 #ifdef __cplusplus
 }

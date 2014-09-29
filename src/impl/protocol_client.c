@@ -86,11 +86,34 @@ static int check_pdu(struct prot_hdr* hdr,
     return 0;
 }
 
-int prot_unmarshal_stat(struct prot_file_stat* pdu, const void* buf)
+int prot_unmarshal_file_info(struct prot_file_info* pdu, const void* buf)
 {
     const uint8_t* p = prot_unmarshal_hdr((struct prot_hdr*)pdu, buf);
 
-    const int err = check_pdu((struct prot_hdr*)pdu, PROT_CMD_STAT, 8);
+    const int err = check_pdu((struct prot_hdr*)pdu,
+                              PROT_CMD_FILE_INFO,
+                              PROT_FILE_INFO_BODY_LEN);
+    if (err != 0)
+        return err;
+
+    memcpy(&pdu->size, p, sizeof(pdu->size));
+    p += sizeof(pdu->size);
+
+    memcpy(&pdu->atime, p, sizeof(pdu->atime));
+    p += sizeof(pdu->atime);
+    memcpy(&pdu->mtime, p, sizeof(pdu->mtime));
+    p += sizeof(pdu->mtime);
+    memcpy(&pdu->ctime, p, sizeof(pdu->ctime));
+    /* p += sizeof(pdu->ctime); */
+
+    return 0;
+}
+
+int prot_unmarshal_xfer_stat(struct prot_xfer_stat* pdu, const void* buf)
+{
+    const uint8_t* p = prot_unmarshal_hdr((struct prot_hdr*)pdu, buf);
+
+    const int err = check_pdu((struct prot_hdr*)pdu, PROT_CMD_XFER_STAT, 8);
     if (err != 0)
         return err;
 

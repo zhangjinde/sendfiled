@@ -6,6 +6,8 @@
 #include <stdint.h>
 
 enum prot_cmd {
+    /* File information as per fstat(2) */
+    PROT_CMD_FILE_INFO,
     /* Read file contents */
     PROT_CMD_READ,
     /* Send file contents to destination file descriptor */
@@ -13,7 +15,7 @@ enum prot_cmd {
     /* Cancel file transfer */
     PROT_CMD_CANCEL,
     /* File transfer request/operation status */
-    PROT_CMD_STAT
+    PROT_CMD_XFER_STAT
 };
 
 enum {
@@ -25,6 +27,9 @@ enum {
 
 #define PROT_FILENAME_MAX 512   /* Excludes the terminating '\0' */
 
+#define PROT_FILE_INFO_BODY_LEN (sizeof(size_t) + sizeof(time_t) * 3)
+#define PROT_FILE_INFO_SIZE (PROT_HDR_SIZE + PROT_FILE_INFO_BODY_LEN)
+
 /* Size of file operation request PDU minus the filename */
 #define PROT_REQ_BASE_SIZE (PROT_HDR_SIZE + 8 + 8)
 
@@ -32,7 +37,7 @@ enum {
 #define PROT_REQ_MAXSIZE (PROT_REQ_BASE_SIZE + PROT_FILENAME_MAX + 1)
 
 /* Size of a status PDU  */
-#define PROT_STAT_SIZE (PROT_HDR_SIZE + 8)
+#define PROT_XFER_STAT_SIZE (PROT_HDR_SIZE + 8)
 
 /* Maximum PDU size */
 #define PROT_PDU_MAXSIZE PROT_REQ_MAXSIZE

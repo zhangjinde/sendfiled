@@ -6,22 +6,31 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-struct file {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpadded"
+
+struct file_info {
     /* Size of file on disk, as returned by stat(2); will be >= the total
        number of bytes transferred */
     size_t size;
-    int fd;
-    int blksize;
+    time_t atime;
+    time_t mtime;
+    time_t ctime;
+    unsigned blksize;
 };
 
-bool file_open_read(struct file* file,
-                    const char* name,
-                    off_t offset, size_t len);
+#pragma GCC diagnostic pop
 
-void file_close(const struct file*);
+/**
+   @retval >0 The file descriptor
+   @retval <0 An error occurred
+ */
+int file_open_read(const char* name,
+                   off_t offset, size_t len,
+                   struct file_info*);
 
-off_t file_offset(const struct file*);
+off_t file_offset(int fd);
 
-ssize_t file_splice(struct file* file, int fd, size_t len);
+ssize_t file_splice(int fd_in, int fd_out, size_t nbytes);
 
 #endif

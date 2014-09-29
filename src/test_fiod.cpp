@@ -187,13 +187,13 @@ TEST_F(FiodProcSmallFileFix, file_not_found)
     ASSERT_TRUE(stat_fd);
 
     uint8_t buf [PROT_PDU_MAXSIZE];
-    struct prot_file_stat ack;
+    struct prot_xfer_stat ack;
 
     // Request ACK
-    const ssize_t nread {read(stat_fd, buf, PROT_STAT_SIZE)};
+    const ssize_t nread {read(stat_fd, buf, PROT_XFER_STAT_SIZE)};
     ASSERT_EQ(nread, PROT_HDR_SIZE);
-    ASSERT_EQ(ENOENT, prot_unmarshal_stat(&ack, buf));
-    EXPECT_EQ(PROT_CMD_STAT, ack.cmd);
+    ASSERT_EQ(ENOENT, prot_unmarshal_xfer_stat(&ack, buf));
+    EXPECT_EQ(PROT_CMD_XFER_STAT, ack.cmd);
     EXPECT_EQ(ENOENT, ack.stat);
     EXPECT_EQ(0, ack.body_len);
 }
@@ -217,23 +217,23 @@ TEST_F(FiodProcSmallFileFix, send)
 
     uint8_t buf [PROT_PDU_MAXSIZE];
     ssize_t nread;
-    struct prot_file_stat ack;
-    struct prot_file_stat xfer_stat;
+    struct prot_file_info ack;
+    struct prot_xfer_stat xfer_stat;
 
     // Request ACK
-    nread = read(stat_fd, buf, PROT_STAT_SIZE);
-    ASSERT_EQ(PROT_STAT_SIZE, nread);
-    ASSERT_EQ(0, prot_unmarshal_stat(&ack, buf));
-    EXPECT_EQ(PROT_CMD_STAT, ack.cmd);
+    nread = read(stat_fd, buf, PROT_FILE_INFO_SIZE);
+    ASSERT_EQ(PROT_FILE_INFO_SIZE, nread);
+    ASSERT_EQ(0, prot_unmarshal_file_info(&ack, buf));
+    EXPECT_EQ(PROT_CMD_FILE_INFO, ack.cmd);
     EXPECT_EQ(PROT_STAT_OK, ack.stat);
-    EXPECT_EQ(8, ack.body_len);
+    EXPECT_EQ(PROT_FILE_INFO_BODY_LEN, ack.body_len);
     EXPECT_EQ(file_contents.size(), ack.size);
 
     // Transfer status update
-    nread = read(stat_fd, buf, PROT_STAT_SIZE);
-    ASSERT_EQ(PROT_STAT_SIZE, nread);
-    ASSERT_EQ(0, prot_unmarshal_stat(&xfer_stat, buf));
-    EXPECT_EQ(PROT_CMD_STAT, xfer_stat.cmd);
+    nread = read(stat_fd, buf, PROT_XFER_STAT_SIZE);
+    ASSERT_EQ(PROT_XFER_STAT_SIZE, nread);
+    ASSERT_EQ(0, prot_unmarshal_xfer_stat(&xfer_stat, buf));
+    EXPECT_EQ(PROT_CMD_XFER_STAT, xfer_stat.cmd);
     EXPECT_EQ(PROT_STAT_OK, xfer_stat.stat);
     EXPECT_GT(xfer_stat.size, 0);
     EXPECT_LE(xfer_stat.size, file_contents.size());
@@ -255,15 +255,15 @@ TEST_F(FiodProcSmallFileFix, read)
 
     uint8_t buf [PROT_PDU_MAXSIZE];
     ssize_t nread;
-    struct prot_file_stat ack;
+    struct prot_file_info ack;
 
     // Request ACK
-    nread = read(data_fd, buf, PROT_STAT_SIZE);
-    ASSERT_EQ(PROT_STAT_SIZE, nread);
-    ASSERT_EQ(0, prot_unmarshal_stat(&ack, buf));
-    EXPECT_EQ(PROT_CMD_STAT, ack.cmd);
+    nread = read(data_fd, buf, PROT_FILE_INFO_SIZE);
+    ASSERT_EQ(PROT_FILE_INFO_SIZE, nread);
+    ASSERT_EQ(0, prot_unmarshal_file_info(&ack, buf));
+    EXPECT_EQ(PROT_CMD_FILE_INFO, ack.cmd);
     EXPECT_EQ(PROT_STAT_OK, ack.stat);
-    EXPECT_EQ(8, ack.body_len);
+    EXPECT_EQ(PROT_FILE_INFO_BODY_LEN, ack.body_len);
     EXPECT_EQ(file_contents.size(), ack.size);
 
     // File content
@@ -286,15 +286,15 @@ TEST_F(FiodProcSmallFileFix, read_range)
 
     uint8_t buf [PROT_PDU_MAXSIZE];
     ssize_t nread;
-    struct prot_file_stat ack;
+    struct prot_file_info ack;
 
     // Request ACK
-    nread = read(data_fd, buf, PROT_STAT_SIZE);
-    ASSERT_EQ(PROT_STAT_SIZE, nread);
-    ASSERT_EQ(0, prot_unmarshal_stat(&ack, buf));
-    EXPECT_EQ(PROT_CMD_STAT, ack.cmd);
+    nread = read(data_fd, buf, PROT_FILE_INFO_SIZE);
+    ASSERT_EQ(PROT_FILE_INFO_SIZE, nread);
+    ASSERT_EQ(0, prot_unmarshal_file_info(&ack, buf));
+    EXPECT_EQ(PROT_CMD_FILE_INFO, ack.cmd);
     EXPECT_EQ(PROT_STAT_OK, ack.stat);
-    EXPECT_EQ(8, ack.body_len);
+    EXPECT_EQ(PROT_FILE_INFO_BODY_LEN, ack.body_len);
     EXPECT_EQ(len, ack.size);
 
     // File content
@@ -324,15 +324,15 @@ TEST_F(FiodProcLargeFileFix, multiple_reading_clients)
 
         uint8_t buf [PROT_PDU_MAXSIZE];
         ssize_t nread;
-        struct prot_file_stat ack;
+        struct prot_file_info ack;
 
         // Request ACK
-        nread = read(cli.data_fd, buf, PROT_STAT_SIZE);
-        ASSERT_EQ(PROT_STAT_SIZE, nread);
-        ASSERT_EQ(0, prot_unmarshal_stat(&ack, buf));
-        EXPECT_EQ(PROT_CMD_STAT, ack.cmd);
+        nread = read(cli.data_fd, buf, PROT_FILE_INFO_SIZE);
+        ASSERT_EQ(PROT_FILE_INFO_SIZE, nread);
+        ASSERT_EQ(0, prot_unmarshal_file_info(&ack, buf));
+        EXPECT_EQ(PROT_CMD_FILE_INFO, ack.cmd);
         EXPECT_EQ(PROT_STAT_OK, ack.stat);
-        EXPECT_EQ(8, ack.body_len);
+        EXPECT_EQ(PROT_FILE_INFO_BODY_LEN, ack.body_len);
         EXPECT_EQ(CHUNK_SIZE * NCHUNKS, ack.size);
     }
 
@@ -407,15 +407,15 @@ TEST_F(FiodProcFix, multiple_clients_reading_different_large_files)
 
         uint8_t buf [PROT_PDU_MAXSIZE];
         ssize_t nread;
-        struct prot_file_stat ack;
+        struct prot_file_info ack;
 
         // Request ACK
-        nread = read(cli.data_fd, buf, PROT_STAT_SIZE);
-        ASSERT_EQ(PROT_STAT_SIZE, nread);
-        ASSERT_EQ(0, prot_unmarshal_stat(&ack, buf));
-        EXPECT_EQ(PROT_CMD_STAT, ack.cmd);
+        nread = read(cli.data_fd, buf, PROT_FILE_INFO_SIZE);
+        ASSERT_EQ(PROT_FILE_INFO_SIZE, nread);
+        ASSERT_EQ(0, prot_unmarshal_file_info(&ack, buf));
+        EXPECT_EQ(PROT_CMD_FILE_INFO, ack.cmd);
         EXPECT_EQ(PROT_STAT_OK, ack.stat);
-        EXPECT_EQ(8, ack.body_len);
+        EXPECT_EQ(PROT_FILE_INFO_BODY_LEN, ack.body_len);
         EXPECT_EQ(CHUNK_SIZE * NCHUNKS, ack.size);
     }
 
@@ -463,15 +463,15 @@ TEST_F(FiodThreadLargeFileFix, read_io_error)
 
     uint8_t buf [PROT_PDU_MAXSIZE];
     ssize_t nread;
-    struct prot_file_stat ack;
+    struct prot_file_info ack;
 
     // Request ACK
-    nread = read(data_fd, buf, PROT_STAT_SIZE);
-    ASSERT_EQ(PROT_STAT_SIZE, nread);
-    ASSERT_EQ(0, prot_unmarshal_stat(&ack, buf));
-    EXPECT_EQ(PROT_CMD_STAT, ack.cmd);
+    nread = read(data_fd, buf, PROT_FILE_INFO_SIZE);
+    ASSERT_EQ(PROT_FILE_INFO_SIZE, nread);
+    ASSERT_EQ(0, prot_unmarshal_file_info(&ack, buf));
+    EXPECT_EQ(PROT_CMD_FILE_INFO, ack.cmd);
     EXPECT_EQ(PROT_STAT_OK, ack.stat);
-    EXPECT_EQ(8, ack.body_len);
+    EXPECT_EQ(PROT_FILE_INFO_BODY_LEN, ack.body_len);
     EXPECT_EQ(CHUNK_SIZE * NCHUNKS, ack.size);
 
     // File content
@@ -524,19 +524,19 @@ TEST_F(FiodThreadLargeFileFix, send_io_error)
     ASSERT_TRUE(stat_fd);
 
     std::vector<uint8_t> data_buf(CHUNK_SIZE);
-    std::vector<uint8_t> stat_buf(PROT_STAT_SIZE);
+    std::vector<uint8_t> stat_buf(PROT_FILE_INFO_SIZE);
     ssize_t nread;
-    struct prot_file_stat ack;
-    struct prot_file_stat xfer_stat;
+    struct prot_file_info ack;
+    struct prot_xfer_stat xfer_stat;
 
     // Request ACK
-    while (wouldblock(nread = read(stat_fd, stat_buf.data(), PROT_STAT_SIZE))) {}
+    while (wouldblock(nread = read(stat_fd, stat_buf.data(), PROT_FILE_INFO_SIZE))) {}
 
-    ASSERT_EQ(PROT_STAT_SIZE, nread);
-    ASSERT_EQ(0, prot_unmarshal_stat(&ack, stat_buf.data()));
-    EXPECT_EQ(PROT_CMD_STAT, ack.cmd);
+    ASSERT_EQ(PROT_FILE_INFO_SIZE, nread);
+    ASSERT_EQ(0, prot_unmarshal_file_info(&ack, stat_buf.data()));
+    EXPECT_EQ(PROT_CMD_FILE_INFO, ack.cmd);
     EXPECT_EQ(PROT_STAT_OK, ack.stat);
-    EXPECT_EQ(8, ack.body_len);
+    EXPECT_EQ(PROT_FILE_INFO_BODY_LEN, ack.body_len);
     EXPECT_EQ(CHUNK_SIZE * NCHUNKS, ack.size);
 
     size_t nchunks {};
@@ -568,12 +568,12 @@ TEST_F(FiodThreadLargeFileFix, send_io_error)
         }
 
         // Read transfer status update (don't let pipe fill up)
-        nread = read(stat_fd, stat_buf.data(), PROT_STAT_SIZE);
+        nread = read(stat_fd, stat_buf.data(), PROT_XFER_STAT_SIZE);
         if (wouldblock(nread))
             continue;
         ASSERT_GE(PROT_HDR_SIZE, nread);
-        ASSERT_NE(-1, prot_unmarshal_stat(&xfer_stat, stat_buf.data()));
-        ASSERT_EQ(PROT_CMD_STAT, xfer_stat.cmd);
+        ASSERT_NE(-1, prot_unmarshal_xfer_stat(&xfer_stat, stat_buf.data()));
+        ASSERT_EQ(PROT_CMD_XFER_STAT, xfer_stat.cmd);
         if (xfer_stat.stat != PROT_STAT_OK) {
             got_errno = (xfer_stat.stat == EIO);
             break;
@@ -583,15 +583,15 @@ TEST_F(FiodThreadLargeFileFix, send_io_error)
     ASSERT_TRUE(set_nonblock(stat_fd, false));
 
     while (!got_eof) {
-        nread = read(stat_fd, stat_buf.data(), PROT_STAT_SIZE);
+        nread = read(stat_fd, stat_buf.data(), PROT_XFER_STAT_SIZE);
 
         if (nread == 0) {
             got_eof = true;
 
         } else {
             ASSERT_GE(nread, PROT_HDR_SIZE);
-            ASSERT_NE(-1, prot_unmarshal_stat(&xfer_stat, stat_buf.data()));
-            ASSERT_EQ(PROT_CMD_STAT, xfer_stat.cmd);
+            ASSERT_NE(-1, prot_unmarshal_xfer_stat(&xfer_stat, stat_buf.data()));
+            ASSERT_EQ(PROT_CMD_XFER_STAT, xfer_stat.cmd);
 
             if (xfer_stat.stat != PROT_STAT_OK)
                 got_errno = (xfer_stat.stat == EIO);

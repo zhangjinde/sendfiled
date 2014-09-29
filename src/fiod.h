@@ -100,7 +100,7 @@ extern "C" {
                   const char* filename,
                   int dest_fd,
                   loff_t offset, size_t len,
-                  const bool stat_fd_nonblock) DSO_EXPORT;
+                  bool stat_fd_nonblock) DSO_EXPORT;
 
     /**
        Splices a file into a pipe.

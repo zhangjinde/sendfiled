@@ -17,44 +17,36 @@
  */
 static bool lock_file(int fd, off_t offset, off_t len);
 
-static bool set_fstat(struct file* file);
+static bool set_fstat(int fd, struct file_info*);
 
-bool file_open_read(struct file* file,
-                    const char* name,
-                    const off_t offset, const size_t len)
+int file_open_read(const char* name,
+                   const off_t offset, const size_t len,
+                   struct file_info* info)
 {
-    *file = (struct file) {
-        .fd = open(name, O_RDONLY)
-    };
+    const int fd = open(name, O_RDONLY);
 
-    if (file->fd == -1)
-        return false;
+    if (fd == -1)
+        return -1;
 
-    if (!lock_file(file->fd, offset, (off_t)len) ||
-        !set_fstat(file)) {
+    if (!lock_file(fd, offset, (off_t)len) ||
+        !set_fstat(fd, info)) {
         goto fail;
     }
 
-    if (offset > 0 && lseek(file->fd, offset, SEEK_SET) == -1)
+    if (offset > 0 && lseek(fd, offset, SEEK_SET) == -1)
         goto fail;
 
-    return true;
+    return fd;
 
  fail:
-    close(file->fd);
-    file->fd = -1;
+    close(fd);
 
-    return false;
+    return -1;
 }
 
-void file_close(const struct file* f)
+off_t file_offset(const int fd)
 {
-    close(f->fd);
-}
-
-off_t file_offset(const struct file* file)
-{
-    return lseek(file->fd, 0, SEEK_CUR);
+    return lseek(fd, 0, SEEK_CUR);
 }
 
 /* ------------------ Internal implementations ---------------- */
@@ -71,15 +63,20 @@ static bool lock_file(const int fd, const off_t offset, const off_t len)
     return (fcntl(fd, F_SETLK, &lock) != -1);
 }
 
-static bool set_fstat(struct file* file)
+static bool set_fstat(const int fd, struct file_info* info)
 {
     struct stat st;
 
-    if (fstat(file->fd, &st) == -1)
+    if (fstat(fd, &st) == -1)
         return false;
 
-    file->size = (size_t)st.st_size;
-    file->blksize = (int)st.st_blksize;
+    *info = (struct file_info) {
+        .size = (size_t)st.st_size,
+        .atime = st.st_atime,
+        .mtime = st.st_mtime,
+        .ctime = st.st_ctime,
+        .blksize = (unsigned)st.st_blksize,
+    };
 
     return true;
 }

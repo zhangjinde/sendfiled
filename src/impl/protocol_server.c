@@ -30,8 +30,29 @@ int prot_unmarshal_request(struct prot_request* pdu, const void* buf)
     return 0;
 }
 
-void prot_marshal_stat(struct prot_file_stat_m* pdu, const size_t file_size)
+#define INSERT_FIELD(p, f)                      \
+    memcpy(p, &f, sizeof(f));                   \
+    p += sizeof(f)
+
+void prot_marshal_file_info(struct prot_file_info_m* pdu,
+                            const size_t file_size,
+                            const time_t atime,
+                            const time_t mtime,
+                            const time_t ctime)
 {
-    uint8_t* p = prot_marshal_hdr(pdu->data, PROT_CMD_STAT, PROT_STAT_OK, 8);
+    uint8_t* p = prot_marshal_hdr(pdu->data,
+                                  PROT_CMD_FILE_INFO,
+                                  PROT_STAT_OK,
+                                  PROT_FILE_INFO_BODY_LEN);
+
+    INSERT_FIELD(p, file_size);
+    INSERT_FIELD(p, atime);
+    INSERT_FIELD(p, mtime);
+    INSERT_FIELD(p, ctime);
+}
+
+void prot_marshal_xfer_stat(struct prot_xfer_stat_m* pdu, const size_t file_size)
+{
+    uint8_t* p = prot_marshal_hdr(pdu->data, PROT_CMD_XFER_STAT, PROT_STAT_OK, 8);
     memcpy(p, &file_size, 8);
 }
