@@ -119,6 +119,37 @@ int fiod_shutdown(const pid_t pid)
     return wait_child(pid);
 }
 
+int fiod_open(int srv_sockfd,
+              const char* filename,
+              loff_t offset, size_t len,
+              bool stat_fd_nonblock)
+{
+    int fds[2];
+
+    if (fiod_pipe(fds, O_NONBLOCK | O_CLOEXEC) == -1)
+        return -1;
+
+    if (!stat_fd_nonblock && !set_nonblock(fds[0], false))
+        goto fail;
+
+    struct prot_request_m req;
+    if (!prot_marshal_file_open(&req, filename, offset, len))
+        goto fail;
+
+    if (us_sendv(srv_sockfd, req.iovs, 2, &fds[1], 1) == -1)
+        goto fail;
+
+    close(fds[1]);
+
+    return fds[0];
+
+ fail:
+    close(fds[0]);
+    close(fds[1]);
+
+    return -1;
+}
+
 int fiod_send(int srv_sockfd,
               const char* filename,
               int dest_fd,

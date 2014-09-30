@@ -46,6 +46,17 @@ static bool marshal_req(struct prot_request_m* req,
     return true;
 }
 
+bool prot_marshal_file_open(struct prot_request_m* req,
+                            const char* filename,
+                            loff_t offset, size_t len)
+{
+    return marshal_req(req,
+                       PROT_CMD_FILE_OPEN,
+                       (uint64_t)offset,
+                       (uint64_t)len,
+                       filename);
+}
+
 bool prot_marshal_send(struct prot_request_m* req,
                        const char* filename,
                        const loff_t offset,
@@ -86,6 +97,10 @@ static int check_pdu(struct prot_hdr* hdr,
     return 0;
 }
 
+#define EXTRACT_FIELD(p, f)                     \
+    memcpy(&f, p, sizeof(f));                   \
+    p += sizeof(f)
+
 int prot_unmarshal_file_info(struct prot_file_info* pdu, const void* buf)
 {
     const uint8_t* p = prot_unmarshal_hdr((struct prot_hdr*)pdu, buf);
@@ -96,15 +111,30 @@ int prot_unmarshal_file_info(struct prot_file_info* pdu, const void* buf)
     if (err != 0)
         return err;
 
-    memcpy(&pdu->size, p, sizeof(pdu->size));
-    p += sizeof(pdu->size);
+    EXTRACT_FIELD(p, pdu->size);
+    EXTRACT_FIELD(p, pdu->atime);
+    EXTRACT_FIELD(p, pdu->mtime);
+    EXTRACT_FIELD(p, pdu->ctime);
 
-    memcpy(&pdu->atime, p, sizeof(pdu->atime));
-    p += sizeof(pdu->atime);
-    memcpy(&pdu->mtime, p, sizeof(pdu->mtime));
-    p += sizeof(pdu->mtime);
-    memcpy(&pdu->ctime, p, sizeof(pdu->ctime));
-    /* p += sizeof(pdu->ctime); */
+    return 0;
+}
+
+int prot_unmarshal_open_file_info(struct prot_open_file_info* pdu,
+                                  const void* buf)
+{
+    const uint8_t* p = prot_unmarshal_hdr((struct prot_hdr*)pdu, buf);
+
+    const int err = check_pdu((struct prot_hdr*)pdu,
+                              PROT_CMD_OPEN_FILE_INFO,
+                              PROT_OPEN_FILE_INFO_BODY_LEN);
+    if (err != 0)
+        return err;
+
+    EXTRACT_FIELD(p, pdu->size);
+    EXTRACT_FIELD(p, pdu->atime);
+    EXTRACT_FIELD(p, pdu->mtime);
+    EXTRACT_FIELD(p, pdu->ctime);
+    EXTRACT_FIELD(p, pdu->fd);
 
     return 0;
 }

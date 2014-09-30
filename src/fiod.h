@@ -70,6 +70,24 @@ extern "C" {
     */
 
     /**
+       Requests the server to open and return information about a file.
+
+       The server will write the file information (size and timestamps) and
+       server-internal file number to the status channel (the returned file
+       descriptor).
+
+       @attention The file will remain open in the server; it is the client's
+       responsibility to initiate the close on the server.
+
+       @retval >0 The status channel file descriptor
+       @retval -1 An error occurred
+     */
+    int fiod_open(int srv_sockfd,
+                  const char* filename,
+                  loff_t offset, size_t len,
+                  bool stat_fd_nonblock) DSO_EXPORT;
+
+    /**
        Sends a file over a user-supplied file descriptor.
 
        The result of each I/O operation will be reported on the status channel

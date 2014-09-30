@@ -274,6 +274,28 @@ TEST_F(FiodProcSmallFileFix, read)
     EXPECT_EQ(file_contents, recvd_file);
 }
 
+TEST_F(FiodProcSmallFileFix, open_file)
+{
+    const test::unique_fd data_fd {fiod_open(srv_fd,
+                                             file.name().c_str(),
+                                             0, 0, false)};
+    ASSERT_TRUE(data_fd);
+
+    uint8_t buf [PROT_PDU_MAXSIZE];
+    ssize_t nread;
+    struct prot_open_file_info ack;
+
+    // Request ACK
+    nread = read(data_fd, buf, PROT_OPEN_FILE_INFO_SIZE);
+    ASSERT_EQ(PROT_OPEN_FILE_INFO_SIZE, nread);
+    ASSERT_EQ(0, prot_unmarshal_open_file_info(&ack, buf));
+    EXPECT_EQ(PROT_CMD_OPEN_FILE_INFO, ack.cmd);
+    EXPECT_EQ(PROT_STAT_OK, ack.stat);
+    EXPECT_EQ(PROT_OPEN_FILE_INFO_BODY_LEN, ack.body_len);
+    EXPECT_EQ(file_contents.size(), ack.size);
+    EXPECT_GT(ack.fd, 0);
+}
+
 TEST_F(FiodProcSmallFileFix, read_range)
 {
     constexpr loff_t offset {3};

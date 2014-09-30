@@ -75,6 +75,10 @@ static bool add_send_xfer(struct context* ctx,
 
 static bool send_file_info(int fd, const struct file_info* info);
 
+static bool send_open_file_info(int cli_fd,
+                                int file_fd,
+                                const struct file_info* info);
+
 static bool send_xfer_stat(int fd, size_t file_size);
 
 static bool send_err(int fd, int err);
@@ -262,6 +266,19 @@ static bool process_request(struct context* ctx,
     }
 
     switch (pdu.cmd) {
+    case PROT_CMD_FILE_OPEN: {
+        struct file_info info;
+        const int fd = file_open_read(pdu.filename,
+                                      pdu.offset, pdu.len,
+                                      &info);
+        if (fd == -1) {
+            send_err(fds[0], errno);
+            return false;
+        }
+
+        send_open_file_info(fds[0], fd, &info);
+    } break;
+
     case PROT_CMD_READ: {
         struct file_info finfo;
         if (!add_read_xfer(ctx,
@@ -306,8 +323,6 @@ static bool needs_stat(const struct xfer* x)
 static bool process_file_op(struct xfer* xfer)
 {
     switch (xfer->cmd) {
-    case PROT_CMD_FILE_INFO:
-        break;
     case PROT_CMD_READ:
     case PROT_CMD_SEND:
         for (;;) {
@@ -341,6 +356,11 @@ static bool process_file_op(struct xfer* xfer)
     case PROT_CMD_CANCEL:
         break;
 
+    case PROT_CMD_FILE_OPEN:
+        LOGERRNOV("invalid state for client command: %d\n", xfer->cmd);
+        break;
+    case PROT_CMD_FILE_INFO:
+    case PROT_CMD_OPEN_FILE_INFO:
     case PROT_CMD_XFER_STAT:
         LOGERRNOV("invalid client command: %d\n", xfer->cmd);
         return false;
@@ -530,6 +550,18 @@ static bool send_file_info(int fd, const struct file_info* info)
     prot_marshal_file_info(&pdu,
                            info->size, info->atime, info->mtime, info->ctime);
     return send_pdu(fd, pdu.data, sizeof(pdu.data));
+}
+
+static bool send_open_file_info(int cli_fd,
+                                int file_fd,
+                                const struct file_info* info)
+{
+    struct prot_open_file_info_m pdu;
+    prot_marshal_open_file_info(&pdu,
+                                info->size,
+                                info->atime, info->mtime, info->ctime,
+                                file_fd);
+    return send_pdu(cli_fd, pdu.data, sizeof(pdu.data));
 }
 
 static bool send_xfer_stat(int fd, size_t file_size)

@@ -22,10 +22,17 @@ struct prot_request {
 };
 
 /**
-   A marshaled file info PDU
+   A marshaled 'file info' PDU
  */
 struct prot_file_info_m {
     uint8_t data [PROT_FILE_INFO_SIZE];
+};
+
+/**
+   A marshaled 'open file info' PDU
+ */
+struct prot_open_file_info_m {
+    uint8_t data [PROT_OPEN_FILE_INFO_SIZE];
 };
 
 /* A marshaled tranfer status PDU */
@@ -51,6 +58,13 @@ extern "C" {
                                 const time_t atime,
                                 const time_t mtime,
                                 const time_t ctime);
+
+    void prot_marshal_open_file_info(struct prot_open_file_info_m* pdu,
+                                     size_t size,
+                                     const time_t atime,
+                                     const time_t mtime,
+                                     const time_t ctime,
+                                     int fd);
 
     void prot_marshal_xfer_stat(struct prot_xfer_stat_m* pdu, size_t val);
 

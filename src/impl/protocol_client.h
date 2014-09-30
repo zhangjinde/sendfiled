@@ -18,12 +18,20 @@ struct prot_request_m {
     struct iovec iovs[2];
 };
 
+#define PROT_FILE_INFO_FIELDS                   \
+    PROT_HDR_FIELDS;                            \
+    size_t size;                                \
+    time_t atime;                               \
+    time_t mtime;                               \
+    time_t ctime
+
 struct prot_file_info {
-    PROT_HDR_FIELDS;
-    size_t size;
-    time_t atime;
-    time_t mtime;
-    time_t ctime;
+    PROT_FILE_INFO_FIELDS;
+};
+
+struct prot_open_file_info {
+    PROT_FILE_INFO_FIELDS;
+    int fd;
 };
 
 struct prot_xfer_stat {
@@ -37,10 +45,16 @@ struct prot_xfer_stat {
 extern "C" {
 #endif
 
-    bool prot_marshal_send(struct prot_request_m* req, const char* filename,
+    bool prot_marshal_file_open(struct prot_request_m* req,
+                                const char* filename,
+                                loff_t offset, size_t len);
+
+    bool prot_marshal_send(struct prot_request_m* req,
+                           const char* filename,
                            loff_t offset, size_t len);
 
-    bool prot_marshal_read(struct prot_request_m* req, const char* filename,
+    bool prot_marshal_read(struct prot_request_m* req,
+                           const char* filename,
                            loff_t offset, size_t len);
 
     /**
@@ -49,6 +63,14 @@ extern "C" {
        @retval >0 Error code from PDU header
     */
     int prot_unmarshal_file_info(struct prot_file_info* pdu, const void* buf);
+
+    /**
+       @retval 0 Success
+       @retval -1 Malformed PDU
+       @retval >0 Error code from PDU header
+    */
+    int prot_unmarshal_open_file_info(struct prot_open_file_info* pdu,
+                                      const void* buf);
 
     /**
        @retval 0 Success
