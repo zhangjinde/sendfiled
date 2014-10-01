@@ -15,6 +15,7 @@
 #include "syspoll.h"
 #include "unix_sockets.h"
 #include "util.h"
+#include "xfer_table.h"
 
 struct xfer_file {
     size_t size;
@@ -29,6 +30,7 @@ struct xfer {
     /* The syspoll-registered fd (must be the first field of this struct) */
     int dest_fd;
     int stat_fd;
+    size_t id;
     struct xfer_file file;
     enum prot_cmd cmd;
     size_t len;
@@ -38,10 +40,9 @@ struct xfer {
 struct context
 {
     struct syspoll* poller;
+    uint32_t next_id;
     int listenfd;
-    struct xfer** xfers;
-    int nxfers;
-    int max_xfers;
+    struct xfer_table xfers;
 };
 
 #pragma GCC diagnostic pop
@@ -51,6 +52,8 @@ static void print_xfer(const struct xfer* x);
 #define PRINT_XFER(x)                           \
     printf("%s: ", __func__);                   \
     print_xfer(x)
+
+static size_t get_xfer_id(void*);
 
 static bool errno_is_fatal(const int err);
 
@@ -92,7 +95,7 @@ static bool send_err(int fd, int err);
 */
 static void remove_xfer(struct context* ctx, struct xfer* xfer);
 
-static void delete_xfer(struct xfer* x);
+static void delete_xfer(void* p);
 
 static bool process_events(struct context* ctx,
                            const int nevents,
@@ -260,11 +263,6 @@ static bool process_request(struct context* ctx,
            size, pdu.cmd, pdu.stat, pdu.body_len, pdu.filename,
            fds[0], fds[1]);
 
-    if ((pdu.cmd == PROT_CMD_READ || pdu.cmd == PROT_CMD_SEND) &&
-        ctx->nxfers == ctx->max_xfers) {
-        return false;
-    }
-
     switch (pdu.cmd) {
     case PROT_CMD_FILE_OPEN: {
         struct file_info info;
@@ -371,6 +369,11 @@ static bool process_file_op(struct xfer* xfer)
 
 /* --------------- (Uninteresting) Internal implementations ------------- */
 
+static size_t get_xfer_id(void* p)
+{
+    return ((struct xfer*)p)->id;
+}
+
 static bool context_construct(struct context* ctx,
                               const int poll_timeout,
                               const int listenfd,
@@ -379,11 +382,11 @@ static bool context_construct(struct context* ctx,
     *ctx = (struct context) {
         .poller = syspoll_new(poll_timeout, maxfds),
         .listenfd = listenfd,
-        .xfers = calloc((size_t)maxfds, sizeof(struct xfer*)),
-        .max_xfers = maxfds
+        .next_id = 1
     };
 
-    if (!ctx->poller || !ctx->xfers) {
+    if (!ctx->poller ||
+        !xfer_table_construct(&ctx->xfers, get_xfer_id, (size_t)maxfds)) {
         context_destruct(ctx);
         return false;
     }
@@ -397,12 +400,7 @@ static void context_destruct(struct context* ctx)
 
     close(ctx->listenfd);
 
-    for (int i = 0; i < ctx->nxfers; i++) {
-        struct xfer* const x = ctx->xfers[i];
-        delete_xfer(x);
-    }
-
-    free(ctx->xfers);
+    xfer_table_destruct(&ctx->xfers, delete_xfer);
 }
 
 static bool xfer_complete(const struct xfer* x)
@@ -435,8 +433,6 @@ static struct xfer* add_xfer(struct context* ctx,
                              const int stat_fd,
                              const int dest_fd)
 {
-    assert (ctx->nxfers < ctx->max_xfers);
-
     if (((size_t)offset + len) > file->size) {
         /* Requested range is invalid */
         errno = ERANGE;
@@ -452,7 +448,8 @@ static struct xfer* add_xfer(struct context* ctx,
         .dest_fd = dest_fd,
         .stat_fd = stat_fd,
         .file = *file,
-        .len = (len > 0 ? len : (file->size - (size_t)offset))
+        .len = (len > 0 ? len : (file->size - (size_t)offset)),
+        .id = ctx->next_id++
     };
 
     if (!syspoll_register(ctx->poller, xfer->dest_fd, xfer, SYSPOLL_WRITE))
@@ -460,9 +457,8 @@ static struct xfer* add_xfer(struct context* ctx,
 
     PRINT_XFER(xfer);
 
-    ctx->xfers[ctx->nxfers] = xfer;
-    xfer->idx = ctx->nxfers;
-    ctx->nxfers++;
+    if (!xfer_table_insert(&ctx->xfers, xfer))
+        goto fail;
 
     return xfer;
 
@@ -494,7 +490,8 @@ static bool add_read_xfer(struct context* ctx,
                                           offset, len,
                                           dest_fd, dest_fd);
 
-    finfo->size = x->len;
+    if (x)
+        finfo->size = x->len;
 
     return (bool)x;
 }
@@ -528,8 +525,10 @@ static bool add_send_xfer(struct context* ctx,
     return (bool)x;
 }
 
-static void delete_xfer(struct xfer* x)
+static void delete_xfer(void* p)
 {
+    struct xfer* const x = p;
+
     close(x->dest_fd);
     if (x->stat_fd != x->dest_fd)
         close(x->stat_fd);
@@ -587,15 +586,7 @@ static bool send_err(int fd, const int stat)
 */
 static void remove_xfer(struct context* ctx, struct xfer* xfer)
 {
-    const int i = xfer->idx;
-
-    if (i < ctx->nxfers - 1) {
-        ctx->xfers[i] = ctx->xfers[ctx->nxfers - 1];
-        ctx->xfers[i]->idx = i;
-        ctx->xfers[ctx->nxfers - 1] = NULL;
-    }
-
-    ctx->nxfers--;
+    xfer_table_erase(&ctx->xfers, xfer->id);
 
     /* The client and server processes share the dest fd's file table entry (it
        was sent over a UNIX socket), so closing it here will not cause it to be

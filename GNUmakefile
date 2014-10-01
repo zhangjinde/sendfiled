@@ -62,6 +62,7 @@ protocol_server.c\
 server.c\
 syspoll_linux.c \
 unix_socket_server.c\
+xfer_table.c\
 
 src_test:=\
 protocol_client.c\
@@ -69,6 +70,7 @@ test_fiod.cpp\
 test_interpose_linux.c \
 test_protocol.cpp\
 test_utils.cpp\
+test_xfer_table.cpp\
 
 obj_c_client:=$(src_client:%=$(builddir)/%.cli.o)
 obj_c_server:=$(src_server:%=$(builddir)/%.srv.o)
