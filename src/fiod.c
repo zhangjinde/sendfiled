@@ -227,12 +227,12 @@ bool fiod_send_open(const int srv_sockfd,
                     const uint32_t txnid,
                     const int dest_fd)
 {
-    struct prot_send_open_m req;
-    prot_marshal_send_open(&req, txnid);
+    prot_send_open_buf buf;
+    prot_marshal_send_open(buf, txnid);
 
     struct iovec iov = {
-        .iov_base = req.data,
-        .iov_len = sizeof(req.data)
+        .iov_base = buf,
+        .iov_len = sizeof(buf)
     };
 
     if (us_sendv(srv_sockfd, &iov, 1, &dest_fd, 1) == -1)

@@ -8,8 +8,8 @@
 
 static bool marshal_req(struct prot_request_m* req,
                         const uint8_t cmd,
-                        const uint64_t offset,
-                        const uint64_t len,
+                        const loff_t offset,
+                        const size_t len,
                         const char* filename)
 {
     const uint64_t namelen = (filename ?
@@ -22,22 +22,16 @@ static bool marshal_req(struct prot_request_m* req,
     }
 
     /* 16 for the offset and len fields; +1 for terminating '\0' */
-    const uint64_t body_len = 16 + namelen + 1;
+    const size_t body_len = sizeof(offset) + sizeof(len) + namelen + 1;
 
     uint8_t* p = prot_marshal_hdr(req->hdr, cmd, PROT_STAT_OK, body_len);
 
-    /* Offset */
-    memcpy(p, &offset, 8);
-    p += 8;
-
-    /* Len */
-    memcpy(p, &len, 8);
-    p += 8;
+    INSERT_FIELD(p, offset);
+    INSERT_FIELD(p, len);
 
     req->filename = filename;
 
     req->iovs[0].iov_base = req->hdr;
-    assert ((p - req->hdr) == PROT_REQ_BASE_SIZE);
     req->iovs[0].iov_len = (size_t)(p - req->hdr);
 
     req->iovs[1].iov_base = (void*)req->filename;
@@ -53,8 +47,8 @@ bool prot_marshal_read(struct prot_request_m* req,
 {
     return marshal_req(req,
                        PROT_CMD_READ,
-                       (uint64_t)offset,
-                       (uint64_t)len,
+                       offset,
+                       len,
                        filename);
 }
 
@@ -64,8 +58,8 @@ bool prot_marshal_file_open(struct prot_request_m* req,
 {
     return marshal_req(req,
                        PROT_CMD_FILE_OPEN,
-                       (uint64_t)offset,
-                       (uint64_t)len,
+                       offset,
+                       len,
                        filename);
 }
 
@@ -76,19 +70,19 @@ bool prot_marshal_send(struct prot_request_m* req,
 {
     return marshal_req(req,
                        PROT_CMD_SEND,
-                       (uint64_t)offset,
-                       (uint64_t)len,
+                       offset,
+                       len,
                        filename);
 }
 
-void prot_marshal_send_open(struct prot_send_open_m* pdu, const uint32_t txnid)
+void prot_marshal_send_open(prot_send_open_buf buf, const uint32_t txnid)
 {
-    uint8_t* p = prot_marshal_hdr(pdu->data,
+    uint8_t* p = prot_marshal_hdr(buf,
                                   PROT_CMD_SEND_OPEN,
                                   PROT_STAT_OK,
-                                  PROT_TXNID_SIZE);
+                                  sizeof(txnid));
 
-    memcpy(p, &txnid, sizeof(txnid));
+    INSERT_FIELD(p, txnid);
 }
 
 static int check_pdu(struct prot_hdr* hdr,
@@ -107,17 +101,13 @@ static int check_pdu(struct prot_hdr* hdr,
     return 0;
 }
 
-#define EXTRACT_FIELD(p, f)                     \
-    memcpy(&f, p, sizeof(f));                   \
-    p += sizeof(f)
-
 int prot_unmarshal_file_info(struct prot_file_info* pdu, const void* buf)
 {
     const uint8_t* p = prot_unmarshal_hdr((struct prot_hdr*)pdu, buf);
 
     const int err = check_pdu((struct prot_hdr*)pdu,
                               PROT_CMD_FILE_INFO,
-                              PROT_FILE_INFO_BODY_LEN);
+                              PROT_FILE_INFO_SIZE - PROT_HDR_SIZE);
     if (err != 0)
         return err;
 
@@ -136,7 +126,7 @@ int prot_unmarshal_open_file_info(struct prot_open_file_info* pdu,
 
     const int err = check_pdu((struct prot_hdr*)pdu,
                               PROT_CMD_OPEN_FILE_INFO,
-                              PROT_OPEN_FILE_INFO_BODY_LEN);
+                              PROT_SIZEOF(prot_open_file_info, txnid));
     if (err != 0)
         return err;
 
@@ -144,7 +134,7 @@ int prot_unmarshal_open_file_info(struct prot_open_file_info* pdu,
     EXTRACT_FIELD(p, pdu->atime);
     EXTRACT_FIELD(p, pdu->mtime);
     EXTRACT_FIELD(p, pdu->ctime);
-    EXTRACT_FIELD(p, pdu->xfer_id);
+    EXTRACT_FIELD(p, pdu->txnid);
 
     return 0;
 }
@@ -157,7 +147,7 @@ int prot_unmarshal_xfer_stat(struct prot_xfer_stat* pdu, const void* buf)
     if (err != 0)
         return err;
 
-    memcpy(&pdu->size, p, 8);
+    EXTRACT_FIELD(p, pdu->size);
 
     return 0;
 }

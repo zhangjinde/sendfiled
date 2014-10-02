@@ -41,13 +41,13 @@ struct xfer {
 struct timer {
     int ident;
     int magic;
-    uint32_t xfer_id;
+    uint32_t txnid;
 };
 
-#define TIMER(ident_, xfer_id_)                                         \
+#define TIMER(ident_, txnid_)                                         \
     (struct timer) {.ident = ident_,                                    \
             .magic = -123,                                              \
-            .xfer_id = xfer_id_                                         \
+            .txnid = txnid_                                         \
             }
 
 static bool is_timer(const void* p)
@@ -77,7 +77,7 @@ static void print_xfer(const struct xfer* x);
     printf("%s: ", __func__);                   \
     print_xfer(x)
 
-static size_t get_xfer_id(void*);
+static size_t get_txnid(void*);
 
 static bool errno_is_fatal(const int err);
 
@@ -105,7 +105,7 @@ static bool register_xfer(struct context* ctx, struct xfer* xfer);
 static bool send_file_info(int fd, const struct file_info* info);
 
 static bool send_open_file_info(int cli_fd,
-                                uint32_t xfer_id,
+                                uint32_t txnid,
                                 const struct file_info* info);
 
 static bool send_xfer_stat(int fd, size_t file_size);
@@ -212,7 +212,7 @@ static bool process_events(struct context* ctx,
             } else if (is_timer(resrc.udata)) {
                 struct timer* const timer = resrc.udata;
                 struct xfer* const xfer = xfer_table_find(ctx->xfers,
-                                                          timer->xfer_id);
+                                                          timer->txnid);
 
                 if (xfer && !xfer_in_progress(xfer))
                     remove_xfer(ctx, xfer);
@@ -318,7 +318,7 @@ static bool process_request(struct context* ctx,
             return false;
         }
 
-        send_open_file_info(fds[0], timer->xfer_id, &finfo);
+        send_open_file_info(fds[0], timer->txnid, &finfo);
     } break;
 
     case PROT_CMD_SEND_OPEN: {
@@ -440,7 +440,7 @@ static bool process_file_op(struct xfer* xfer)
 
 /* --------------- (Uninteresting) Internal implementations ------------- */
 
-static size_t get_xfer_id(void* p)
+static size_t get_txnid(void* p)
 {
     return ((struct xfer*)p)->id;
 }
@@ -453,7 +453,7 @@ static bool context_construct(struct context* ctx,
 {
     *ctx = (struct context) {
         .poller = syspoll_new(poll_timeout, maxfds),
-        .xfers = xfer_table_new(get_xfer_id, (size_t)maxfds),
+        .xfers = xfer_table_new(get_txnid, (size_t)maxfds),
         .open_file_timeout_ms = (unsigned)open_file_timeout_ms,
         .listenfd = listenfd,
         .next_id = 1
@@ -638,36 +638,36 @@ static bool send_pdu(const int fd, void* pdu, const size_t size)
 
 static bool send_file_info(int fd, const struct file_info* info)
 {
-    struct prot_file_info_m pdu;
-    prot_marshal_file_info(&pdu,
+    prot_file_info_buf pdu;
+    prot_marshal_file_info(pdu,
                            info->size, info->atime, info->mtime, info->ctime);
-    return send_pdu(fd, pdu.data, sizeof(pdu.data));
+    return send_pdu(fd, pdu, sizeof(pdu));
 }
 
 static bool send_open_file_info(int cli_fd,
-                                const uint32_t xfer_id,
+                                const uint32_t txnid,
                                 const struct file_info* info)
 {
-    struct prot_open_file_info_m pdu;
-    prot_marshal_open_file_info(&pdu,
+    prot_open_file_info_buf pdu;
+    prot_marshal_open_file_info(pdu,
                                 info->size,
                                 info->atime, info->mtime, info->ctime,
-                                xfer_id);
-    return send_pdu(cli_fd, pdu.data, sizeof(pdu.data));
+                                txnid);
+    return send_pdu(cli_fd, pdu, sizeof(pdu));
 }
 
 static bool send_xfer_stat(int fd, size_t file_size)
 {
-    struct prot_xfer_stat_m pdu;
-    prot_marshal_xfer_stat(&pdu, file_size);
-    return send_pdu(fd, pdu.data, sizeof(pdu.data));
+    prot_xfer_stat_buf pdu;
+    prot_marshal_xfer_stat(pdu, file_size);
+    return send_pdu(fd, pdu, sizeof(pdu));
 }
 
 static bool send_err(int fd, const int stat)
 {
-    struct prot_hdr_m pdu;
-    prot_marshal_hdr(pdu.data, PROT_CMD_XFER_STAT, (int)stat, 0);
-    return send_pdu(fd, pdu.data, sizeof(pdu.data));
+    prot_hdr_buf pdu;
+    prot_marshal_hdr(pdu, PROT_CMD_XFER_STAT, (int)stat, 0);
+    return send_pdu(fd, pdu, sizeof(pdu));
 }
 
 /*

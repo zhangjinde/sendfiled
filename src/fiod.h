@@ -160,7 +160,7 @@ extern "C" {
 
        @param srv_sockfd A socket connected to the server (see fiod_connect())
 
-       @param txnid The open file's unique identifier
+       @param txnid Transaction ID/open file ID
 
        @param dest_fd The file descriptor to which to write the file
      */

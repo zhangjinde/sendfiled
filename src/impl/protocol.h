@@ -2,6 +2,7 @@
 #define FIOD_PROTOCOL_H
 
 #include <sys/types.h>
+#include <sys/uio.h>
 
 #include <stdint.h>
 
@@ -28,46 +29,122 @@ enum {
     PROT_STAT_OK
 };
 
-#define PROT_HDR_SIZE 10        /* cmd{1} + stat{1} + len{8} */
+#define PROT_SIZEOF(s, m)                       \
+    sizeof(((struct s*)NULL)->m)
 
 #define PROT_FILENAME_MAX 512   /* Excludes the terminating '\0' */
 
-#define PROT_TXNID_SIZE 4
+#define INSERT_FIELD(p, f)                      \
+    memcpy(p, &f, sizeof(f));                   \
+    p += sizeof(f)
 
-#define PROT_FILE_INFO_BODY_LEN (sizeof(size_t) + sizeof(time_t) * 3)
-#define PROT_FILE_INFO_SIZE (PROT_HDR_SIZE + PROT_FILE_INFO_BODY_LEN)
+#define EXTRACT_FIELD(p, f)                     \
+    memcpy(&f, p, sizeof(f));                   \
+    p += sizeof(f)
 
-/* +4 bytes for the transfer ID */
-#define PROT_OPEN_FILE_INFO_BODY_LEN (PROT_FILE_INFO_BODY_LEN + 4)
-#define PROT_OPEN_FILE_INFO_SIZE (PROT_HDR_SIZE + PROT_OPEN_FILE_INFO_BODY_LEN)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpadded"
 
-#define PROT_SEND_OPEN_SIZE (PROT_HDR_SIZE + PROT_TXNID_SIZE)
-
-#define PROT_REQ_BODY_LEN (8 + 8)
-
-/* Size of file operation request PDU minus the filename */
-#define PROT_REQ_BASE_SIZE (PROT_HDR_SIZE + PROT_REQ_BODY_LEN)
-
-/* Maximum size of a file operation request PDU */
-#define PROT_REQ_MAXSIZE (PROT_REQ_BASE_SIZE + PROT_FILENAME_MAX + 1)
-
-/* Size of a status PDU  */
-#define PROT_XFER_STAT_SIZE (PROT_HDR_SIZE + 8)
-
-/* Maximum PDU size */
-#define PROT_PDU_MAXSIZE PROT_REQ_MAXSIZE
+/* ------------------ PDU Headers ------------- */
 
 #define PROT_HDR_FIELDS                         \
     uint8_t cmd;                                \
     uint8_t stat;                               \
     size_t body_len
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpadded"
-
 struct prot_hdr {
     PROT_HDR_FIELDS;
 };
+
+#define PROT_HDR_SIZE                           \
+    (PROT_SIZEOF(prot_hdr, cmd) +               \
+     PROT_SIZEOF(prot_hdr, stat) +              \
+     PROT_SIZEOF(prot_hdr, body_len))
+
+typedef uint8_t prot_hdr_buf [PROT_HDR_SIZE];
+
+/* ------------- File Operation Request PDU ------------ */
+
+struct prot_request {
+    PROT_HDR_FIELDS;
+    loff_t offset;
+    size_t len;
+    const char* filename;
+};
+
+/* A marshaled request PDU */
+struct prot_request_m {
+    uint8_t hdr [PROT_HDR_SIZE +
+                 PROT_SIZEOF(prot_request, offset) +
+                 PROT_SIZEOF(prot_request, len)];
+    const char* filename;
+    struct iovec iovs[2];
+};
+
+/* Maximum size of a file operation request PDU */
+#define PROT_REQ_MAXSIZE (PROT_SIZEOF(prot_request_m, hdr) +  \
+                          PROT_FILENAME_MAX + 1)
+
+/* -------------- 'Send Open File' PDU */
+
+struct prot_send_open {
+    PROT_HDR_FIELDS;
+    uint32_t txnid;
+};
+
+#define PROT_SEND_OPEN_SIZE                     \
+    (PROT_HDR_SIZE +                            \
+     PROT_SIZEOF(prot_send_open, txnid))
+
+typedef uint8_t prot_send_open_buf [PROT_SEND_OPEN_SIZE];
+
+/* --------------- File Information PDU ------------- */
+
+#define PROT_FILE_INFO_FIELDS                   \
+    PROT_HDR_FIELDS;                            \
+    size_t size;                                \
+    time_t atime;                               \
+    time_t mtime;                               \
+    time_t ctime
+
+struct prot_file_info {
+    PROT_FILE_INFO_FIELDS;
+};
+
+#define PROT_FILE_INFO_SIZE                     \
+    (PROT_HDR_SIZE +                            \
+     PROT_SIZEOF(prot_file_info, size) +        \
+     PROT_SIZEOF(prot_file_info, atime) +       \
+     PROT_SIZEOF(prot_file_info, mtime) +       \
+     PROT_SIZEOF(prot_file_info, ctime))
+
+typedef uint8_t prot_file_info_buf [PROT_FILE_INFO_SIZE];
+
+/* ------------- Open File Information PDU ------------ */
+
+struct prot_open_file_info {
+    PROT_FILE_INFO_FIELDS;
+    uint32_t txnid;
+};
+
+#define PROT_OPEN_FILE_INFO_SIZE                \
+    (PROT_FILE_INFO_SIZE +                      \
+     PROT_SIZEOF(prot_open_file_info, txnid))
+
+typedef uint8_t prot_open_file_info_buf [PROT_OPEN_FILE_INFO_SIZE];
+
+/* -------------- Transfer Status PDU -------------- */
+
+struct prot_xfer_stat {
+    PROT_HDR_FIELDS;
+    size_t size;
+};
+
+#define PROT_XFER_STAT_SIZE                     \
+    (PROT_HDR_SIZE +                            \
+     PROT_SIZEOF(prot_xfer_stat, size))         \
+
+typedef uint8_t prot_xfer_stat_buf [PROT_XFER_STAT_SIZE];
 
 #pragma GCC diagnostic pop
 

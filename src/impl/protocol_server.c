@@ -31,15 +31,15 @@ int prot_unmarshal_request(struct prot_request* pdu, const void* buf)
     }
 
     /* offset + len + 1-char filename and its NUL (minimum filename length) */
-    if (pdu->body_len < (8 + 8 + 2)) {
+    if (pdu->body_len < (PROT_SIZEOF(prot_request, offset) +
+                         PROT_SIZEOF(prot_request, len) +
+                         2)) {
         pdu->filename = NULL;
         return -1;
     }
 
-    memcpy(&pdu->offset, p, 8);
-    p += 8;
-    memcpy(&pdu->len, p, 8);
-    p += 8;
+    EXTRACT_FIELD(p, pdu->offset);
+    EXTRACT_FIELD(p, pdu->len);
 
     pdu->filename = (char*)p;
 
@@ -53,28 +53,24 @@ int prot_unmarshal_send_open(struct prot_send_open* pdu, const void* buf)
     if (pdu->stat != PROT_STAT_OK)
         return pdu->stat;
 
-    if (pdu->cmd != PROT_CMD_SEND_OPEN || pdu->body_len != PROT_TXNID_SIZE)
+    if (pdu->cmd != PROT_CMD_SEND_OPEN || pdu->body_len != sizeof(pdu->txnid))
         return -1;
 
-    memcpy(&pdu->txnid, p, PROT_TXNID_SIZE);
+    EXTRACT_FIELD(p, pdu->txnid);
 
     return 0;
 }
 
-#define INSERT_FIELD(p, f)                      \
-    memcpy(p, &f, sizeof(f));                   \
-    p += sizeof(f)
-
-void prot_marshal_file_info(struct prot_file_info_m* pdu,
+void prot_marshal_file_info(prot_file_info_buf pdu,
                             const size_t file_size,
                             const time_t atime,
                             const time_t mtime,
                             const time_t ctime)
 {
-    uint8_t* p = prot_marshal_hdr(pdu->data,
+    uint8_t* p = prot_marshal_hdr(pdu,
                                   PROT_CMD_FILE_INFO,
                                   PROT_STAT_OK,
-                                  PROT_FILE_INFO_BODY_LEN);
+                                  (PROT_FILE_INFO_SIZE - PROT_HDR_SIZE));
 
     INSERT_FIELD(p, file_size);
     INSERT_FIELD(p, atime);
@@ -82,27 +78,28 @@ void prot_marshal_file_info(struct prot_file_info_m* pdu,
     INSERT_FIELD(p, ctime);
 }
 
-void prot_marshal_open_file_info(struct prot_open_file_info_m* pdu,
+void prot_marshal_open_file_info(prot_open_file_info_buf pdu,
                                  const size_t file_size,
                                  const time_t atime,
                                  const time_t mtime,
                                  const time_t ctime,
-                                 const uint32_t xfer_id)
+                                 const uint32_t txnid)
 {
-    uint8_t* p = prot_marshal_hdr(pdu->data,
+    uint8_t* p = prot_marshal_hdr(pdu,
                                   PROT_CMD_OPEN_FILE_INFO,
                                   PROT_STAT_OK,
-                                  PROT_OPEN_FILE_INFO_BODY_LEN);
+                                  PROT_SIZEOF(prot_open_file_info, txnid));
 
     INSERT_FIELD(p, file_size);
     INSERT_FIELD(p, atime);
     INSERT_FIELD(p, mtime);
     INSERT_FIELD(p, ctime);
-    INSERT_FIELD(p, xfer_id);
+    INSERT_FIELD(p, txnid);
 }
 
-void prot_marshal_xfer_stat(struct prot_xfer_stat_m* pdu, const size_t file_size)
+void prot_marshal_xfer_stat(prot_xfer_stat_buf pdu, const size_t file_size)
 {
-    uint8_t* p = prot_marshal_hdr(pdu->data, PROT_CMD_XFER_STAT, PROT_STAT_OK, 8);
-    memcpy(p, &file_size, 8);
+    uint8_t* p = prot_marshal_hdr(pdu, PROT_CMD_XFER_STAT, PROT_STAT_OK, 8);
+
+    INSERT_FIELD(p, file_size);
 }

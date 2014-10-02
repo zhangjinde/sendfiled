@@ -9,43 +9,6 @@
 
 #include "protocol.h"
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpadded"
-
-/* A marshaled request PDU */
-struct prot_request_m {
-    uint8_t hdr [PROT_REQ_BASE_SIZE];
-    const char* filename;
-    struct iovec iovs[2];
-};
-
-struct prot_send_open_m {
-    uint8_t data [PROT_SEND_OPEN_SIZE];
-};
-
-#define PROT_FILE_INFO_FIELDS                   \
-    PROT_HDR_FIELDS;                            \
-    size_t size;                                \
-    time_t atime;                               \
-    time_t mtime;                               \
-    time_t ctime
-
-struct prot_file_info {
-    PROT_FILE_INFO_FIELDS;
-};
-
-struct prot_open_file_info {
-    PROT_FILE_INFO_FIELDS;
-    uint32_t xfer_id;
-};
-
-struct prot_xfer_stat {
-    PROT_HDR_FIELDS;
-    size_t size;
-};
-
-#pragma GCC diagnostic pop
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -58,7 +21,7 @@ extern "C" {
                            const char* filename,
                            loff_t offset, size_t len);
 
-    void prot_marshal_send_open(struct prot_send_open_m* pdu,
+    void prot_marshal_send_open(prot_send_open_buf,
                                 uint32_t txnid);
 
     bool prot_marshal_read(struct prot_request_m* req,
