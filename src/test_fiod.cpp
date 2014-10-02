@@ -275,14 +275,14 @@ TEST_F(FiodProcSmallFileFix, read)
     EXPECT_EQ(file_contents, recvd_file);
 }
 
-TEST_F(FiodProcSmallFileFix, open_file)
+TEST_F(FiodProcSmallFileFix, send_open_file)
 {
     const test::unique_fd data_fd {fiod_open(srv_fd,
                                              file.name().c_str(),
                                              0, 0, false)};
     ASSERT_TRUE(data_fd);
 
-    uint8_t buf [PROT_PDU_MAXSIZE];
+    uint8_t buf [64];
     ssize_t nread;
     struct prot_open_file_info ack;
 
@@ -295,6 +295,22 @@ TEST_F(FiodProcSmallFileFix, open_file)
     EXPECT_EQ(PROT_OPEN_FILE_INFO_BODY_LEN, ack.body_len);
     EXPECT_EQ(file_contents.size(), ack.size);
     EXPECT_GT(ack.xfer_id, 0);
+
+    // Send 'open file'
+
+    int pfd[2];
+    ASSERT_NE(-1, pipe(pfd));
+    const test::unique_fd pipe_read {pfd[0]};
+    test::unique_fd pipe_write {pfd[1]};
+
+    ASSERT_TRUE(fiod_send_open(srv_fd, ack.xfer_id, pipe_write));
+    ::close(pipe_write);
+
+    nread = read(pipe_read, buf, sizeof(buf));
+    ASSERT_EQ(file_contents.size(), nread);
+    const std::string recvd_file(reinterpret_cast<const char*>(buf),
+                                 static_cast<std::size_t>(nread));
+    EXPECT_EQ(file_contents, recvd_file);
 }
 
 TEST_F(FiodProcSmallFileFix, read_range)

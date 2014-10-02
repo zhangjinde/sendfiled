@@ -162,7 +162,7 @@ extern "C" {
 
        @param txnid The open file's unique identifier
 
-       @param dest_fd The file descriptor to which to write the file.
+       @param dest_fd The file descriptor to which to write the file
      */
     bool fiod_send_open(int srv_sockfd,
                         uint32_t txnid,

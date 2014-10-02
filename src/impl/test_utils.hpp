@@ -53,8 +53,10 @@ public:
     }
 
     void close() noexcept {
-        if (*this)
+        if (*this) {
             ::close(fd);
+            fd = -1;
+        }
     }
 
 private:

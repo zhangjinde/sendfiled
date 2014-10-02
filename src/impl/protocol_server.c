@@ -7,6 +7,16 @@
 
 #pragma GCC diagnostic pop
 
+enum prot_cmd prot_get_cmd(const void* buf)
+{
+    return ((const uint8_t*)buf)[0];
+}
+
+int prot_get_stat(const void* buf)
+{
+    return ((const uint8_t*)buf)[1];
+}
+
 int prot_unmarshal_request(struct prot_request* pdu, const void* buf)
 {
     const uint8_t* p = prot_unmarshal_hdr((struct prot_hdr*)pdu, buf);

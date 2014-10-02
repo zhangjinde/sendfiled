@@ -51,6 +51,10 @@ struct prot_xfer_stat_m {
 extern "C" {
 #endif
 
+    enum prot_cmd prot_get_cmd(const void*);
+
+    int prot_get_stat(const void*);
+
     /**
        @retval 0 Success
        @retval -1 Malformed/invalid PDU

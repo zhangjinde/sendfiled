@@ -286,27 +286,25 @@ static bool process_request(struct context* ctx,
                             const void* buf, const size_t size,
                             int* fds, const size_t nfds UNUSED)
 {
-    struct prot_request pdu;
-    int err = prot_unmarshal_request(&pdu, buf);
-
-    if (err == -1) {
-        fprintf(stderr, "%s: received malformed request PDU\n", __func__);
-        /* TODO: send NACK */
-        return false;
-
-    } else if (err > 0) {
-        fprintf(stderr, "%s: client sent error code %d\n", __func__, pdu.stat);
+    if (prot_get_stat(buf) != PROT_STAT_OK) {
+        fprintf(stderr, "%s: client sent error code %d\n",
+                __func__, prot_get_stat(buf));
         return false;
     }
 
     printf("XXX nrecvd: %lu; cmd: %d; stat: %d;"
-           " fnlen: %lu; fname: %s;"
            " recvd_fds[0]: %d; recvd_fds[1]: %d\n",
-           size, pdu.cmd, pdu.stat, pdu.body_len, pdu.filename,
-           fds[0], fds[1]);
+           size, prot_get_cmd(buf), prot_get_stat(buf), fds[0], fds[1]);
 
-    switch (pdu.cmd) {
+    switch (prot_get_cmd(buf)) {
     case PROT_CMD_FILE_OPEN: {
+        struct prot_request pdu;
+        if (prot_unmarshal_request(&pdu, buf) == -1) {
+            fprintf(stderr, "%s: received malformed request PDU\n", __func__);
+            /* TODO: send NACK */
+            return false;
+        }
+
         struct file_info finfo;
         const struct timer* const timer = add_open_file(ctx,
                                                         pdu.filename,
@@ -323,12 +321,39 @@ static bool process_request(struct context* ctx,
         send_open_file_info(fds[0], timer->xfer_id, &finfo);
     } break;
 
-    case PROT_CMD_SEND_OPEN:
-        /* struct xfer* const = xfer_table_find */
-        break;
+    case PROT_CMD_SEND_OPEN: {
+        struct prot_send_open pdu;
+        if (prot_unmarshal_send_open(&pdu, buf) == -1) {
+            fprintf(stderr, "%s: received malformed request PDU\n", __func__);
+            /* Nowhere to send error to */
+            return false;
+        }
+
+        struct xfer* const xfer = xfer_table_find(ctx->xfers, pdu.txnid);
+        if (!xfer) {
+            send_err(fds[0], ENOENT);
+            return false;
+        }
+
+        xfer->cmd = PROT_CMD_SEND;
+        xfer->dest_fd = fds[0];
+
+        if (!register_xfer(ctx, xfer)) {
+            send_err(xfer->stat_fd, errno);
+            delete_xfer(xfer);
+            return false;
+        }
+    } break;
 
     case PROT_CMD_READ:
     case PROT_CMD_SEND: {
+        struct prot_request pdu;
+        if (prot_unmarshal_request(&pdu, buf) == -1) {
+            fprintf(stderr, "%s: received malformed request PDU\n", __func__);
+            /* TODO: send NACK */
+            return false;
+        }
+
         struct file_info finfo;
         struct xfer* const xfer =
             add_xfer(ctx,
@@ -347,7 +372,10 @@ static bool process_request(struct context* ctx,
 
     } break;
 
-    default:
+    case PROT_CMD_CANCEL:
+    case PROT_CMD_OPEN_FILE_INFO:
+    case PROT_CMD_FILE_INFO:
+    case PROT_CMD_XFER_STAT:
         /* TODO report "unknown command" */
         return false;
     }
