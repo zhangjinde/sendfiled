@@ -11,7 +11,8 @@ enum {
     SYSPOLL_READ = 1 << 1,
     SYSPOLL_WRITE = 1 << 2,
     /* Shutdown event (e.g., a signal such as SIGTERM or SIGINT) */
-    SYSPOLL_TERM = 1 << 3
+    SYSPOLL_TERM = 1 << 3,
+    SYSPOLL_ONESHOT = 1 << 4
 };
 
 struct syspoll;
@@ -25,6 +26,8 @@ void syspoll_delete(struct syspoll*);
    descriptor (i.e., of type 'int').
  */
 bool syspoll_register(struct syspoll*, int fd, void* data, unsigned events);
+
+int syspoll_timer(struct syspoll* this, void* data, unsigned millis);
 
 bool syspoll_deregister(struct syspoll*, int fd);
 

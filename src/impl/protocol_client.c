@@ -134,7 +134,7 @@ int prot_unmarshal_open_file_info(struct prot_open_file_info* pdu,
     EXTRACT_FIELD(p, pdu->atime);
     EXTRACT_FIELD(p, pdu->mtime);
     EXTRACT_FIELD(p, pdu->ctime);
-    EXTRACT_FIELD(p, pdu->fd);
+    EXTRACT_FIELD(p, pdu->xfer_id);
 
     return 0;
 }

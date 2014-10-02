@@ -46,6 +46,25 @@ void xfer_table_destruct(struct xfer_table* this,
     free(this->buckets);
 }
 
+struct xfer_table* xfer_table_new(xfer_table_hash_func hash,
+                                  size_t max_xfers)
+{
+    struct xfer_table* this = malloc(sizeof(*this));
+    if (!this)
+        return NULL;
+
+    xfer_table_construct(this, hash, max_xfers);
+
+    return this;
+}
+
+void xfer_table_delete(struct xfer_table* this,
+                       xfer_table_elem_deleter delete_elem)
+{
+    xfer_table_destruct(this, delete_elem);
+    free(this);
+}
+
 static struct xfer_table_bucket* get_bucket(const struct xfer_table* this,
                                             const size_t hash)
 {

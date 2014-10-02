@@ -7,7 +7,9 @@
 extern "C" {
 #endif
 
-    bool srv_run(const int listenfd, int maxfds);
+    bool srv_run(const int listenfd,
+                 int maxfds,
+                 long open_file_timeout_ms);
 
 #ifdef __cplusplus
 }

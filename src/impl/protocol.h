@@ -33,7 +33,8 @@ enum {
 #define PROT_FILE_INFO_BODY_LEN (sizeof(size_t) + sizeof(time_t) * 3)
 #define PROT_FILE_INFO_SIZE (PROT_HDR_SIZE + PROT_FILE_INFO_BODY_LEN)
 
-#define PROT_OPEN_FILE_INFO_BODY_LEN (PROT_FILE_INFO_BODY_LEN + sizeof(int))
+/* +4 bytes for the transfer ID */
+#define PROT_OPEN_FILE_INFO_BODY_LEN (PROT_FILE_INFO_BODY_LEN + 4)
 #define PROT_OPEN_FILE_INFO_SIZE (PROT_HDR_SIZE + PROT_OPEN_FILE_INFO_BODY_LEN)
 
 #define PROT_REQ_BODY_LEN (8 + 8)

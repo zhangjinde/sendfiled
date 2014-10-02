@@ -5,6 +5,7 @@
 #include <sys/uio.h>
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #include "protocol.h"
 
@@ -31,7 +32,7 @@ struct prot_file_info {
 
 struct prot_open_file_info {
     PROT_FILE_INFO_FIELDS;
-    int fd;
+    uint32_t xfer_id;
 };
 
 struct prot_xfer_stat {

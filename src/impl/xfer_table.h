@@ -38,6 +38,11 @@ extern "C" {
 
     void xfer_table_destruct(struct xfer_table*, xfer_table_elem_deleter);
 
+    struct xfer_table* xfer_table_new(xfer_table_hash_func hash,
+                                      size_t max_xfers);
+
+    void xfer_table_delete(struct xfer_table*, xfer_table_elem_deleter);
+
     bool xfer_table_insert(struct xfer_table*, void* elem);
 
     void xfer_table_erase(struct xfer_table*, size_t hash);

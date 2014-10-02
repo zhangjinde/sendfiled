@@ -2,6 +2,7 @@
 
 #include <sys/epoll.h>
 #include <sys/signalfd.h>
+#include <sys/timerfd.h>
 
 #include <unistd.h>
 
@@ -90,8 +91,12 @@ bool syspoll_register(struct syspoll* this, int fd, void* data, unsigned events)
 
     if (events & SYSPOLL_READ)
         epoll_events |= EPOLLIN;
+
     if (events & SYSPOLL_WRITE)
         epoll_events |= EPOLLOUT;
+
+    if (events & SYSPOLL_ONESHOT)
+        epoll_events |= EPOLLONESHOT;
 
     struct epoll_event event = {
         .events = epoll_events,
@@ -105,6 +110,37 @@ bool syspoll_register(struct syspoll* this, int fd, void* data, unsigned events)
     }
 
     return true;
+}
+
+int syspoll_timer(struct syspoll* this, void* data, unsigned millis)
+{
+    const int fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
+    if (fd == -1)
+        return -1;
+
+    struct itimerspec time;
+    time.it_value.tv_sec = millis / 1000;
+    millis -= time.it_value.tv_sec * 1000;
+    time.it_value.tv_nsec = millis * 1000000;
+    time.it_interval.tv_sec = 0;
+    time.it_interval.tv_nsec = 0;
+
+    if (timerfd_settime(fd, 0, &time, 0) == -1)
+        goto fail;
+
+    if(!syspoll_register(this,
+                         fd,
+                         data,
+                         SYSPOLL_READ | SYSPOLL_ONESHOT)) {
+        goto fail;
+    }
+
+    return fd;
+
+ fail:
+    close(fd);
+
+    return -1;
 }
 
 bool syspoll_deregister(struct syspoll* this, int fd)

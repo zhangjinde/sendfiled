@@ -59,7 +59,7 @@ void prot_marshal_open_file_info(struct prot_open_file_info_m* pdu,
                                  const time_t atime,
                                  const time_t mtime,
                                  const time_t ctime,
-                                 const int fd)
+                                 const uint32_t xfer_id)
 {
     uint8_t* p = prot_marshal_hdr(pdu->data,
                                   PROT_CMD_OPEN_FILE_INFO,
@@ -70,7 +70,7 @@ void prot_marshal_open_file_info(struct prot_open_file_info_m* pdu,
     INSERT_FIELD(p, atime);
     INSERT_FIELD(p, mtime);
     INSERT_FIELD(p, ctime);
-    INSERT_FIELD(p, fd);
+    INSERT_FIELD(p, xfer_id);
 }
 
 void prot_marshal_xfer_stat(struct prot_xfer_stat_m* pdu, const size_t file_size)

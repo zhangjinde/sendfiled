@@ -1,5 +1,6 @@
 #include <unistd.h>
 
+#include <cerrno>
 #include <cstdint>
 #include <numeric>
 #include <vector>
@@ -96,7 +97,7 @@ struct FiodThreadFix : public ::testing::Test {
 
         srv_barr.wait();
 
-        srv_run(listenfd, maxfiles);
+        srv_run(listenfd, maxfiles, 3000);
 
         us_stop_serving(path.c_str(), listenfd);
     }
@@ -293,7 +294,7 @@ TEST_F(FiodProcSmallFileFix, open_file)
     EXPECT_EQ(PROT_STAT_OK, ack.stat);
     EXPECT_EQ(PROT_OPEN_FILE_INFO_BODY_LEN, ack.body_len);
     EXPECT_EQ(file_contents.size(), ack.size);
-    EXPECT_GT(ack.fd, 0);
+    EXPECT_GT(ack.xfer_id, 0);
 }
 
 TEST_F(FiodProcSmallFileFix, read_range)

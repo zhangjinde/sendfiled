@@ -48,7 +48,7 @@ TEST(Protocol, unmarshal_open_file_info)
     EXPECT_EQ(222, pdu.atime);
     EXPECT_EQ(333, pdu.mtime);
     EXPECT_EQ(444, pdu.ctime);
-    EXPECT_EQ(777, pdu.fd);
+    EXPECT_EQ(777, pdu.xfer_id);
 }
 
 TEST(Protocol, unmarshal_file_info)
