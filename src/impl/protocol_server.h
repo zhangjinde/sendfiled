@@ -21,6 +21,11 @@ struct prot_request {
     const char* filename;
 };
 
+struct prot_send_open {
+    PROT_HDR_FIELDS;
+    uint32_t txnid;
+};
+
 /**
    A marshaled 'file info' PDU
  */
@@ -48,10 +53,12 @@ extern "C" {
 
     /**
        @retval 0 Success
-       @retval -1 Malformed PDU
+       @retval -1 Malformed/invalid PDU
        @retval >0 Error code from PDU header
     */
     int prot_unmarshal_request(struct prot_request*, const void* buf);
+
+    int prot_unmarshal_send_open(struct prot_send_open*, const void* buf);
 
     void prot_marshal_file_info(struct prot_file_info_m* pdu,
                                 size_t size,

@@ -323,6 +323,10 @@ static bool process_request(struct context* ctx,
         send_open_file_info(fds[0], timer->xfer_id, &finfo);
     } break;
 
+    case PROT_CMD_SEND_OPEN:
+        /* struct xfer* const = xfer_table_find */
+        break;
+
     case PROT_CMD_READ:
     case PROT_CMD_SEND: {
         struct file_info finfo;
@@ -392,6 +396,7 @@ static bool process_file_op(struct xfer* xfer)
     case PROT_CMD_CANCEL:
         break;
 
+    case PROT_CMD_SEND_OPEN:
     case PROT_CMD_FILE_OPEN:
         LOGERRNOV("invalid state for client command: %d\n", xfer->cmd);
         break;

@@ -14,6 +14,7 @@
 #include <sys/types.h>
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #include "attributes.h"
 
@@ -74,6 +75,36 @@ extern "C" {
     */
 
     /**
+       Splices a file into a pipe.
+
+       The server will write data read from the file into a pipe of which the
+       read end is returned to the caller.
+
+       On Linux, this will be achieved by calling @a splice(2), while on other
+       systems this call equates to a @a read(2) into a userspace buffer
+       followed by a @a write(2) from the userspace buffer to the pipe, so it
+       would be better to use fiod_send() on such systems.
+
+       @param srv_sockfd A socket connected to the server (see fiod_connect())
+
+       @param filename The name of the file to be read
+
+       @param offset The start file offset
+
+       @param len The number of bytes from the file to be sent
+
+       @param dest_fd_nonblock Whether or not the destination file descriptor
+       should be non-blocking.
+
+       @retval >0 The destination file descriptor
+       @retval -1 An error occurred
+     */
+    int fiod_read(int srv_sockfd,
+                  const char* filename,
+                  loff_t offset, size_t len,
+                  bool dest_fd_nonblock) DSO_EXPORT;
+
+    /**
        Requests the server to open and return information about a file.
 
        The server will write the file information (size and timestamps) and
@@ -125,34 +156,17 @@ extern "C" {
                   bool stat_fd_nonblock) DSO_EXPORT;
 
     /**
-       Splices a file into a pipe.
-
-       The server will write data read from the file into a pipe of which the
-       read end is returned to the caller.
-
-       On Linux, this will be achieved by calling @a splice(2), while on other
-       systems this call equates to a @a read(2) into a userspace buffer
-       followed by a @a write(2) from the userspace buffer to the pipe, so it
-       would be better to use fiod_send() on such systems.
+       Sends a file previously opened with fiod_open().
 
        @param srv_sockfd A socket connected to the server (see fiod_connect())
 
-       @param filename The name of the file to be read
+       @param txnid The open file's unique identifier
 
-       @param offset The start file offset
-
-       @param len The number of bytes from the file to be sent
-
-       @param dest_fd_nonblock Whether or not the destination file descriptor
-       should be non-blocking.
-
-       @retval >0 The destination file descriptor
-       @retval -1 An error occurred
+       @param dest_fd The file descriptor to which to write the file.
      */
-    int fiod_read(int srv_sockfd,
-                  const char* filename,
-                  loff_t offset, size_t len,
-                  bool dest_fd_nonblock) DSO_EXPORT;
+    bool fiod_send_open(int srv_sockfd,
+                        uint32_t txnid,
+                        int dest_fd) DSO_EXPORT;
 
     /**
        @}

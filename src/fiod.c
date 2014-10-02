@@ -122,6 +122,40 @@ int fiod_shutdown(const pid_t pid)
     return wait_child(pid);
 }
 
+int fiod_read(const int sockfd,
+              const char* filename,
+              const loff_t offset,
+              const size_t len,
+              const bool dest_fd_nonblock)
+{
+    int fds[2];
+
+    if (fiod_pipe(fds, O_NONBLOCK | O_CLOEXEC) == -1)
+        return -1;
+
+    if (!dest_fd_nonblock && !set_nonblock(fds[0], false))
+        goto fail;
+
+    struct prot_request_m req;
+    if (!prot_marshal_read(&req, filename, offset, len))
+        goto fail;
+
+    const ssize_t nsent = us_sendv(sockfd, req.iovs, 2, &fds[1], 1);
+    if (nsent == -1)
+        goto fail;
+
+    /* No use for the write end of the pipe in this process */
+    close (fds[1]);
+
+    return fds[0];
+
+ fail:
+    close(fds[0]);
+    close(fds[1]);
+
+    return -1;
+}
+
 int fiod_open(int srv_sockfd,
               const char* filename,
               loff_t offset, size_t len,
@@ -153,9 +187,9 @@ int fiod_open(int srv_sockfd,
     return -1;
 }
 
-int fiod_send(int srv_sockfd,
+int fiod_send(const int srv_sockfd,
               const char* filename,
-              int dest_fd,
+              const int dest_fd,
               const loff_t offset,
               const size_t len,
               const bool stat_fd_nonblock)
@@ -189,38 +223,22 @@ int fiod_send(int srv_sockfd,
     return -1;
 }
 
-int fiod_read(const int sockfd,
-              const char* filename,
-              const loff_t offset,
-              const size_t len,
-              const bool dest_fd_nonblock)
+bool fiod_send_open(const int srv_sockfd,
+                    const uint32_t txnid,
+                    const int dest_fd)
 {
-    int fds[2];
+    struct prot_send_open_m req;
+    prot_marshal_send_open(&req, txnid);
 
-    if (fiod_pipe(fds, O_NONBLOCK | O_CLOEXEC) == -1)
-        return -1;
+    struct iovec iov = {
+        .iov_base = req.data,
+        .iov_len = sizeof(req.data)
+    };
 
-    if (!dest_fd_nonblock && !set_nonblock(fds[0], false))
-        goto fail;
+    if (us_sendv(srv_sockfd, &iov, 1, &dest_fd, 1) == -1)
+        return false;
 
-    struct prot_request_m req;
-    if (!prot_marshal_read(&req, filename, offset, len))
-        goto fail;
-
-    const ssize_t nsent = us_sendv(sockfd, req.iovs, 2, &fds[1], 1);
-    if (nsent == -1)
-        goto fail;
-
-    /* No use for the write end of the pipe in this process */
-    close (fds[1]);
-
-    return fds[0];
-
- fail:
-    close(fds[0]);
-    close(fds[1]);
-
-    return -1;
+    return true;
 }
 
 /* -------------- Internal implementations ------------ */

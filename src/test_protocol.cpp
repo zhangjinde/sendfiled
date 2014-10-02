@@ -94,6 +94,27 @@ TEST(Protocol, marshal_send)
     EXPECT_EQ(fname.c_str(), pdu.filename);
 }
 
+TEST(Protocol, marshal_send_open)
+{
+    struct prot_send_open_m pdu;
+    prot_marshal_send_open(&pdu, 0xDEADBEEF);
+
+    EXPECT_EQ(PROT_CMD_SEND_OPEN, pdu.data[0]);
+    EXPECT_EQ(PROT_STAT_OK, pdu.data[1]);
+
+    size_t body_len;
+    std::uint32_t txnid;
+
+    uint8_t* p = &pdu.data[2];
+
+    memcpy(&body_len, p, 8);
+    p += 8;
+    memcpy(&txnid, p, PROT_TXNID_SIZE);
+
+    EXPECT_EQ(PROT_TXNID_SIZE, body_len);
+    EXPECT_EQ(0xDEADBEEF, txnid);
+}
+
 TEST(Protocol, unmarshal_error_status)
 {
     struct prot_xfer_stat stat;
@@ -163,6 +184,19 @@ TEST(Protocol, unmarshal_send)
     EXPECT_EQ(8 + 8 + fname.size() + 1, pdu.body_len);
     EXPECT_EQ(0xDEAD, pdu.offset);
     EXPECT_EQ(0xBEEF, pdu.len);
+}
+
+TEST(Protocol, unmarshal_send_open_file)
+{
+    struct prot_send_open_m tmp;
+    prot_marshal_send_open(&tmp, 0xDEADBEEF);
+
+    struct prot_send_open pdu;
+    ASSERT_EQ(0, prot_unmarshal_send_open(&pdu, tmp.data));
+    EXPECT_EQ(PROT_CMD_SEND_OPEN, pdu.cmd);
+    EXPECT_EQ(PROT_STAT_OK, pdu.stat);
+    EXPECT_EQ(PROT_TXNID_SIZE, pdu.body_len);
+    EXPECT_EQ(0xDEADBEEF, pdu.txnid);
 }
 
 TEST(Protocol, marshal_file_info)

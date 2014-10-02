@@ -46,6 +46,18 @@ static bool marshal_req(struct prot_request_m* req,
     return true;
 }
 
+bool prot_marshal_read(struct prot_request_m* req,
+                       const char* filename,
+                       const loff_t offset,
+                       const size_t len)
+{
+    return marshal_req(req,
+                       PROT_CMD_READ,
+                       (uint64_t)offset,
+                       (uint64_t)len,
+                       filename);
+}
+
 bool prot_marshal_file_open(struct prot_request_m* req,
                             const char* filename,
                             loff_t offset, size_t len)
@@ -69,16 +81,14 @@ bool prot_marshal_send(struct prot_request_m* req,
                        filename);
 }
 
-bool prot_marshal_read(struct prot_request_m* req,
-                       const char* filename,
-                       const loff_t offset,
-                       const size_t len)
+void prot_marshal_send_open(struct prot_send_open_m* pdu, const uint32_t txnid)
 {
-    return marshal_req(req,
-                       PROT_CMD_READ,
-                       (uint64_t)offset,
-                       (uint64_t)len,
-                       filename);
+    uint8_t* p = prot_marshal_hdr(pdu->data,
+                                  PROT_CMD_SEND_OPEN,
+                                  PROT_STAT_OK,
+                                  PROT_TXNID_SIZE);
+
+    memcpy(p, &txnid, sizeof(txnid));
 }
 
 static int check_pdu(struct prot_hdr* hdr,

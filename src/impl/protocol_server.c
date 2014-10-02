@@ -11,6 +11,9 @@ int prot_unmarshal_request(struct prot_request* pdu, const void* buf)
 {
     const uint8_t* p = prot_unmarshal_hdr((struct prot_hdr*)pdu, buf);
 
+    if (pdu->stat != PROT_STAT_OK)
+        return pdu->stat;
+
     if (pdu->cmd != PROT_CMD_SEND &&
         pdu->cmd != PROT_CMD_READ &&
         pdu->cmd != PROT_CMD_FILE_OPEN) {
@@ -29,6 +32,21 @@ int prot_unmarshal_request(struct prot_request* pdu, const void* buf)
     p += 8;
 
     pdu->filename = (char*)p;
+
+    return 0;
+}
+
+int prot_unmarshal_send_open(struct prot_send_open* pdu, const void* buf)
+{
+    const uint8_t* p = prot_unmarshal_hdr((struct prot_hdr*)pdu, buf);
+
+    if (pdu->stat != PROT_STAT_OK)
+        return pdu->stat;
+
+    if (pdu->cmd != PROT_CMD_SEND_OPEN || pdu->body_len != PROT_TXNID_SIZE)
+        return -1;
+
+    memcpy(&pdu->txnid, p, PROT_TXNID_SIZE);
 
     return 0;
 }

@@ -19,6 +19,10 @@ struct prot_request_m {
     struct iovec iovs[2];
 };
 
+struct prot_send_open_m {
+    uint8_t data [PROT_SEND_OPEN_SIZE];
+};
+
 #define PROT_FILE_INFO_FIELDS                   \
     PROT_HDR_FIELDS;                            \
     size_t size;                                \
@@ -53,6 +57,9 @@ extern "C" {
     bool prot_marshal_send(struct prot_request_m* req,
                            const char* filename,
                            loff_t offset, size_t len);
+
+    void prot_marshal_send_open(struct prot_send_open_m* pdu,
+                                uint32_t txnid);
 
     bool prot_marshal_read(struct prot_request_m* req,
                            const char* filename,

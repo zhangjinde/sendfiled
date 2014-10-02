@@ -12,6 +12,8 @@ enum prot_cmd {
     PROT_CMD_READ,
     /* Send file contents to destination file descriptor */
     PROT_CMD_SEND,
+    /* Send a previously-opened file */
+    PROT_CMD_SEND_OPEN,
     /* Cancel file transfer */
     PROT_CMD_CANCEL,
     /* File information as per fstat(2) */
@@ -30,12 +32,16 @@ enum {
 
 #define PROT_FILENAME_MAX 512   /* Excludes the terminating '\0' */
 
+#define PROT_TXNID_SIZE 4
+
 #define PROT_FILE_INFO_BODY_LEN (sizeof(size_t) + sizeof(time_t) * 3)
 #define PROT_FILE_INFO_SIZE (PROT_HDR_SIZE + PROT_FILE_INFO_BODY_LEN)
 
 /* +4 bytes for the transfer ID */
 #define PROT_OPEN_FILE_INFO_BODY_LEN (PROT_FILE_INFO_BODY_LEN + 4)
 #define PROT_OPEN_FILE_INFO_SIZE (PROT_HDR_SIZE + PROT_OPEN_FILE_INFO_BODY_LEN)
+
+#define PROT_SEND_OPEN_SIZE (PROT_HDR_SIZE + PROT_TXNID_SIZE)
 
 #define PROT_REQ_BODY_LEN (8 + 8)
 
