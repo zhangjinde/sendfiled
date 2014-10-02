@@ -560,7 +560,7 @@ static struct timer* add_open_file(struct context* ctx,
     if (!xfer)
         return false;
 
-    struct timer* timer = malloc(sizeof(timer));
+    struct timer* timer = malloc(sizeof(*timer));
     if (!timer)
         goto fail1;
 

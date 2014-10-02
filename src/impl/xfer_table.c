@@ -18,32 +18,28 @@ bool xfer_table_construct(struct xfer_table* this,
                           xfer_table_hash_func hash,
                           const size_t max_xfers)
 {
-    const size_t nbuckets = clp2(max_xfers / XFER_TABLE_BUCKET_SIZE);
+    const size_t capacity = clp2(max_xfers);
 
     *this = (struct xfer_table) {
-        .nbuckets = nbuckets,
-        .buckets = calloc(nbuckets, sizeof(struct xfer_table_bucket)),
+        .elems = calloc(capacity, sizeof(void*)),
+        .capacity = capacity,
         .hash = hash
     };
 
-    if (!this->buckets)
-        return false;
-
-    return true;
+    return (bool)this->elems;
 }
 
 void xfer_table_destruct(struct xfer_table* this,
                          xfer_table_elem_deleter delete_elem)
 {
     if (delete_elem) {
-        for (size_t i = 0; i < this->nbuckets; i++) {
-            const struct xfer_table_bucket* const b = &this->buckets[i];
-            for (size_t j = 0; j < b->size; j++)
-                delete_elem(b->elems[j]);
+        for (size_t i = 0; i < this->capacity; i++) {
+            if (this->elems[i])
+                delete_elem(this->elems[i]);
         }
     }
 
-    free(this->buckets);
+    free(this->elems);
 }
 
 struct xfer_table* xfer_table_new(xfer_table_hash_func hash,
@@ -65,46 +61,31 @@ void xfer_table_delete(struct xfer_table* this,
     free(this);
 }
 
-static struct xfer_table_bucket* get_bucket(const struct xfer_table* this,
-                                            const size_t hash)
+static size_t indexof(const struct xfer_table* this, const size_t hash)
 {
-    return &this->buckets[hash & (this->nbuckets - 1)];
+    return (hash & (this->capacity - 1));
 }
 
 bool xfer_table_insert(struct xfer_table* this, void* elem)
 {
-    struct xfer_table_bucket* const b = get_bucket(this, this->hash(elem));
+    const size_t idx = indexof(this, this->hash(elem));
 
-    if (b->size == XFER_TABLE_BUCKET_SIZE)
+    if (this->elems[idx])
         return false;
 
-    b->elems[b->size] = elem;
-    b->size++;
+    this->elems[idx] = elem;
+    this->size++;
 
     return true;
 }
 
 void xfer_table_erase(struct xfer_table* this, const size_t hash)
 {
-    struct xfer_table_bucket* const b = get_bucket(this, hash);
-
-    for (size_t i = 0; i < b->size; i++) {
-        if (this->hash(b->elems[i]) == hash) {
-            b->elems[i] = b->elems[b->size - 1];
-            b->size--;
-            break;
-        }
-    }
+    this->elems[indexof(this, hash)] = NULL;
+    this->size--;
 }
 
 void* xfer_table_find(const struct xfer_table* this, const size_t hash)
 {
-    const struct xfer_table_bucket* const b = get_bucket(this, hash);
-
-    for (size_t i = 0; i < b->size; i++) {
-        if (this->hash(b->elems[i]) == hash)
-            return b->elems[i];
-    }
-
-    return NULL;
+    return this->elems[indexof(this, hash)];
 }

@@ -35,8 +35,7 @@ TEST(XferTable, construct)
 
     EXPECT_TRUE(xfer_table_construct(&tbl, hash, maxfds));
 
-    // 100 / 5 (bucket size) = 20; next power of 2 = 32
-    EXPECT_EQ(32, tbl.nbuckets);
+    EXPECT_EQ(128, tbl.capacity);
 
     for (size_t i = 0; i < 1000; i++)
         EXPECT_EQ(nullptr, xfer_table_find(&tbl, i));
@@ -62,7 +61,7 @@ TEST_F(XferTableFix100, insert_retrieve_erase_single_element)
  */
 TEST_F(XferTableFix100, fill_table_to_capacity)
 {
-    const size_t nelems {tbl.nbuckets * XFER_TABLE_BUCKET_SIZE};
+    const size_t nelems {tbl.capacity};
 
     std::vector<size_t> elems(nelems);
 
@@ -75,9 +74,9 @@ TEST_F(XferTableFix100, fill_table_to_capacity)
     size_t overflow {nelems};
     EXPECT_FALSE(xfer_table_insert(&tbl, &overflow));
 
-    // Buckets should all be filled
-    for (size_t i = 0; i < tbl.nbuckets; i++)
-        ASSERT_EQ(XFER_TABLE_BUCKET_SIZE, tbl.buckets[i].size);
+    // Table should be filled should all be filled
+    for (size_t i = 0; i < tbl.capacity; i++)
+        ASSERT_NE(nullptr, tbl.elems[i]);
 
     // Check that all inserted hashes can be retrieved
     for (size_t i = 0; i < nelems; i++) {
@@ -89,7 +88,7 @@ TEST_F(XferTableFix100, fill_table_to_capacity)
 
 TEST_F(XferTableFix100, erase)
 {
-    const size_t nelems {tbl.nbuckets * XFER_TABLE_BUCKET_SIZE};
+    const size_t nelems {tbl.capacity};
 
     std::vector<size_t> elems(nelems);
 

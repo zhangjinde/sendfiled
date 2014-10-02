@@ -9,21 +9,15 @@
 #pragma GCC diagnostic push
 /* #pragma GCC diagnostic ignored "-Wpadded" */
 
-#define XFER_TABLE_BUCKET_SIZE 5
-
 typedef void (*xfer_table_elem_deleter) (void*);
 
 typedef size_t (*xfer_table_hash_func) (void* elem);
 
-struct xfer_table_bucket {
-    void* elems [XFER_TABLE_BUCKET_SIZE];
-    size_t size;
-};
-
 struct xfer_table {
-    struct xfer_table_bucket* buckets;
+    void** elems;
+    size_t capacity;
+    size_t size;
     xfer_table_hash_func hash;
-    size_t nbuckets;
 };
 
 #pragma GCC diagnostic pop
