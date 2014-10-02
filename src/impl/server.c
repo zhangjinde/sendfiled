@@ -507,7 +507,7 @@ static struct xfer* add_xfer(struct context* ctx,
                              const enum prot_cmd cmd,
                              const loff_t offset,
                              const size_t len,
-                             const int dest_fd, const int stat_fd,
+                             const int stat_fd, const int dest_fd,
                              struct file_info* finfo)
 {
     assert (cmd == PROT_CMD_READ ||
@@ -528,7 +528,7 @@ static struct xfer* add_xfer(struct context* ctx,
                                           cmd,
                                           &file,
                                           offset, len,
-                                          dest_fd, stat_fd);
+                                          stat_fd, dest_fd);
     if (!xfer) {
         close(fd);
         return NULL;
@@ -571,8 +571,7 @@ static struct timer* add_open_file(struct context* ctx,
     if (timerid == -1)
         goto fail2;
 
-    *timer = TIMER(timerid, ctx->next_id);
-    ctx->next_id++;
+    *timer = TIMER(timerid, xfer->id);
 
     return timer;
 
