@@ -25,7 +25,10 @@
 
 static int wait_child(pid_t pid);
 
-pid_t fiod_spawn(const char* name, const char* root, const int maxfiles)
+pid_t fiod_spawn(const char* name,
+                 const char* root,
+                 const int maxfiles,
+                 const int open_fd_timeout_ms)
 {
     /* Pipe used to sync with child */
     int pfd[2];
@@ -93,7 +96,7 @@ pid_t fiod_spawn(const char* name, const char* root, const int maxfiles)
         statfd = 3;
     }
 
-    if (!fiod_exec_server("build/fiod", name, root, maxfiles))
+    if (!fiod_exec_server("build/fiod", name, root, maxfiles, open_fd_timeout_ms))
         LOGERRNO("Couldn't exec server process\n");
 
  fail:

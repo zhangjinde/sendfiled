@@ -17,9 +17,10 @@ int fiod_pipe(int fds[2], const int flags)
 }
 
 bool fiod_exec_server(const char* path,
-                     const char* srvname,
-                     const char* root_dir,
-                     const int maxfiles)
+                      const char* srvname,
+                      const char* root_dir,
+                      const int maxfiles,
+                      const int open_fd_timeout_ms)
 {
     const long line_max = sysconf(_SC_LINE_MAX);
 
@@ -36,11 +37,20 @@ bool fiod_exec_server(const char* path,
 
     char maxfiles_str [10];
 
-    const int ndigits = snprintf(maxfiles_str,
-                                 sizeof(maxfiles_str),
-                                 "%d", maxfiles);
+    int ndigits = snprintf(maxfiles_str,
+                           sizeof(maxfiles_str),
+                           "%d", maxfiles);
 
     if (ndigits >= (int)sizeof(maxfiles_str))
+        return false;
+
+    char open_fd_timeout_ms_str [10];
+
+    ndigits = snprintf(open_fd_timeout_ms_str,
+                       sizeof(open_fd_timeout_ms_str),
+                       "%d", open_fd_timeout_ms);
+
+    if (ndigits >= (int)sizeof(open_fd_timeout_ms_str))
         return false;
 
     const char* args[] = {
@@ -48,6 +58,7 @@ bool fiod_exec_server(const char* path,
         "-s", srvname,
         "-r", root_dir,
         "-n", maxfiles_str,
+        "-t", open_fd_timeout_ms_str,
         "-p",
         NULL
     };

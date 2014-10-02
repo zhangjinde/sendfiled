@@ -85,6 +85,7 @@ all: $(builddir)/$(target) $(builddir)/$(target_so) build_tests
 build_tests: $(builddir)/$(test_target)
 
 ifneq ($(MAKECMDGOALS), clean)
+-include $(builddir)/main.c.srv.d
 -include $(src_server:%=$(builddir)/%.srv.d)
 -include $(src_client:%=$(builddir)/%.cli.d)
 -include $(src_test:%=$(builddir)/%.tst.d)

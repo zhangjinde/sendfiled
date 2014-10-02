@@ -14,6 +14,8 @@
 #include "impl/server.h"
 #include "impl/unix_sockets.h"
 
+static const long OPEN_FD_TIMEOUT_MS_MAX = 60 * 60 * 1000;
+
 /*
   File descriptor (opened in parent process by fiod_spawn()) to which server
   startup success (0) or error code is to be written in order to sync with
@@ -21,9 +23,23 @@
  */
 static const int syncfd = 3;
 
-static void print_usage(const char* progname);
+static void print_usage(const char* progname, long fd_timeout_ms);
 
 static bool sync_parent(int stat);
+
+static long opt_strtol(const char* s)
+{
+    errno = 0;
+    const long l = strtol(s, NULL, 10);
+
+    if (errno != 0 || l == 0 || l == LONG_MIN || l == LONG_MAX) {
+        if (errno != 0)
+            LOGERRNO("\n");
+        return -1;
+    } else {
+        return l;
+    }
+}
 
 int main(const int argc, char** argv)
 {
@@ -31,9 +47,10 @@ int main(const int argc, char** argv)
     const char* name = NULL;
     long maxfiles = 0;
     bool do_sync = false;
+    long fd_timeout_ms = 30000;
 
     int opt;
-    while ((opt = getopt(argc, argv, "+r:s:n:p")) != -1) {
+    while ((opt = getopt(argc, argv, "+r:s:n:t:p")) != -1) {
         switch (opt) {
         case 'r':
             root_dir = optarg;
@@ -44,18 +61,26 @@ int main(const int argc, char** argv)
             break;
 
         case 'n': {
-            errno = 0;
-            maxfiles = strtol(optarg, NULL, 10);
-            if (errno != 0 || maxfiles == 0 ||
-                maxfiles == LONG_MIN || maxfiles == LONG_MAX) {
+            maxfiles = opt_strtol(optarg);
+            if (maxfiles == -1) {
                 const int tmp = errno;
                 fprintf(stderr, "Invalid value '%s' for max files\n", optarg);
                 errno = tmp;
-                if (errno != 0)
-                    LOGERRNO("\n");
                 return EXIT_FAILURE;
             }
         } break;
+
+        case 't':
+            fd_timeout_ms = opt_strtol(optarg);
+            if (fd_timeout_ms == -1 || fd_timeout_ms > OPEN_FD_TIMEOUT_MS_MAX) {
+                const int tmp = errno;
+                fprintf(stderr,
+                        "Invalid value '%s' for open file descriptor timeout\n",
+                        optarg);
+                errno = tmp;
+                return EXIT_FAILURE;
+            }
+            break;
 
         case 'p':
             do_sync = true;
@@ -65,17 +90,18 @@ int main(const int argc, char** argv)
             return EXIT_FAILURE;
 
         default:
-            print_usage(argv[0]);
+            print_usage(argv[0], fd_timeout_ms);
             return EXIT_FAILURE;
         }
     }
 
     if (!root_dir || !name || (maxfiles == 0)) {
-        print_usage(argv[0]);
+        print_usage(argv[0], fd_timeout_ms);
         return EXIT_FAILURE;
     }
 
-    printf("root dir: %s; name: %s; maxfiles: %ld\n", root_dir, name, maxfiles);
+    printf("root dir: %s; name: %s; maxfiles: %ld; fd_timeout_ms: %ld\n",
+           root_dir, name, maxfiles, fd_timeout_ms);
 
     proc_common_init(root_dir, &syncfd, 1);
 
@@ -94,7 +120,7 @@ int main(const int argc, char** argv)
         close (syncfd);
     }
 
-    const bool success = srv_run(listenfd, (int)maxfiles);
+    const bool success = srv_run(listenfd, (int)maxfiles, fd_timeout_ms);
 
     puts("\nGot SIGTERM or SIGINT; exiting\n");
 
@@ -103,11 +129,12 @@ int main(const int argc, char** argv)
     return (success ? EXIT_SUCCESS : EXIT_FAILURE);
 }
 
-static void print_usage(const char* progname)
+static void print_usage(const char* progname, const long fd_timeout_ms)
 {
     printf("Usage %s -r <root_directory> -s <server_name> -n <maxfiles>"
-           " [-p (sync with parent process)]\n",
-           progname);
+           " [-p (sync with parent process)]"
+           " [-t <open_fd_timeout_ms> (default: %ld)]\n",
+           progname, fd_timeout_ms);
 }
 
 static bool sync_parent(const int status)

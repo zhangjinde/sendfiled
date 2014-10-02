@@ -40,13 +40,17 @@ extern "C" {
 
        @param maxfiles The maximum number of open files
 
+       @param open_fd_timeout_ms The number of milliseconds after which unused,
+       open file descriptors should be closed
+
        @retval >0 The process id
        @retval 0 Process of same name was already running
        @retval -1 An error occurred (see @a errno)
      */
     pid_t fiod_spawn(const char* name,
                      const char* root,
-                     int maxfiles) DSO_EXPORT;
+                     int maxfiles,
+                     int open_fd_timeout_ms) DSO_EXPORT;
 
     /**
        Connects to a running instance of the FIOD process.
