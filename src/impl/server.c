@@ -299,7 +299,7 @@ static bool process_request(struct context* ctx,
     switch (prot_get_cmd(buf)) {
     case PROT_CMD_FILE_OPEN: {
         struct prot_request pdu;
-        if (prot_unmarshal_request(&pdu, buf) == -1) {
+        if (prot_unmarshal_request(&pdu, buf, size) == -1) {
             fprintf(stderr, "%s: received malformed request PDU\n", __func__);
             /* TODO: send NACK */
             return false;
@@ -348,7 +348,7 @@ static bool process_request(struct context* ctx,
     case PROT_CMD_READ:
     case PROT_CMD_SEND: {
         struct prot_request pdu;
-        if (prot_unmarshal_request(&pdu, buf) == -1) {
+        if (prot_unmarshal_request(&pdu, buf, size) == -1) {
             fprintf(stderr, "%s: received malformed request PDU\n", __func__);
             /* TODO: send NACK */
             return false;
@@ -638,36 +638,38 @@ static bool send_pdu(const int fd, void* pdu, const size_t size)
 
 static bool send_file_info(int fd, const struct file_info* info)
 {
-    prot_file_info_buf pdu;
-    prot_marshal_file_info(pdu,
+    struct prot_file_info pdu;
+    prot_marshal_file_info(&pdu,
                            info->size, info->atime, info->mtime, info->ctime);
-    return send_pdu(fd, pdu, sizeof(pdu));
+    return send_pdu(fd, &pdu, sizeof(pdu));
 }
 
 static bool send_open_file_info(int cli_fd,
                                 const uint32_t txnid,
                                 const struct file_info* info)
 {
-    prot_open_file_info_buf pdu;
-    prot_marshal_open_file_info(pdu,
+    struct prot_open_file_info pdu;
+    prot_marshal_open_file_info(&pdu,
                                 info->size,
                                 info->atime, info->mtime, info->ctime,
                                 txnid);
-    return send_pdu(cli_fd, pdu, sizeof(pdu));
+    return send_pdu(cli_fd, &pdu, sizeof(pdu));
 }
 
 static bool send_xfer_stat(int fd, size_t file_size)
 {
-    prot_xfer_stat_buf pdu;
-    prot_marshal_xfer_stat(pdu, file_size);
-    return send_pdu(fd, pdu, sizeof(pdu));
+    struct prot_xfer_stat pdu;
+    prot_marshal_xfer_stat(&pdu, file_size);
+    return send_pdu(fd, &pdu, sizeof(pdu));
 }
 
 static bool send_err(int fd, const int stat)
 {
-    prot_hdr_buf pdu;
-    prot_marshal_hdr(pdu, PROT_CMD_XFER_STAT, (int)stat, 0);
-    return send_pdu(fd, pdu, sizeof(pdu));
+    struct prot_hdr pdu = {
+        .cmd = PROT_CMD_XFER_STAT,
+        .stat = (uint8_t)stat
+    };
+    return send_pdu(fd, &pdu, sizeof(pdu));
 }
 
 /*

@@ -17,9 +17,13 @@ int prot_get_stat(const void* buf)
     return ((const uint8_t*)buf)[1];
 }
 
-int prot_unmarshal_request(struct prot_request* pdu, const void* buf)
+int prot_unmarshal_request(struct prot_request* pdu,
+                           const void* buf, const size_t size)
 {
-    const uint8_t* p = prot_unmarshal_hdr((struct prot_hdr*)pdu, buf);
+    if (size < PROT_REQ_MINSIZE)
+        return -1;
+
+    memcpy(pdu, buf, PROT_REQ_BASE_SIZE);
 
     if (pdu->stat != PROT_STAT_OK)
         return pdu->stat;
@@ -30,76 +34,64 @@ int prot_unmarshal_request(struct prot_request* pdu, const void* buf)
         return -1;
     }
 
-    /* offset + len + 1-char filename and its NUL (minimum filename length) */
-    if (pdu->body_len < (PROT_SIZEOF(prot_request, offset) +
-                         PROT_SIZEOF(prot_request, len) +
-                         2)) {
-        pdu->filename = NULL;
-        return -1;
-    }
-
-    EXTRACT_FIELD(p, pdu->offset);
-    EXTRACT_FIELD(p, pdu->len);
-
-    pdu->filename = (char*)p;
+    pdu->filename = (char*)((uint8_t*)buf + PROT_REQ_BASE_SIZE);
+    pdu->filename_len = (size - PROT_REQ_BASE_SIZE - 1);
 
     return 0;
 }
 
 int prot_unmarshal_send_open(struct prot_send_open* pdu, const void* buf)
 {
-    const uint8_t* p = prot_unmarshal_hdr((struct prot_hdr*)pdu, buf);
+    memcpy(pdu, buf, sizeof(*pdu));
 
     if (pdu->stat != PROT_STAT_OK)
         return pdu->stat;
 
-    if (pdu->cmd != PROT_CMD_SEND_OPEN || pdu->body_len != sizeof(pdu->txnid))
+    if (pdu->cmd != PROT_CMD_SEND_OPEN)
         return -1;
-
-    EXTRACT_FIELD(p, pdu->txnid);
 
     return 0;
 }
 
-void prot_marshal_file_info(prot_file_info_buf pdu,
+void prot_marshal_file_info(struct prot_file_info* pdu,
                             const size_t file_size,
                             const time_t atime,
                             const time_t mtime,
                             const time_t ctime)
 {
-    uint8_t* p = prot_marshal_hdr(pdu,
-                                  PROT_CMD_FILE_INFO,
-                                  PROT_STAT_OK,
-                                  (PROT_FILE_INFO_SIZE - PROT_HDR_SIZE));
-
-    INSERT_FIELD(p, file_size);
-    INSERT_FIELD(p, atime);
-    INSERT_FIELD(p, mtime);
-    INSERT_FIELD(p, ctime);
+    *pdu = (struct prot_file_info) {
+        .cmd = PROT_CMD_FILE_INFO,
+        .stat = PROT_STAT_OK,
+        .size = file_size,
+        .atime = atime,
+        .mtime = mtime,
+        .ctime = ctime
+    };
 }
 
-void prot_marshal_open_file_info(prot_open_file_info_buf pdu,
+void prot_marshal_open_file_info(struct prot_open_file_info* pdu,
                                  const size_t file_size,
                                  const time_t atime,
                                  const time_t mtime,
                                  const time_t ctime,
                                  const uint32_t txnid)
 {
-    uint8_t* p = prot_marshal_hdr(pdu,
-                                  PROT_CMD_OPEN_FILE_INFO,
-                                  PROT_STAT_OK,
-                                  PROT_SIZEOF(prot_open_file_info, txnid));
-
-    INSERT_FIELD(p, file_size);
-    INSERT_FIELD(p, atime);
-    INSERT_FIELD(p, mtime);
-    INSERT_FIELD(p, ctime);
-    INSERT_FIELD(p, txnid);
+    *pdu = (struct prot_open_file_info) {
+        .cmd = PROT_CMD_OPEN_FILE_INFO,
+        .stat = PROT_STAT_OK,
+        .size = file_size,
+        .atime = atime,
+        .mtime = mtime,
+        .ctime = ctime,
+        .txnid = txnid
+    };
 }
 
-void prot_marshal_xfer_stat(prot_xfer_stat_buf pdu, const size_t file_size)
+void prot_marshal_xfer_stat(struct prot_xfer_stat* pdu, const size_t file_size)
 {
-    uint8_t* p = prot_marshal_hdr(pdu, PROT_CMD_XFER_STAT, PROT_STAT_OK, 8);
-
-    INSERT_FIELD(p, file_size);
+    *pdu = (struct prot_xfer_stat) {
+        .cmd = PROT_CMD_XFER_STAT,
+        .stat = PROT_STAT_OK,
+        .size = file_size
+    };
 }

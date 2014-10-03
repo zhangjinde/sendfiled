@@ -122,6 +122,13 @@ int fiod_shutdown(const pid_t pid)
     return wait_child(pid);
 }
 
+#define REQ_IOVS(req) {                                       \
+        (struct iovec) { .iov_base = &req,                    \
+                .iov_len = PROT_REQ_BASE_SIZE },              \
+            (struct iovec) { .iov_base = (void*)req.filename, \
+                    .iov_len = req.filename_len + 1 }         \
+    }
+
 int fiod_read(const int sockfd,
               const char* filename,
               const loff_t offset,
@@ -136,11 +143,13 @@ int fiod_read(const int sockfd,
     if (!dest_fd_nonblock && !set_nonblock(fds[0], false))
         goto fail;
 
-    struct prot_request_m req;
+    struct prot_request req;
     if (!prot_marshal_read(&req, filename, offset, len))
         goto fail;
 
-    const ssize_t nsent = us_sendv(sockfd, req.iovs, 2, &fds[1], 1);
+    struct iovec iovs[] = REQ_IOVS(req);
+
+    const ssize_t nsent = us_sendv(sockfd, iovs, 2, &fds[1], 1);
     if (nsent == -1)
         goto fail;
 
@@ -169,11 +178,13 @@ int fiod_open(int srv_sockfd,
     if (!stat_fd_nonblock && !set_nonblock(fds[0], false))
         goto fail;
 
-    struct prot_request_m req;
+    struct prot_request req;
     if (!prot_marshal_file_open(&req, filename, offset, len))
         goto fail;
 
-    if (us_sendv(srv_sockfd, req.iovs, 2, &fds[1], 1) == -1)
+    struct iovec iovs[] = REQ_IOVS(req);
+
+    if (us_sendv(srv_sockfd, iovs, 2, &fds[1], 1) == -1)
         goto fail;
 
     close(fds[1]);
@@ -204,11 +215,13 @@ int fiod_send(const int srv_sockfd,
 
     fds[2] = dest_fd;
 
-    struct prot_request_m req;
+    struct prot_request req;
     if (!prot_marshal_send(&req, filename, offset, len))
         goto fail;
 
-    if (us_sendv(srv_sockfd, req.iovs, 2, &fds[1], 2) == -1)
+    struct iovec iovs[] = REQ_IOVS(req);
+
+    if (us_sendv(srv_sockfd, iovs, 2, &fds[1], 2) == -1)
         goto fail;
 
     /* No use for the write end of the pipe in this process */
@@ -227,12 +240,12 @@ bool fiod_send_open(const int srv_sockfd,
                     const uint32_t txnid,
                     const int dest_fd)
 {
-    prot_send_open_buf buf;
-    prot_marshal_send_open(buf, txnid);
+    struct prot_send_open pdu;
+    prot_marshal_send_open(&pdu, txnid);
 
     struct iovec iov = {
-        .iov_base = buf,
-        .iov_len = sizeof(buf)
+        .iov_base = &pdu,
+        .iov_len = sizeof(pdu)
     };
 
     if (us_sendv(srv_sockfd, &iov, 1, &dest_fd, 1) == -1)

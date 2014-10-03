@@ -13,18 +13,18 @@
 extern "C" {
 #endif
 
-    bool prot_marshal_file_open(struct prot_request_m* req,
+    bool prot_marshal_file_open(struct prot_request* req,
                                 const char* filename,
                                 loff_t offset, size_t len);
 
-    bool prot_marshal_send(struct prot_request_m* req,
+    bool prot_marshal_send(struct prot_request* req,
                            const char* filename,
                            loff_t offset, size_t len);
 
-    void prot_marshal_send_open(prot_send_open_buf,
+    void prot_marshal_send_open(struct prot_send_open*,
                                 uint32_t txnid);
 
-    bool prot_marshal_read(struct prot_request_m* req,
+    bool prot_marshal_read(struct prot_request* req,
                            const char* filename,
                            loff_t offset, size_t len);
 

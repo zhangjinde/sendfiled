@@ -20,24 +20,25 @@ extern "C" {
        @retval -1 Malformed/invalid PDU
        @retval >0 Error code from PDU header
     */
-    int prot_unmarshal_request(struct prot_request*, const void* buf);
+    int prot_unmarshal_request(struct prot_request*,
+                               const void* buf, size_t size);
 
     int prot_unmarshal_send_open(struct prot_send_open*, const void* buf);
 
-    void prot_marshal_file_info(prot_file_info_buf pdu,
+    void prot_marshal_file_info(struct prot_file_info* pdu,
                                 size_t size,
                                 const time_t atime,
                                 const time_t mtime,
                                 const time_t ctime);
 
-    void prot_marshal_open_file_info(prot_open_file_info_buf pdu,
+    void prot_marshal_open_file_info(struct prot_open_file_info* pdu,
                                      size_t size,
                                      const time_t atime,
                                      const time_t mtime,
                                      const time_t ctime,
                                      uint32_t txnid);
 
-    void prot_marshal_xfer_stat(prot_xfer_stat_buf pdu, size_t val);
+    void prot_marshal_xfer_stat(struct prot_xfer_stat* pdu, size_t val);
 
 #ifdef __cplusplus
 }
