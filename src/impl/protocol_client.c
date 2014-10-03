@@ -6,7 +6,7 @@
 
 #include "protocol_client.h"
 
-static bool marshal_req(struct prot_request* req,
+static bool marshal_req(struct prot_request* pdu,
                         const uint8_t cmd,
                         const loff_t offset,
                         const size_t len,
@@ -21,14 +21,14 @@ static bool marshal_req(struct prot_request* req,
         return false;
     }
 
-    *req = (struct prot_request) {
-        .cmd = cmd,
-        .stat = PROT_STAT_OK,
-        .offset = offset,
-        .len = len,
-        .filename = filename,
-        .filename_len = namelen
-    };
+    memset(pdu, 0, sizeof(*pdu));
+
+    pdu->cmd = cmd;
+    pdu->stat = PROT_STAT_OK;
+    pdu->offset = offset;
+    pdu->len = len;
+    pdu->filename = filename;
+    pdu->filename_len = namelen;
 
     return true;
 }
@@ -70,11 +70,11 @@ bool prot_marshal_send(struct prot_request* req,
 
 void prot_marshal_send_open(struct prot_send_open* pdu, const uint32_t txnid)
 {
-    *pdu = (struct prot_send_open) {
-        .cmd = PROT_CMD_SEND_OPEN,
-        .stat = PROT_STAT_OK,
-        .txnid = txnid
-    };
+    memset(pdu, 0, sizeof(*pdu));
+
+    pdu->cmd = PROT_CMD_SEND_OPEN;
+    pdu->stat = PROT_STAT_OK;
+    pdu->txnid = txnid;
 }
 
 static int check_hdr(struct prot_hdr* hdr,

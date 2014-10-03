@@ -33,9 +33,8 @@ struct xfer {
     int stat_fd;
     uint32_t id;
     struct xfer_file file;
-    enum prot_cmd cmd;
     size_t len;
-    int idx;
+    enum prot_cmd cmd;
 };
 
 struct timer {
@@ -44,10 +43,10 @@ struct timer {
     uint32_t txnid;
 };
 
-#define TIMER(ident_, txnid_)                                         \
-    (struct timer) {.ident = ident_,                                    \
-            .magic = -123,                                              \
-            .txnid = txnid_                                         \
+#define TIMER(ident_, txnid_)                   \
+    (struct timer) {.ident = ident_,            \
+            .magic = -123,                      \
+            .txnid = txnid_                     \
             }
 
 static bool is_timer(const void* p)

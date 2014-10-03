@@ -59,14 +59,14 @@ void prot_marshal_file_info(struct prot_file_info* pdu,
                             const time_t mtime,
                             const time_t ctime)
 {
-    *pdu = (struct prot_file_info) {
-        .cmd = PROT_CMD_FILE_INFO,
-        .stat = PROT_STAT_OK,
-        .size = file_size,
-        .atime = atime,
-        .mtime = mtime,
-        .ctime = ctime
-    };
+    memset(pdu, 0, sizeof(*pdu));
+
+    pdu->cmd = PROT_CMD_FILE_INFO;
+    pdu->stat = PROT_STAT_OK;
+    pdu->size = file_size;
+    pdu->atime = atime;
+    pdu->mtime = mtime;
+    pdu->ctime = ctime;
 }
 
 void prot_marshal_open_file_info(struct prot_open_file_info* pdu,
@@ -76,22 +76,22 @@ void prot_marshal_open_file_info(struct prot_open_file_info* pdu,
                                  const time_t ctime,
                                  const uint32_t txnid)
 {
-    *pdu = (struct prot_open_file_info) {
-        .cmd = PROT_CMD_OPEN_FILE_INFO,
-        .stat = PROT_STAT_OK,
-        .size = file_size,
-        .atime = atime,
-        .mtime = mtime,
-        .ctime = ctime,
-        .txnid = txnid
-    };
+    memset(pdu, 0, sizeof(*pdu));
+
+    pdu->cmd = PROT_CMD_OPEN_FILE_INFO;
+    pdu->stat = PROT_STAT_OK;
+    pdu->size = file_size;
+    pdu->atime = atime;
+    pdu->mtime = mtime;
+    pdu->ctime = ctime;
+    pdu->txnid = txnid;
 }
 
 void prot_marshal_xfer_stat(struct prot_xfer_stat* pdu, const size_t file_size)
 {
-    *pdu = (struct prot_xfer_stat) {
-        .cmd = PROT_CMD_XFER_STAT,
-        .stat = PROT_STAT_OK,
-        .size = file_size
-    };
+    memset(pdu, 0, sizeof(*pdu));
+
+    pdu->cmd = PROT_CMD_XFER_STAT;
+    pdu->stat = PROT_STAT_OK;
+    pdu->size = file_size;
 }
