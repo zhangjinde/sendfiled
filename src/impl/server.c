@@ -35,6 +35,7 @@ struct xfer {
     struct xfer_file file;
     size_t len;
     enum prot_cmd cmd;
+    struct fio_ctx* fio_ctx;
 };
 
 struct timer {
@@ -398,9 +399,11 @@ static bool process_file_op(struct xfer* xfer)
             const ssize_t nwritten = (xfer->cmd == PROT_CMD_READ ?
                                       file_splice(xfer->file.fd,
                                                   xfer->dest_fd,
+                                                  xfer->fio_ctx,
                                                   nbytes) :
                                       file_sendfile(xfer->file.fd,
                                                     xfer->dest_fd,
+                                                    xfer->fio_ctx,
                                                     nbytes));
 
             if (nwritten < 0) {
@@ -526,8 +529,14 @@ static struct xfer* create_xfer(struct context* ctx,
         .stat_fd = stat_fd,
         .file = *file,
         .len = (len > 0 ? len : (file->size - (size_t)offset)),
-        .id = ctx->next_id++
+        .id = ctx->next_id++,
+        .fio_ctx = fio_ctx_new(file->blksize)
     };
+
+    if (!fio_ctx_valid(xfer->fio_ctx)) {
+        free(xfer);
+        return NULL;
+    }
 
     PRINT_XFER(xfer);
 
@@ -629,6 +638,8 @@ static void delete_xfer(void* p)
     if (x->stat_fd != x->dest_fd)
         close(x->stat_fd);
     close(x->file.fd);
+
+    fio_ctx_delete(x->fio_ctx);
 
     free(x);
 }
