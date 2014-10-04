@@ -33,4 +33,6 @@ off_t file_offset(int fd);
 
 ssize_t file_splice(int fd_in, int fd_out, size_t nbytes);
 
+ssize_t file_sendfile(int fd_in, int fd_out, size_t nbytes);
+
 #endif

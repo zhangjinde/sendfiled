@@ -576,7 +576,7 @@ TEST_F(FiodThreadLargeFileFix, send_io_error)
 
     for (;;) {
         if (nchunks > NCHUNKS / 2)
-            mock_splice_set_retval(-EIO);
+            mock_sendfile_set_retval(-EIO);
 
         nread = read(data_fd,
                      data_buf.data() + nread_chunk,

@@ -393,10 +393,15 @@ static bool process_file_op(struct xfer* xfer)
     case PROT_CMD_READ:
     case PROT_CMD_SEND:
         for (;;) {
-            const ssize_t nwritten = file_splice(xfer->file.fd,
-                                                 xfer->dest_fd,
-                                                 MIN_(xfer->file.blksize,
-                                                      xfer->len));
+            const size_t nbytes = MIN_(xfer->file.blksize, xfer->len);
+
+            const ssize_t nwritten = (xfer->cmd == PROT_CMD_READ ?
+                                      file_splice(xfer->file.fd,
+                                                  xfer->dest_fd,
+                                                  nbytes) :
+                                      file_sendfile(xfer->file.fd,
+                                                    xfer->dest_fd,
+                                                    nbytes));
 
             if (nwritten < 0) {
                 if (errno_is_fatal(errno)) {
