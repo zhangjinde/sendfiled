@@ -7,7 +7,7 @@
 #include <stdint.h>
 
 enum prot_cmd {
-    /* Open and send file information  */
+    /* Open and send file information */
     PROT_CMD_FILE_OPEN,
     /* Read file contents */
     PROT_CMD_READ,

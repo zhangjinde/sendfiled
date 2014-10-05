@@ -263,8 +263,7 @@ static bool handle_listenfd(struct context* ctx,
         if (nread < 0) {
             return !errno_is_fatal(errno);
         } else {
-            /* Recv of zero makes no sense on a UDP (connectionless)
-               socket */
+            /* Recv of zero makes no sense on a UDP (connectionless) socket */
             assert (nread > 0);
 
             if (!process_request(ctx,

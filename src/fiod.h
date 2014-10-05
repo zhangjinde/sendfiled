@@ -1,5 +1,8 @@
 /**
    @defgroup mod_client Client Interface
+
+   Interface through which client applications interact with the file I/O
+   server.
  */
 
 /**
