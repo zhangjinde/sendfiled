@@ -19,9 +19,9 @@ struct file_info {
     unsigned blksize;
 };
 
-#pragma GCC diagnostic pop
-
 struct fio_ctx;
+
+#pragma GCC diagnostic pop
 
 struct fio_ctx* fio_ctx_new(size_t capacity);
 

@@ -75,28 +75,27 @@ extern "C" {
     */
 
     /**
-       Splices a file into a pipe.
+       Reads a file into a pipe.
 
        The server will write data read from the file into a pipe of which the
        read end is returned to the caller.
 
-       On Linux, this will be achieved by calling @a splice(2), while on other
-       systems this call equates to a @a read(2) into a userspace buffer
-       followed by a @a write(2) from the userspace buffer to the pipe, so it
-       would be better to use fiod_send() on such systems.
+       @note This operation is only zero-copy on Linux. On other systems a
+       userspace buffer is used between the file read and pipe write.
 
        @param srv_sockfd A socket connected to the server (see fiod_connect())
 
        @param filename The name of the file to be read
 
-       @param offset The start file offset
+       @param offset The beginning file offset
 
-       @param len The number of bytes from the file to be sent
+       @param len The number of bytes, starting from @a offset, to read from the
+       file
 
-       @param dest_fd_nonblock Whether or not the destination file descriptor
-       should be non-blocking.
+       @param dest_fd_nonblock Whether or not the destination pipe file
+       descriptor should be non-blocking
 
-       @retval >0 The destination file descriptor
+       @retval >0 The read end of the pipe to which the file will be written
        @retval -1 An error occurred
      */
     int fiod_read(int srv_sockfd,
@@ -105,25 +104,7 @@ extern "C" {
                   bool dest_fd_nonblock) DSO_EXPORT;
 
     /**
-       Requests the server to open and return information about a file.
-
-       The server will write the file information (size and timestamps) and
-       server-internal file number to the status channel (the returned file
-       descriptor).
-
-       @attention The file will remain open in the server; it is the client's
-       responsibility to initiate the close on the server.
-
-       @retval >0 The status channel file descriptor
-       @retval -1 An error occurred
-     */
-    int fiod_open(int srv_sockfd,
-                  const char* filename,
-                  loff_t offset, size_t len,
-                  bool stat_fd_nonblock) DSO_EXPORT;
-
-    /**
-       Sends a file over a user-supplied file descriptor.
+       Writes a file to a user-supplied file descriptor.
 
        The result of each I/O operation will be reported on the status channel
        (the returned file descriptor).
@@ -152,6 +133,21 @@ extern "C" {
     int fiod_send(int srv_sockfd,
                   const char* filename,
                   int dest_fd,
+                  loff_t offset, size_t len,
+                  bool stat_fd_nonblock) DSO_EXPORT;
+
+    /**
+       Requests the server to open and return information about a file.
+
+       The server will write the file information (size and timestamps) and
+       server-internal file number to the status channel (the returned file
+       descriptor).
+
+       @retval >0 The status channel file descriptor
+       @retval -1 An error occurred
+     */
+    int fiod_open(int srv_sockfd,
+                  const char* filename,
                   loff_t offset, size_t len,
                   bool stat_fd_nonblock) DSO_EXPORT;
 
