@@ -154,17 +154,18 @@ bool srv_run(const int listenfd,
     if (!recvbuf)
         goto fail;
 
-    /* The processing loop */
     for (;;) {
         const int n = syspoll_poll(ctx.poller);
 
         if (n == -1) {
-            LOGERRNO("syspoll_poll() failed");
-            break;
+            if (errno != EINTR && errno_is_fatal(errno)) {
+                LOGERRNO("syspoll_poll() failed");
+                break;
+            }
+        } else if (n > 0) {
+            if (!process_events(&ctx, n, recvbuf, PROT_REQ_MAXSIZE))
+                break;
         }
-
-        if (!process_events(&ctx, n, recvbuf, PROT_REQ_MAXSIZE))
-            break;
     }
 
     free(recvbuf);
