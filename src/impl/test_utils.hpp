@@ -6,8 +6,6 @@
 #include <string>
 #include <thread>
 
-#include "../attributes.h"
-
 namespace test {
 
 /// An RAII file descriptor
@@ -66,7 +64,7 @@ private:
 /**
  * A RAII temporary file.
  */
-class DSO_EXPORT TmpFile {
+class TmpFile {
     TmpFile(const TmpFile&) = delete;
     TmpFile(TmpFile&&) = delete;
     TmpFile& operator=(const TmpFile&) = delete;
@@ -95,7 +93,7 @@ private:
  *
  * Doesn't seem to be anything comparable in C++11.
  */
-class DSO_EXPORT thread_barrier final {
+class thread_barrier final {
 public:
     thread_barrier(const thread_barrier&) = delete;
     thread_barrier(thread_barrier&&) = delete;

@@ -75,7 +75,7 @@ static bool set_fstat(const int fd, struct file_info* info)
         .atime = st.st_atime,
         .mtime = st.st_mtime,
         .ctime = st.st_ctime,
-        .blksize = (unsigned)st.st_blksize,
+        .blksize = (unsigned)st.st_blksize
     };
 
     return true;

@@ -20,7 +20,6 @@
 #include "impl/unix_sockets.h"
 #include "impl/util.h"
 
-#include "attributes.h"
 #include "fiod.h"
 
 static int wait_child(pid_t pid);

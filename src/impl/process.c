@@ -3,7 +3,6 @@
 
 #include <stdio.h>
 
-#include "../attributes.h"
 #include "errors.h"
 #include "process.h"
 

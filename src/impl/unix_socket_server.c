@@ -11,7 +11,6 @@
 #include <string.h>
 #include <time.h>
 
-#include "../attributes.h"
 #include "errors.h"
 #include "unix_sockets.h"
 

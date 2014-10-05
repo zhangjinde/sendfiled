@@ -7,7 +7,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../attributes.h"
 #include "errors.h"
 #include "file_io.h"
 #include "protocol_server.h"
@@ -284,7 +283,7 @@ static bool handle_listenfd(struct context* ctx,
 
 static bool process_request(struct context* ctx,
                             const void* buf, const size_t size,
-                            int* fds, const size_t nfds UNUSED)
+                            int* fds, const size_t nfds __attribute__((unused)))
 {
     if (prot_get_stat(buf) != PROT_STAT_OK) {
         fprintf(stderr, "%s: client sent error code %d\n",

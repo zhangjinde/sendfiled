@@ -16,7 +16,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "attributes.h"
+#define DSO_EXPORT  __attribute__((visibility("default")))
+#define DSO_LOCAL   __attribute__((visibility("hidden")))
 
 struct fiod_context;
 
