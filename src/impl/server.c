@@ -436,7 +436,7 @@ static bool process_file_op(struct xfer* xfer)
 
             xfer->len -= (size_t)nwritten;
 
-            if (xfer->len == 0) {
+            if (xfer_complete(xfer)) {
                 return (!needs_stat(xfer) ||
                         send_xfer_stat(xfer->stat_fd, (size_t)nwritten));
             }

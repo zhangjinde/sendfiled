@@ -4,11 +4,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <string.h>
-
-#include "unix_socket_client.h"
-#include "unix_sockets.h"
-
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmissing-prototypes"
 
