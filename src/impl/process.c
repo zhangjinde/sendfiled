@@ -1,7 +1,10 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <sys/resource.h>
 #include <unistd.h>
 
 #include <stdio.h>
+#include <signal.h>
 
 #include "errors.h"
 #include "process.h"
@@ -36,12 +39,24 @@ bool proc_close_all_fds_except(const int* excluded_fds, const size_t nfds)
     return true;
 }
 
-void proc_common_init(const char* root,
+bool proc_common_init(const char* root,
                       const int* excluded_fds,
                       const size_t nfds)
 {
+    /* Ignore SIGPIPE */
+    sigset_t sigmask;
+    if (sigemptyset(&sigmask) == -1 ||
+        sigaddset(&sigmask, SIGPIPE) == -1 ||
+        sigprocmask(SIG_BLOCK, &sigmask, NULL) == -1) {
+        return false;
+    }
+
     proc_close_all_fds_except(excluded_fds, nfds);
 
-    if (chdir(root) < 0)
+    if (chdir(root) < 0) {
         fprintf(stderr, "%s: can’t change directory to %s", __func__, root);
+        return false;
+    }
+
+    return true;
 }

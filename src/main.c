@@ -103,7 +103,10 @@ int main(const int argc, char** argv)
     printf("root dir: %s; name: %s; maxfiles: %ld; fd_timeout_ms: %ld\n",
            root_dir, name, maxfiles, fd_timeout_ms);
 
-    proc_common_init(root_dir, &syncfd, 1);
+    if (!proc_common_init(root_dir, &syncfd, 1)) {
+        perror("proc_common_init");
+        return EXIT_FAILURE;
+    }
 
     /* proc_daemonise(); */
 
