@@ -13,7 +13,7 @@
 #include "impl/protocol_client.h"
 #include "impl/server.h"
 #include "impl/test_interpose.h"
-#include "impl/unix_sockets.h"
+#include "impl/unix_socket_server.h"
 #include "impl/util.h"
 
 #pragma GCC diagnostic push

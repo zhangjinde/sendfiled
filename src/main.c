@@ -12,7 +12,7 @@
 #include "impl/errors.h"
 #include "impl/process.h"
 #include "impl/server.h"
-#include "impl/unix_sockets.h"
+#include "impl/unix_socket_server.h"
 
 static const long OPEN_FD_TIMEOUT_MS_MAX = 60 * 60 * 1000;
 

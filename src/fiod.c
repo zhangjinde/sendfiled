@@ -17,7 +17,7 @@
 #include "impl/process.h"
 #include "impl/protocol_client.h"
 #include "impl/server.h"
-#include "impl/unix_sockets.h"
+#include "impl/unix_socket_client.h"
 #include "impl/util.h"
 
 #include "fiod.h"

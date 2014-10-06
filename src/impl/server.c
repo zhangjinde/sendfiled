@@ -12,7 +12,7 @@
 #include "protocol_server.h"
 #include "server.h"
 #include "syspoll.h"
-#include "unix_sockets.h"
+#include "unix_socket_server.h"
 #include "util.h"
 #include "xfer_table.h"
 
@@ -243,6 +243,19 @@ static bool process_request(struct context* ctx,
                             const void* buf, const size_t size,
                             int* fds, const size_t nfds);
 
+static void close_fds(int* fds, const size_t nfds)
+{
+    const int tmp = errno;
+
+    if (nfds > 0) {
+        close(fds[0]);
+        if (nfds == 2)
+            close(fds[1]);
+    }
+
+    errno = tmp;
+}
+
 static bool handle_listenfd(struct context* ctx,
                             const int events,
                             uint8_t* buf,
@@ -250,15 +263,18 @@ static bool handle_listenfd(struct context* ctx,
 {
     assert (events == SYSPOLL_READ);
 
-    int recvd_fds[2];
+    int recvd_fds [US_MAXFDS];
     size_t nfds;
 
     for (;;) {
-        nfds = 2;
+        nfds = US_MAXFDS;
+        uid_t uid;
+        gid_t gid;
 
         const ssize_t nread = us_recv(ctx->listenfd,
                                       buf, buf_size,
-                                      recvd_fds, &nfds);
+                                      recvd_fds, &nfds,
+                                      &uid, &gid);
 
         if (nread < 0) {
             return !errno_is_fatal(errno);
@@ -266,14 +282,13 @@ static bool handle_listenfd(struct context* ctx,
             /* Recv of zero makes no sense on a UDP (connectionless) socket */
             assert (nread > 0);
 
-            if (!process_request(ctx,
-                                 buf, (size_t)nread,
-                                 recvd_fds, nfds)) {
-                if (nfds > 0) {
-                    close(recvd_fds[0]);
-                    if (nfds == 2)
-                        close(recvd_fds[1]);
-                }
+            if (uid != geteuid()) {
+                send_err(recvd_fds[0], EACCES);
+                close_fds(recvd_fds, nfds);
+
+            } else if (!process_request(ctx, buf, (size_t)nread,
+                                        recvd_fds, nfds)) {
+                close_fds(recvd_fds, nfds);
             }
         }
     }

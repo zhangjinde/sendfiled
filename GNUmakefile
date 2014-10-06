@@ -53,6 +53,7 @@ fiod.c\
 fiod_linux.c\
 protocol_client.c\
 unix_socket_client.c\
+unix_socket_client_linux.c\
 
 src_server := $(src_common)\
 file_io.c\
@@ -61,6 +62,7 @@ protocol_server.c\
 server.c\
 syspoll_linux.c \
 unix_socket_server.c\
+unix_socket_server_linux.c\
 xfer_table.c\
 
 src_test:=\
