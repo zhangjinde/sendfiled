@@ -58,6 +58,7 @@ unix_socket_client_linux.c\
 src_server := $(src_common)\
 file_io.c\
 file_io_linux.c\
+process_linux.c\
 protocol_server.c\
 server.c\
 syspoll_linux.c \

@@ -84,9 +84,6 @@ pid_t fiod_spawn(const char* name,
        of the pipe shared with the parent) */
     int statfd = pfd[1];
 
-    if (!proc_close_all_fds_except(&statfd, 1))
-        goto fail;
-
     /* Dupe the status fd to fd 3 and then close it */
     if (statfd != 3) {
         if (dup2(statfd, 3) == -1)

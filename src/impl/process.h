@@ -12,6 +12,6 @@ bool proc_common_init(const char* root, const int* excluded_fds, size_t nfds);
 
 /** @todo Will probably need to be platform-specific because the glibc and
     FreeBSD implementations apparently differ significantly. */
-int proc_daemonise(void);
+bool proc_daemonise(void);
 
 #endif

@@ -48,9 +48,10 @@ int main(const int argc, char** argv)
     long maxfiles = 0;
     bool do_sync = false;
     long fd_timeout_ms = 30000;
+    bool daemonise = false;
 
     int opt;
-    while ((opt = getopt(argc, argv, "+r:s:n:t:p")) != -1) {
+    while ((opt = getopt(argc, argv, "+r:s:n:t:pd")) != -1) {
         switch (opt) {
         case 'r':
             root_dir = optarg;
@@ -86,6 +87,10 @@ int main(const int argc, char** argv)
             do_sync = true;
             break;
 
+        case 'd':
+            daemonise = true;
+            break;
+
         case '?':
             return EXIT_FAILURE;
 
@@ -100,21 +105,16 @@ int main(const int argc, char** argv)
         return EXIT_FAILURE;
     }
 
-    printf("root dir: %s; name: %s; maxfiles: %ld; fd_timeout_ms: %ld\n",
-           root_dir, name, maxfiles, fd_timeout_ms);
-
     if (!proc_common_init(root_dir, &syncfd, 1)) {
         perror("proc_common_init");
         return EXIT_FAILURE;
     }
 
-    /* proc_daemonise(); */
-
     const int listenfd = us_serve(name);
     if (listenfd == -1) {
         if (do_sync && !sync_parent(errno))
             perror("Failed to write errno to sync fd");
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
 
     if (do_sync) {
@@ -122,6 +122,12 @@ int main(const int argc, char** argv)
             perror("Failed to sync with parent");
         close (syncfd);
     }
+
+    printf("root dir: %s; name: %s; maxfiles: %ld; fd_timeout_ms: %ld\n",
+           root_dir, name, maxfiles, fd_timeout_ms);
+
+    if (daemonise && !proc_daemonise())
+        return EXIT_FAILURE;
 
     const bool success = srv_run(listenfd, (int)maxfiles, fd_timeout_ms);
 
