@@ -5,6 +5,7 @@
 #include <sys/uio.h>
 
 #include <assert.h>
+#include <errno.h>
 #include <stdbool.h>
 #include <string.h>
 
@@ -44,6 +45,13 @@ ssize_t us_recv(int srv_fd,
     const ssize_t nrecvd = recvmsg(srv_fd, &msg, 0);
     if (nrecvd == -1)
         return -1;
+
+    if (msg.msg_flags == MSG_TRUNC ||
+        msg.msg_flags == MSG_CTRUNC) {
+        /* Datagram or ancilliary data was truncated */
+        errno = ERANGE;
+        return -1;
+    }
 
     if (!us_get_fds_and_creds(&msg,
                               recvd_fds, nfds,
