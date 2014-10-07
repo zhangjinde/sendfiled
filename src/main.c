@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
+#include <syslog.h>
 #include <unistd.h>
 
 #include <limits.h>
@@ -123,17 +124,21 @@ int main(const int argc, char** argv)
         close (syncfd);
     }
 
-    printf("root dir: %s; name: %s; maxfiles: %ld; fd_timeout_ms: %ld\n",
-           root_dir, name, maxfiles, fd_timeout_ms);
-
     if (daemonise && !proc_daemonise())
         return EXIT_FAILURE;
 
+    syslog(LOG_INFO,
+           "Starting; root dir: %s; name: %s;"
+           " maxfiles: %ld; fd_timeout_ms: %ld\n",
+           root_dir, name, maxfiles, fd_timeout_ms);
+
     const bool success = srv_run(listenfd, (int)maxfiles, fd_timeout_ms);
 
-    puts("\nGot SIGTERM or SIGINT; exiting\n");
+    syslog(LOG_INFO, "Stopping\n");
 
     us_stop_serving(name, listenfd);
+
+    closelog();
 
     return (success ? EXIT_SUCCESS : EXIT_FAILURE);
 }

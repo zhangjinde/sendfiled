@@ -71,11 +71,10 @@ bool proc_daemonise(void)
     int fd1 = dup(0);
     int fd2 = dup(0);
 
-    /* /\* openlog(cmd, LOG_CONS, LOG_DAEMON); *\/ */
+    openlog("fiod", LOG_CONS | LOG_PID, LOG_DAEMON);
 
     if (fd0 != 0 || fd1 != 1 || fd2 != 2) {
-        /* syslog(LOG_ERR, "unexpected file descriptors %d %d %d", */
-        /*        fd0, fd1, fd2); */
+        syslog(LOG_ERR, "unexpected file descriptors %d %d %d", fd0, fd1, fd2);
         return false;
     }
 
