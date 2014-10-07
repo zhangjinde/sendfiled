@@ -165,7 +165,7 @@ extern "C" {
        @param dest_fd The file descriptor to which to write the file
      */
     bool fiod_send_open(int srv_sockfd,
-                        uint32_t txnid,
+                        size_t txnid,
                         int dest_fd) DSO_EXPORT;
 
     /**

@@ -233,7 +233,7 @@ int fiod_send(const int srv_sockfd,
 }
 
 bool fiod_send_open(const int srv_sockfd,
-                    const uint32_t txnid,
+                    const size_t txnid,
                     const int dest_fd)
 {
     struct prot_send_open pdu;

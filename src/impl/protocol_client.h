@@ -5,7 +5,6 @@
 #include <sys/uio.h>
 
 #include <stdbool.h>
-#include <stdint.h>
 
 #include "protocol.h"
 
@@ -22,7 +21,7 @@ extern "C" {
                            loff_t offset, size_t len);
 
     void prot_marshal_send_open(struct prot_send_open*,
-                                uint32_t txnid);
+                                size_t txnid);
 
     bool prot_marshal_read(struct prot_request* req,
                            const char* filename,

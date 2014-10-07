@@ -70,7 +70,7 @@ struct prot_request {
 
 struct prot_send_open {
     PROT_HDR_FIELDS;
-    uint32_t txnid;
+    size_t txnid;
 };
 
 /* --------------- File Information PDU ------------- */
@@ -90,7 +90,7 @@ struct prot_file_info {
 
 struct prot_open_file_info {
     PROT_FILE_INFO_FIELDS;
-    uint32_t txnid;
+    size_t txnid;
 };
 
 /* -------------- Transfer Status PDU -------------- */

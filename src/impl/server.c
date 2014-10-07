@@ -30,17 +30,17 @@ struct xfer {
        syspoll_linux.c expects it that way) */
     int dest_fd;
     int stat_fd;
-    uint32_t id;
+    size_t id;
     struct xfer_file file;
+    struct fio_ctx* fio_ctx;
     size_t len;
     enum prot_cmd cmd;
-    struct fio_ctx* fio_ctx;
 };
 
 struct timer {
     int ident;
     int magic;
-    uint32_t txnid;
+    size_t txnid;
 };
 
 #define TIMER(ident_, txnid_)                   \
@@ -62,10 +62,10 @@ static bool xfer_in_progress(const struct xfer* x)
 struct context
 {
     struct syspoll* poller;
-    uint32_t next_id;
-    unsigned open_file_timeout_ms;
-    int listenfd;
     struct xfer_table* xfers;
+    size_t next_id;
+    int listenfd;
+    unsigned open_file_timeout_ms;
 };
 
 #pragma GCC diagnostic pop
@@ -104,7 +104,7 @@ static bool register_xfer(struct context* ctx, struct xfer* xfer);
 static bool send_file_info(int fd, const struct file_info* info);
 
 static bool send_open_file_info(int cli_fd,
-                                uint32_t txnid,
+                                size_t txnid,
                                 const struct file_info* info);
 
 static bool send_xfer_stat(int fd, size_t file_size);
@@ -674,7 +674,7 @@ static bool send_file_info(int fd, const struct file_info* info)
 }
 
 static bool send_open_file_info(int cli_fd,
-                                const uint32_t txnid,
+                                const size_t txnid,
                                 const struct file_info* info)
 {
     struct prot_open_file_info pdu;

@@ -68,7 +68,7 @@ bool prot_marshal_send(struct prot_request* req,
                        filename);
 }
 
-void prot_marshal_send_open(struct prot_send_open* pdu, const uint32_t txnid)
+void prot_marshal_send_open(struct prot_send_open* pdu, const size_t txnid)
 {
     memset(pdu, 0, sizeof(*pdu));
 

@@ -36,7 +36,7 @@ extern "C" {
                                      const time_t atime,
                                      const time_t mtime,
                                      const time_t ctime,
-                                     uint32_t txnid);
+                                     size_t txnid);
 
     void prot_marshal_xfer_stat(struct prot_xfer_stat* pdu, size_t val);
 

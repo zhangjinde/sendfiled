@@ -74,7 +74,7 @@ void prot_marshal_open_file_info(struct prot_open_file_info* pdu,
                                  const time_t atime,
                                  const time_t mtime,
                                  const time_t ctime,
-                                 const uint32_t txnid)
+                                 const size_t txnid)
 {
     memset(pdu, 0, sizeof(*pdu));
 
