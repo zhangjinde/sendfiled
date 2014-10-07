@@ -17,12 +17,8 @@
 #include <sys/types.h>
 
 #include <stdbool.h>
-#include <stdint.h>
 
-#define DSO_EXPORT  __attribute__((visibility("default")))
-#define DSO_LOCAL   __attribute__((visibility("hidden")))
-
-struct fiod_context;
+#define FIOD_API  __attribute__((visibility("default")))
 
 #ifdef __cplusplus
 extern "C" {
@@ -55,7 +51,7 @@ extern "C" {
     pid_t fiod_spawn(const char* name,
                      const char* root,
                      int maxfiles,
-                     int open_fd_timeout_ms) DSO_EXPORT;
+                     int open_fd_timeout_ms) FIOD_API;
 
     /**
        Connects to a running instance of the FIOD process.
@@ -65,12 +61,12 @@ extern "C" {
        @retval >0 The request channel socket file descriptor
        @retval -1 An error occurred
      */
-    int fiod_connect(const char* name) DSO_EXPORT;
+    int fiod_connect(const char* name) FIOD_API;
 
     /**
        Shuts down a file I/O process.
      */
-    int fiod_shutdown(pid_t pid) DSO_EXPORT;
+    int fiod_shutdown(pid_t pid) FIOD_API;
 
     /**
        @}
@@ -105,7 +101,7 @@ extern "C" {
     int fiod_read(int srv_sockfd,
                   const char* filename,
                   loff_t offset, size_t len,
-                  bool dest_fd_nonblock) DSO_EXPORT;
+                  bool dest_fd_nonblock) FIOD_API;
 
     /**
        Writes a file to a user-supplied file descriptor.
@@ -138,7 +134,7 @@ extern "C" {
                   const char* filename,
                   int dest_fd,
                   loff_t offset, size_t len,
-                  bool stat_fd_nonblock) DSO_EXPORT;
+                  bool stat_fd_nonblock) FIOD_API;
 
     /**
        Requests the server to open and return information about a file.
@@ -153,7 +149,7 @@ extern "C" {
     int fiod_open(int srv_sockfd,
                   const char* filename,
                   loff_t offset, size_t len,
-                  bool stat_fd_nonblock) DSO_EXPORT;
+                  bool stat_fd_nonblock) FIOD_API;
 
     /**
        Sends a file previously opened with fiod_open().
@@ -166,35 +162,8 @@ extern "C" {
      */
     bool fiod_send_open(int srv_sockfd,
                         size_t txnid,
-                        int dest_fd) DSO_EXPORT;
+                        int dest_fd) FIOD_API;
 
-    /**
-       @}
-       @name Receiving & Writing
-       @{
-     */
-
-    /**
-       Creates and writes to a new file.
-
-       @param filename The name of the new file.
-
-       @param fd_in The file descriptor from which the file contents will be
-       read.
-     */
-    int fiod_create(struct fiod_context*,const char* filename, int fd_in);
-
-    /**
-       Appends to a file created with fiod_create().
-     */
-    int fiod_append(struct fiod_context*, int fd_in, int fd_out);
-
-    /**
-       Closes a file created with fiod_create().
-     */
-    int fiod_close(struct fiod_context*, int fd);
-
-    /**@}*/
     /**@}*/
 
 #ifdef __cplusplus
