@@ -31,6 +31,8 @@ struct syspoll
 
 struct syspoll* syspoll_new(const int maxevents)
 {
+    assert (maxevents > 0);
+
     struct syspoll* this = malloc(sizeof(*this));
     if (!this)
         return NULL;

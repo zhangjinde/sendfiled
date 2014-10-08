@@ -5,8 +5,6 @@
 
 #include <stdbool.h>
 
-#include "unix_sockets.h"
-
 struct msghdr;
 
 #ifdef __cplusplus

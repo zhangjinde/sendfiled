@@ -6,28 +6,44 @@
 
 #include <stdint.h>
 
-enum prot_cmd {
+/**
+   Request Command IDs.
+
+   Responses have bit 7 set, requests do not.
+ */
+enum prot_cmd_req {
     /* Open and send file information */
-    PROT_CMD_FILE_OPEN,
+    PROT_CMD_FILE_OPEN = 0x01,
     /* Read file contents */
-    PROT_CMD_READ,
+    PROT_CMD_READ = 0x02,
     /* Send file contents to destination file descriptor */
-    PROT_CMD_SEND,
+    PROT_CMD_SEND = 0x03,
     /* Send a previously-opened file */
-    PROT_CMD_SEND_OPEN,
-    /* Cancel file transfer */
-    PROT_CMD_CANCEL,
-    /* File information as per fstat(2) */
-    PROT_CMD_OPEN_FILE_INFO,
-    PROT_CMD_FILE_INFO,
-    /* File transfer request/operation status */
-    PROT_CMD_XFER_STAT
+    PROT_CMD_SEND_OPEN = 0x04
 };
+
+/**
+   Response Command IDs.
+
+   Responses have bit 7 set, requests do not.
+ */
+enum prot_cmd_resp {
+    /* File information as per fstat(2) */
+    PROT_CMD_FILE_INFO = 0x81,
+    PROT_CMD_OPEN_FILE_INFO = 0x82,
+    /* File transfer request/operation status */
+    PROT_CMD_XFER_STAT = 0x83
+};
+
+#define PROT_IS_REQUEST(cmd) (((cmd) & 0x80) == 0)
 
 enum {
     /* No error */
     PROT_STAT_OK
 };
+
+/* Maximum number of file descriptors transferred in a single message */
+#define PROT_MAXFDS 2
 
 #define PROT_FILENAME_MAX 512   /* Excludes the terminating '\0' */
 

@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include "protocol.h"
 #include "unix_socket_server.h"
 
 #include <stdio.h>
@@ -32,7 +33,7 @@ ssize_t us_recv(int srv_fd,
 
     struct ucred creds;
 
-    char cmsg_buf [CMSG_SPACE(sizeof(int) * US_MAXFDS) +
+    char cmsg_buf [CMSG_SPACE(sizeof(int) * PROT_MAXFDS) +
                    CMSG_SPACE(sizeof(creds))] = {0};
 
     struct msghdr msg = {

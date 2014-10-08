@@ -7,6 +7,7 @@
 
 #include <string.h>
 
+#include "protocol.h"
 #include "unix_socket_client.h"
 
 ssize_t us_sendv(const int fd,
@@ -24,7 +25,7 @@ ssize_t us_sendv(const int fd,
         .pid = getpid()
     };
 
-    uint8_t cmsg_buf [CMSG_SPACE(sizeof(int) * US_MAXFDS) +
+    uint8_t cmsg_buf [CMSG_SPACE(sizeof(int) * PROT_MAXFDS) +
                       CMSG_SPACE(sizeof(cred))] = {0};
 
     us_attach_fds_and_creds(&msg, cmsg_buf, fds_to_send, nfds,

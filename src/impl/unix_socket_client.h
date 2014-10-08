@@ -5,8 +5,6 @@
 
 #include <stdint.h>
 
-#include "unix_sockets.h"
-
 struct iovec;
 struct msghdr;
 

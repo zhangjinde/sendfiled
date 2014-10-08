@@ -234,8 +234,7 @@ TEST_F(FiodProcSmallFileFix, send)
     ASSERT_EQ(0, prot_unmarshal_xfer_stat(&xfer_stat, buf));
     EXPECT_EQ(PROT_CMD_XFER_STAT, xfer_stat.cmd);
     EXPECT_EQ(PROT_STAT_OK, xfer_stat.stat);
-    EXPECT_GT(xfer_stat.size, 0);
-    EXPECT_LE(xfer_stat.size, file_contents.size());
+    EXPECT_EQ(file_contents.size(), xfer_stat.size);
 
     // File content
     nread = read(data_fd, buf, sizeof(buf));
@@ -274,17 +273,24 @@ TEST_F(FiodProcSmallFileFix, read)
 
 TEST_F(FiodProcSmallFileFix, send_open_file)
 {
-    const test::unique_fd data_fd {fiod_open(srv_fd,
+    // Create pipe to which file will ultimately be written
+    int pfd [2];
+    ASSERT_NE(-1, pipe(pfd));
+    const test::unique_fd pipe_read {pfd[0]};
+    test::unique_fd pipe_write {pfd[1]};
+
+    // Open the file
+    const test::unique_fd stat_fd {fiod_open(srv_fd,
                                              file.name().c_str(),
                                              0, 0, false)};
-    ASSERT_TRUE(data_fd);
+    ASSERT_TRUE(stat_fd);
 
     uint8_t buf [64];
     ssize_t nread;
     struct prot_open_file_info ack;
 
-    // Request ACK
-    nread = read(data_fd, buf, sizeof(ack));
+    // Receive 'ACK' with file stats
+    nread = read(stat_fd, buf, sizeof(ack));
     ASSERT_EQ(sizeof(ack), nread);
     ASSERT_EQ(0, prot_unmarshal_open_file_info(&ack, buf));
     EXPECT_EQ(PROT_CMD_OPEN_FILE_INFO, ack.cmd);
@@ -293,20 +299,22 @@ TEST_F(FiodProcSmallFileFix, send_open_file)
     EXPECT_GT(ack.txnid, 0);
 
     // Send 'open file'
-
-    int pfd[2];
-    ASSERT_NE(-1, pipe(pfd));
-    const test::unique_fd pipe_read {pfd[0]};
-    test::unique_fd pipe_write {pfd[1]};
-
     ASSERT_TRUE(fiod_send_open(srv_fd, ack.txnid, pipe_write));
     ::close(pipe_write);
 
+    // Read file data
     nread = read(pipe_read, buf, sizeof(buf));
     ASSERT_EQ(file_contents.size(), nread);
     const std::string recvd_file(reinterpret_cast<const char*>(buf),
                                  static_cast<std::size_t>(nread));
     EXPECT_EQ(file_contents, recvd_file);
+
+    // Read transfer status
+    struct prot_xfer_stat xstat;
+    nread = read(stat_fd, buf, sizeof(buf));
+    ASSERT_EQ(sizeof(xstat), nread);
+    ASSERT_EQ(0, prot_unmarshal_xfer_stat(&xstat, buf));
+    EXPECT_EQ(file_contents.size(), xstat.size);
 }
 
 TEST_F(FiodProcSmallFileFix, read_range)

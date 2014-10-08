@@ -6,9 +6,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#pragma GCC diagnostic push
-/* #pragma GCC diagnostic ignored "-Wpadded" */
-
 typedef void (*xfer_table_elem_deleter) (void*);
 
 typedef size_t (*xfer_table_hash_func) (void* elem);
@@ -19,8 +16,6 @@ struct xfer_table {
     size_t size;
     xfer_table_hash_func hash;
 };
-
-#pragma GCC diagnostic pop
 
 #ifdef __cplusplus
 extern "C" {

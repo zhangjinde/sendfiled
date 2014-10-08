@@ -7,6 +7,13 @@
 
 #define MIN_(a, b) ((a) < (b) ? (a) : (b))
 
+#define PRESERVE_ERRNO(expr)                    \
+    {                                           \
+        const int errno_saved_ = errno;         \
+        expr;                                   \
+        errno = errno_saved_;                   \
+    }
+
 #ifdef __cplusplus
 extern "C" {
 #endif

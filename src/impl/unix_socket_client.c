@@ -12,7 +12,6 @@
 
 #include "errors.h"
 #include "unix_socket_client.h"
-#include "unix_sockets.h"
 
 /** FIXME: not to be hard-coded */
 static const char* const TMPDIR = "/tmp/";

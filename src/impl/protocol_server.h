@@ -11,7 +11,7 @@
 extern "C" {
 #endif
 
-    enum prot_cmd prot_get_cmd(const void*);
+    int prot_get_cmd(const void*);
 
     int prot_get_stat(const void*);
 

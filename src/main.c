@@ -111,8 +111,8 @@ int main(const int argc, char** argv)
         return EXIT_FAILURE;
     }
 
-    const int listenfd = us_serve(name);
-    if (listenfd == -1) {
+    const int requestfd = us_serve(name);
+    if (requestfd == -1) {
         if (do_sync && !sync_parent(errno))
             perror("Failed to write errno to sync fd");
         return EXIT_FAILURE;
@@ -132,11 +132,11 @@ int main(const int argc, char** argv)
            " maxfiles: %ld; fd_timeout_ms: %ld\n",
            root_dir, name, maxfiles, fd_timeout_ms);
 
-    const bool success = srv_run(listenfd, (int)maxfiles, fd_timeout_ms);
+    const bool success = srv_run(requestfd, (int)maxfiles, fd_timeout_ms);
 
     syslog(LOG_INFO, "Stopping\n");
 
-    us_stop_serving(name, listenfd);
+    us_stop_serving(name, requestfd);
 
     closelog();
 

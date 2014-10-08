@@ -78,7 +78,7 @@ void prot_marshal_send_open(struct prot_send_open* pdu, const size_t txnid)
 }
 
 static int check_hdr(struct prot_hdr* hdr,
-                     const enum prot_cmd expected_cmd)
+                     const enum prot_cmd_resp expected_cmd)
 {
     if (hdr->cmd != expected_cmd)
         return -1;
