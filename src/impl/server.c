@@ -16,14 +16,14 @@
 #include "util.h"
 #include "xfer_table.h"
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpadded"
+
 struct xfer_file {
     size_t size;
     int fd;
     unsigned blksize;
 };
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpadded"
 
 struct xfer {
     /* The syspoll-registered fd (must be the first field of this struct because
@@ -127,7 +127,6 @@ static bool process_events(struct context* ctx,
                            uint8_t* buf, const size_t buf_size);
 
 static bool context_construct(struct context* ctx,
-                              int poll_timeout,
                               long open_file_timeout_ms,
                               int listenfd,
                               int maxfds);
@@ -140,7 +139,7 @@ bool srv_run(const int listenfd,
 {
     struct context ctx;
 
-    if (!context_construct(&ctx, 1000, open_file_timeout_ms, listenfd, maxfds))
+    if (!context_construct(&ctx, open_file_timeout_ms, listenfd, maxfds))
         return false;
 
     if (!syspoll_register(ctx.poller,
@@ -467,13 +466,12 @@ static size_t get_txnid(void* p)
 }
 
 static bool context_construct(struct context* ctx,
-                              const int poll_timeout,
                               const long open_file_timeout_ms,
                               const int listenfd,
                               const int maxfds)
 {
     *ctx = (struct context) {
-        .poller = syspoll_new(poll_timeout, maxfds),
+        .poller = syspoll_new(maxfds),
         .xfers = xfer_table_new(get_txnid, (size_t)maxfds),
         .open_file_timeout_ms = (unsigned)open_file_timeout_ms,
         .listenfd = listenfd,

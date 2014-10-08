@@ -23,21 +23,19 @@ struct syspoll
     int epollfd;
     int sigfd;
     sigset_t orig_sigmask;
-    int timeout;
     struct epoll_event* events;
     int nevents;
 };
 
 #pragma GCC diagnostic pop
 
-struct syspoll* syspoll_new(int timeout_ms, const int maxevents)
+struct syspoll* syspoll_new(const int maxevents)
 {
     struct syspoll* this = malloc(sizeof(*this));
     if (!this)
         return NULL;
 
     *this = (struct syspoll) {
-        .timeout = timeout_ms,
         .epollfd = epoll_create1(EPOLL_CLOEXEC),
         .nevents = maxevents
     };
@@ -160,7 +158,7 @@ int syspoll_poll(struct syspoll* this)
 {
     const int n = epoll_wait(this->epollfd,
                              this->events, this->nevents,
-                             this->timeout);
+                             -1);
     if (n < 0) {
         fprintf(stderr, "%s: epoll_wait() failed (%s)\n",
                 __func__, strerror(errno));

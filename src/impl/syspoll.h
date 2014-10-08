@@ -17,7 +17,7 @@ enum {
 
 struct syspoll;
 
-struct syspoll* syspoll_new(int timeout_ms, int maxevents);
+struct syspoll* syspoll_new(int maxevents);
 
 void syspoll_delete(struct syspoll*);
 
