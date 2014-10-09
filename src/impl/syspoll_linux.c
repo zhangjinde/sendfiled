@@ -63,7 +63,7 @@ struct syspoll* syspoll_new(const int maxevents)
     if (this->sigfd == -1)
         goto fail;
 
-    if (!syspoll_register(this, this->sigfd, &this->sigfd, SYSPOLL_READ))
+    if (!syspoll_register(this, (struct syspoll_resrc*)&this->sigfd, SYSPOLL_READ))
         goto fail;
 
     return this;
@@ -85,7 +85,9 @@ void syspoll_delete(struct syspoll* this)
     }
 }
 
-bool syspoll_register(struct syspoll* this, int fd, void* data, unsigned events)
+bool syspoll_register(struct syspoll* this,
+                      struct syspoll_resrc* resrc,
+                      unsigned events)
 {
     unsigned epoll_events = EPOLLET;
 
@@ -100,13 +102,15 @@ bool syspoll_register(struct syspoll* this, int fd, void* data, unsigned events)
 
     struct epoll_event event = {
         .events = epoll_events,
-        .data = {.ptr = data}
+        .data = {.ptr = resrc}
     };
 
-    return (epoll_ctl(this->epollfd, EPOLL_CTL_ADD, fd, &event) == 0);
+    return (epoll_ctl(this->epollfd, EPOLL_CTL_ADD, resrc->ident, &event) == 0);
 }
 
-int syspoll_timer(struct syspoll* this, void* data, unsigned millis)
+bool syspoll_timer(struct syspoll* this,
+                   struct syspoll_resrc* resrc,
+                   unsigned millis)
 {
     const int fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
     if (fd == -1)
@@ -123,18 +127,19 @@ int syspoll_timer(struct syspoll* this, void* data, unsigned millis)
         goto fail;
 
     if(!syspoll_register(this,
-                         fd,
-                         data,
+                         resrc,
                          SYSPOLL_READ | SYSPOLL_ONESHOT)) {
         goto fail;
     }
 
-    return fd;
+    resrc->ident = fd;
+
+    return true;
 
  fail:
     close(fd);
 
-    return -1;
+    return false;
 }
 
 bool syspoll_deregister(struct syspoll* this, int fd)
@@ -150,11 +155,11 @@ int syspoll_poll(struct syspoll* this)
 
 static bool recvd_term_signal(struct syspoll* this);
 
-struct syspoll_resrc syspoll_get(struct syspoll* this, int eventnum)
+struct syspoll_events syspoll_get(struct syspoll* this, int eventnum)
 {
     const struct epoll_event* const e = &this->events[eventnum];
 
-    struct syspoll_resrc info = {
+    struct syspoll_events info = {
         .events = 0,
         .udata = e->data.ptr
     };
@@ -167,12 +172,15 @@ struct syspoll_resrc syspoll_get(struct syspoll* this, int eventnum)
             info.events |= SYSPOLL_WRITE;
 
         if (e->events & EPOLLIN) {
-            if (*(int*)e->data.ptr == this->sigfd) {
+            const struct syspoll_resrc* r = (struct syspoll_resrc*)e->data.ptr;
+
+            if (r->ident == this->sigfd) {
                 info.events = (recvd_term_signal(this) ?
                                SYSPOLL_TERM :
                                SYSPOLL_ERROR);
                 return info;
             }
+
             info.events |= SYSPOLL_READ;
         }
     }

@@ -188,8 +188,7 @@ bool srv_run(const int reqfd,
         return false;
 
     if (!syspoll_register(ctx.poller,
-                          ctx.reqfd,
-                          &ctx.reqfd,
+                          (struct syspoll_resrc*)&ctx.reqfd,
                           SYSPOLL_READ)) {
         goto fail;
     }
@@ -236,21 +235,21 @@ static bool process_events(struct srv_ctx* ctx,
                            void* buf, const size_t buf_size)
 {
     for (int i = 0; i < nevents; i++) {
-        struct syspoll_resrc resrc = syspoll_get(ctx->poller, i);
+        struct syspoll_events events = syspoll_get(ctx->poller, i);
 
-        if (*(int*)resrc.udata == ctx->reqfd) {
-            if (resrc.events & SYSPOLL_ERROR ||
-                !handle_reqfd(ctx, resrc.events, buf, buf_size)) {
+        if (*(int*)events.udata == ctx->reqfd) {
+            if (events.events & SYSPOLL_ERROR ||
+                !handle_reqfd(ctx, events.events, buf, buf_size)) {
                 syslog(LOG_ERR, "Fatal error on request socket\n");
                 return false;
             }
 
         } else {
-            if (resrc.events & SYSPOLL_TERM) {
+            if (events.events & SYSPOLL_TERM) {
                 return false;
 
-            } else if (is_timer(resrc.udata)) {
-                struct resrc_timer* const timer = resrc.udata;
+            } else if (is_timer(events.udata)) {
+                struct resrc_timer* const timer = events.udata;
                 struct resrc_xfer* const xfer = xfer_table_find(ctx->xfers,
                                                                 timer->txnid);
 
@@ -264,9 +263,9 @@ static bool process_events(struct srv_ctx* ctx,
                 free(timer);
 
             } else {
-                struct resrc_xfer* const xfer = resrc.udata;
+                struct resrc_xfer* const xfer = events.udata;
 
-                if (resrc.events & SYSPOLL_ERROR) {
+                if (events.events & SYSPOLL_ERROR) {
                     syslog(LOG_INFO,
                            "Fatal error on transfer {txnid: %lu; statfd: %d}\n",
                            xfer->id, xfer->stat_fd);
@@ -465,42 +464,12 @@ static bool process_request(struct srv_ctx* ctx,
 
 static bool has_stat_channel(const struct resrc_xfer* x);
 
-static bool register_status_fd(struct srv_ctx* ctx, struct resrc_xfer* x);
-
 static bool retry_send_err_later(struct srv_ctx* ctx,
                                  struct resrc_xfer* x,
-                                 const int err)
-{
-    if (!register_status_fd(ctx, x))
-        return false;
-
-    /* x->dest_fd has had a fatal error so closing it is redundant */
-
-    struct err_retry* const e = (struct err_retry*)x;
-
-    e->stat_fd = x->stat_fd;
-    e->tag = RETRYING_ERR_DELIV_TAG;
-    e->err_code = err;
-
-    return true;
-}
+                                 const int err);
 
 static bool retry_terminal_xfer_stat_later(struct srv_ctx* ctx,
-                                           struct resrc_xfer* x)
-{
-    if (!register_status_fd(ctx, x))
-        return false;
-
-    close(x->dest_fd);
-    /* Prevent xfer from being removed by caller */
-    x->nbytes_left = 1;
-
-    struct term_notif_retry* const n = (struct term_notif_retry*)x;
-    n->stat_fd = x->stat_fd;
-    n->tag = RETRYING_TERM_NOTIF_DELIV_TAG;
-
-    return true;
-}
+                                           struct resrc_xfer* x);
 
 static bool process_file_op(struct srv_ctx* ctx, struct resrc_xfer* xfer)
 {
@@ -598,14 +567,49 @@ static bool has_stat_channel(const struct resrc_xfer* x)
     return (x->stat_fd != x->dest_fd);
 }
 
-static bool register_status_fd(struct srv_ctx* ctx, struct resrc_xfer* x)
+static bool retry_send_err_later(struct srv_ctx* ctx,
+                                 struct resrc_xfer* x,
+                                 const int err)
 {
     if (!syspoll_deregister(ctx->poller, x->dest_fd)) {
         syslog(LOG_EMERG, "Unable to de-register transfer's dest fd [%m]\n");
         return false;
     }
 
-    if (!syspoll_register(ctx->poller, x->stat_fd, x, SYSPOLL_WRITE)) {
+    /* Dest fd has had a fatal error so closing would be redundant */
+
+    struct err_retry* const e = (struct err_retry*)x;
+
+    e->stat_fd = x->stat_fd;
+    e->tag = RETRYING_ERR_DELIV_TAG;
+    e->err_code = err;
+
+    if (!syspoll_register(ctx->poller, (struct syspoll_resrc*)e, SYSPOLL_WRITE)) {
+        syslog(LOG_EMERG, "Unable to register transfer's stat fd [%m]\n");
+        return false;
+    }
+
+    return true;
+}
+
+static bool retry_terminal_xfer_stat_later(struct srv_ctx* ctx,
+                                           struct resrc_xfer* x)
+{
+    if (!syspoll_deregister(ctx->poller, x->dest_fd)) {
+        syslog(LOG_EMERG, "Unable to de-register transfer's dest fd [%m]\n");
+        return false;
+    }
+
+    close(x->dest_fd);
+    /* Prevent xfer from being removed by caller */
+    x->nbytes_left = 1;
+
+    struct term_notif_retry* const n = (struct term_notif_retry*)x;
+
+    n->stat_fd = x->stat_fd;
+    n->tag = RETRYING_TERM_NOTIF_DELIV_TAG;
+
+    if (!syspoll_register(ctx->poller, (struct syspoll_resrc*)n, SYSPOLL_WRITE)) {
         syslog(LOG_EMERG, "Unable to register transfer's stat fd [%m]\n");
         return false;
     }
@@ -712,7 +716,7 @@ static struct resrc_xfer* create_xfer(struct srv_ctx* ctx,
 
 static bool register_xfer(struct srv_ctx* ctx, struct resrc_xfer* xfer)
 {
-    return syspoll_register(ctx->poller, xfer->dest_fd, xfer, SYSPOLL_WRITE);
+    return syspoll_register(ctx->poller, (struct syspoll_resrc*)xfer, SYSPOLL_WRITE);
 }
 
 static struct resrc_xfer* add_xfer(struct srv_ctx* ctx,
@@ -784,7 +788,7 @@ static struct resrc_timer* add_open_file(struct srv_ctx* ctx,
         goto fail1;
 
     const int timerid = syspoll_timer(ctx->poller,
-                                      timer,
+                                      (struct syspoll_resrc*)timer,
                                       ctx->open_file_timeout_ms);
 
     if (timerid == -1)
