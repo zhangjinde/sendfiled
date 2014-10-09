@@ -11,8 +11,7 @@
 
 #include "protocol.h"
 #include "unix_socket_server.h"
-
-#include <stdio.h>
+#include "util.h"
 
 int us_passcred_option(void)
 {
@@ -59,6 +58,10 @@ ssize_t us_recv(int srv_fd,
                               SCM_CREDENTIALS, &creds, sizeof(creds))) {
         return -1;
     }
+
+    set_nonblock(recvd_fds[0], true);
+    if (*nfds == 2)
+        set_nonblock(recvd_fds[1], true);
 
     *uid = creds.uid;
     *gid = creds.gid;
