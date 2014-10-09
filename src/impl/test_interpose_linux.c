@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <sys/sendfile.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #include <assert.h>
 #include <errno.h>
@@ -11,8 +12,21 @@
 
 #include "test_interpose_impl.h"
 
+DEFINE_MOCK_CONSTRUCTS(write)
 DEFINE_MOCK_CONSTRUCTS(splice)
 DEFINE_MOCK_CONSTRUCTS(sendfile)
+
+ssize_t write(int fd, const void* buf, size_t len)
+{
+    MOCK_RETURN(write);
+
+    typedef ssize_t (*fptr) (int, const void*, size_t);
+
+    fptr real_write = (fptr)dlsym(RTLD_NEXT, "write");
+    assert (real_write);
+
+    return real_write(fd, buf, len);
+}
 
 ssize_t splice(int fd_in, loff_t *off_in, int fd_out,
                loff_t *off_out, size_t len, unsigned int flags)

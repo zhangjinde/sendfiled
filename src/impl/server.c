@@ -34,11 +34,11 @@ struct xfer_file {
 };
 
 /*
-   Resources are event sources such as the socket on which client requests are
-   received, pipes to which transfer status and/or file data is written, and
-   open file timers.
+  Resources are event sources such as the socket on which client requests are
+  received, pipes to which transfer status and/or file data is written, and
+  open file timers.
 
-   The registered file descriptor MUST be the first field in the structure.
+  The registered file descriptor MUST be the first field in the structure.
 */
 
 struct resrc_xfer {
@@ -64,10 +64,35 @@ struct resrc_xfer {
 struct resrc_timer {
     /** Identifies the timer with the poller */
     int ident;
-    /** Number which identifies this resource as a timer (INT_MAX) */
-    int magic_number;
+    /** A value of TIMER_TAG identifies this resource as a timer */
+    int tag;
     /** The associated transfer ID */
     size_t txnid;
+};
+
+struct err_retry {
+    int stat_fd;
+    int tag;
+    size_t txnid;
+    int err_code;
+};
+
+struct term_notif_retry {
+    int stat_fd;
+    int tag;
+    size_t txnid;
+};
+
+enum {
+    /** Tag which identifies a resource as a timer */
+    TIMER_TAG = INT_MIN,
+
+    /**
+       Tag which identifies a transfer as being in its 'retrying send of
+       terminal status notification' state.
+    */
+    RETRYING_TERM_NOTIF_DELIV_TAG,
+    RETRYING_ERR_DELIV_TAG
 };
 
 /**
@@ -78,16 +103,16 @@ struct resrc_timer {
 
    @param txnid_ The unique transfer/transaction identifier
 */
-#define TIMER_(ident_, txnid_)                                    \
-    (struct resrc_timer)                                          \
-    {.ident = ident_, .magic_number = INT_MAX, .txnid = txnid_ }
+#define TIMER(ident_, txnid_)                                       \
+    (struct resrc_timer)                                            \
+    {.ident = ident_, .tag = TIMER_TAG, .txnid = txnid_ }
 
 /**
    Checks whether a resource is a timer.
 */
 static bool is_timer(const void* p)
 {
-    return (((const struct resrc_timer*)p)->magic_number == INT_MAX);
+    return (((const struct resrc_timer*)p)->tag == TIMER_TAG);
 }
 
 /**
@@ -152,6 +177,7 @@ static void srv_ctx_destruct(struct srv_ctx* ctx);
 static bool process_events(struct srv_ctx* ctx,
                            int nevents,
                            void* buf, size_t buf_size);
+static bool send_xfer_stat(int fd, size_t file_size);
 
 bool srv_run(const int reqfd,
              const int maxfds,
@@ -203,7 +229,7 @@ static bool handle_reqfd(struct srv_ctx* ctx,
 /** Removes a transfer from all data structures and releases its resources
     (including data and status channel file descriptors) */
 static void purge_xfer(struct srv_ctx* ctx, struct resrc_xfer* xfer);
-static bool process_file_op(struct resrc_xfer* xfer);
+static bool process_file_op(struct srv_ctx* ctx, struct resrc_xfer* xfer);
 
 static bool process_events(struct srv_ctx* ctx,
                            const int nevents,
@@ -246,8 +272,7 @@ static bool process_events(struct srv_ctx* ctx,
                            xfer->id, xfer->stat_fd);
                     PRESERVE_ERRNO(purge_xfer(ctx, xfer));
 
-                /* } else if (!process_file_op(xfer) || xfer_complete(xfer)) { */
-                } else if (!process_file_op(xfer) || xfer->nbytes_left == 0) {
+                } else if (!process_file_op(ctx, xfer) || xfer->nbytes_left == 0) {
                     PRESERVE_ERRNO(purge_xfer(ctx, xfer));
                 }
             }
@@ -263,11 +288,9 @@ static bool process_request(struct srv_ctx* ctx,
 
 static void close_fds(int* fds, const size_t nfds)
 {
-    if (nfds > 0) {
-        close(fds[0]);
-        if (nfds == 2)
-            close(fds[1]);
-    }
+    close(fds[0]);
+    if (nfds == 2)
+        close(fds[1]);
 }
 
 static bool handle_reqfd(struct srv_ctx* ctx,
@@ -297,9 +320,9 @@ static bool handle_reqfd(struct srv_ctx* ctx,
             return !errno_is_fatal(errno);
         } else {
             if (nfds == 0 || nfds > PROT_MAXFDS) {
-                syslog(LOG_NOTICE,
+                syslog(LOG_ERR,
                        "Received unexpected number of"
-                       " file descriptors (%d) from client; ignoring\n",
+                       " file descriptors (%d) from client; ignoring request\n",
                        (int)nfds);
 
             } else if (uid != ctx->uid) {
@@ -440,19 +463,63 @@ static bool process_request(struct srv_ctx* ctx,
     return true;
 }
 
-static bool needs_stat(const struct resrc_xfer* x)
+static bool has_stat_channel(const struct resrc_xfer* x);
+
+static bool register_status_fd(struct srv_ctx* ctx, struct resrc_xfer* x);
+
+static bool retry_send_err_later(struct srv_ctx* ctx,
+                                 struct resrc_xfer* x,
+                                 const int err)
 {
-    return (x->stat_fd != x->dest_fd);
+    if (!register_status_fd(ctx, x))
+        return false;
+
+    /* x->dest_fd has had a fatal error so closing it is redundant */
+
+    struct err_retry* const e = (struct err_retry*)x;
+
+    e->stat_fd = x->stat_fd;
+    e->tag = RETRYING_ERR_DELIV_TAG;
+    e->err_code = err;
+
+    return true;
 }
 
-static bool send_xfer_stat(int fd, size_t file_size);
+static bool retry_terminal_xfer_stat_later(struct srv_ctx* ctx,
+                                           struct resrc_xfer* x)
+{
+    if (!register_status_fd(ctx, x))
+        return false;
 
-static bool process_file_op(struct resrc_xfer* xfer)
+    close(x->dest_fd);
+    /* Prevent xfer from being removed by caller */
+    x->nbytes_left = 1;
+
+    struct term_notif_retry* const n = (struct term_notif_retry*)x;
+    n->stat_fd = x->stat_fd;
+    n->tag = RETRYING_TERM_NOTIF_DELIV_TAG;
+
+    return true;
+}
+
+static bool process_file_op(struct srv_ctx* ctx, struct resrc_xfer* xfer)
 {
     switch (xfer->cmd) {
     case PROT_CMD_READ:
     case PROT_CMD_SEND: {
         size_t ntotal_written = 0;
+
+        if (xfer->stat_fd == RETRYING_TERM_NOTIF_DELIV_TAG) {
+            const struct term_notif_retry* r = (struct term_notif_retry*)xfer;
+            return (send_xfer_stat(r->stat_fd, PROT_XFER_COMPLETE) ||
+                    !errno_is_fatal(errno));
+
+        } else if (xfer->stat_fd == RETRYING_ERR_DELIV_TAG) {
+            const struct err_retry* e = (struct err_retry*)xfer;
+            if (!send_err(e->stat_fd, e->err_code))
+                return !errno_is_fatal(errno);
+            return false;
+        }
 
         for (;;) {
             const size_t writemax = MIN_(xfer->file.blksize, xfer->nbytes_left);
@@ -468,11 +535,20 @@ static bool process_file_op(struct resrc_xfer* xfer)
                                                     writemax));
 
             if (nwritten == -1) {
-                if (errno_is_fatal(errno)) {
-                    if (needs_stat(xfer))
-                        send_err(xfer->stat_fd, errno);
+                const int write_errno = errno;
+
+                if (!errno_is_fatal(write_errno))
+                    return true;
+
+                if (!has_stat_channel(xfer))
+                    return false;
+
+                if (send_err(xfer->stat_fd, write_errno) ||
+                    errno_is_fatal(errno)) {
                     return false;
                 }
+
+                return retry_send_err_later(ctx, xfer, write_errno);
 
             } else if (nwritten == 0) {
                 /* FIXME Not sure how to deal with this properly */
@@ -485,10 +561,25 @@ static bool process_file_op(struct resrc_xfer* xfer)
                 ntotal_written += (size_t)nwritten;
             }
 
-            if (nwritten == -1 || xfer->nbytes_left == 0) {
-                return (!needs_stat(xfer) ||
-                        send_xfer_stat(xfer->stat_fd, ntotal_written));
+            /* Sent as much as possible for the time being */
+            if (has_stat_channel(xfer)) {
+                if (xfer->nbytes_left == 0) {
+                    /* Terminal notification; delivery is critical */
+                    if (!send_xfer_stat(xfer->stat_fd, PROT_XFER_COMPLETE)) {
+                        return (!errno_is_fatal(errno) &&
+                                retry_terminal_xfer_stat_later(ctx, xfer));
+                    }
+
+                } else if (nwritten == -1 && ntotal_written > 0) {
+                    /* Nonterminal notification; delivery not critical */
+                    if (!send_xfer_stat(xfer->stat_fd, ntotal_written) &&
+                        errno_is_fatal(errno)) {
+                        return false;
+                    }
+                }
             }
+
+            return true;
         }
     }
 
@@ -499,6 +590,27 @@ static bool process_file_op(struct resrc_xfer* xfer)
     }
 
     return false;
+}
+
+static bool has_stat_channel(const struct resrc_xfer* x)
+{
+    assert ((x->stat_fd == x->dest_fd) || x->cmd == PROT_CMD_SEND);
+    return (x->stat_fd != x->dest_fd);
+}
+
+static bool register_status_fd(struct srv_ctx* ctx, struct resrc_xfer* x)
+{
+    if (!syspoll_deregister(ctx->poller, x->dest_fd)) {
+        syslog(LOG_EMERG, "Unable to de-register transfer's dest fd [%m]\n");
+        return false;
+    }
+
+    if (!syspoll_register(ctx->poller, x->stat_fd, x, SYSPOLL_WRITE)) {
+        syslog(LOG_EMERG, "Unable to register transfer's stat fd [%m]\n");
+        return false;
+    }
+
+    return true;
 }
 
 /* --------------- (Uninteresting) Internal implementations ------------- */
@@ -678,7 +790,7 @@ static struct resrc_timer* add_open_file(struct srv_ctx* ctx,
     if (timerid == -1)
         goto fail2;
 
-    *timer = TIMER_(timerid, xfer->id);
+    *timer = TIMER(timerid, xfer->id);
 
     return timer;
 
@@ -724,11 +836,11 @@ static void purge_xfer(struct srv_ctx* ctx, struct resrc_xfer* xfer)
     delete_xfer(xfer);
 }
 
-static bool send_pdu(const int fd, const void* pdu, const size_t size)
+static ssize_t send_pdu(const int fd, const void* pdu, const size_t size)
 {
     const ssize_t n = write(fd, pdu, size);
     assert (n == -1 || (size_t)n == size);
-    return (n != -1);
+    return n;
 }
 
 static bool send_file_info(int fd, const struct file_info* info)
@@ -736,7 +848,7 @@ static bool send_file_info(int fd, const struct file_info* info)
     struct prot_file_info pdu;
     prot_marshal_file_info(&pdu,
                            info->size, info->atime, info->mtime, info->ctime);
-    return send_pdu(fd, &pdu, sizeof(pdu));
+    return (send_pdu(fd, &pdu, sizeof(pdu)) == sizeof(pdu));
 }
 
 static bool send_open_file_info(int cli_fd,
@@ -748,14 +860,14 @@ static bool send_open_file_info(int cli_fd,
                                 info->size,
                                 info->atime, info->mtime, info->ctime,
                                 txnid);
-    return send_pdu(cli_fd, &pdu, sizeof(pdu));
+    return (send_pdu(cli_fd, &pdu, sizeof(pdu)) == sizeof(pdu));
 }
 
 static bool send_xfer_stat(const int fd, const size_t file_size)
 {
     struct prot_xfer_stat pdu;
     prot_marshal_xfer_stat(&pdu, file_size);
-    return send_pdu(fd, &pdu, sizeof(pdu));
+    return (send_pdu(fd, &pdu, sizeof(pdu)) == sizeof(pdu));
 }
 
 static bool send_err(const int fd, const int stat)
@@ -764,5 +876,5 @@ static bool send_err(const int fd, const int stat)
         .cmd = PROT_CMD_XFER_STAT,
         .stat = (uint8_t)stat
     };
-    return send_pdu(fd, &pdu, sizeof(pdu));
+    return (send_pdu(fd, &pdu, sizeof(pdu)) == sizeof(pdu));
 }

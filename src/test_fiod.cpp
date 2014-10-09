@@ -82,6 +82,7 @@ struct FiodThreadFix : public ::testing::Test {
 
     ~FiodThreadFix() {
         stop_thread();
+        mock_write_reset();
         mock_sendfile_reset();
         mock_splice_reset();
     }
@@ -234,7 +235,7 @@ TEST_F(FiodProcSmallFileFix, send)
     ASSERT_EQ(0, prot_unmarshal_xfer_stat(&xfer_stat, buf));
     EXPECT_EQ(PROT_CMD_XFER_STAT, xfer_stat.cmd);
     EXPECT_EQ(PROT_STAT_OK, xfer_stat.stat);
-    EXPECT_EQ(file_contents.size(), xfer_stat.size);
+    EXPECT_EQ(PROT_XFER_COMPLETE, xfer_stat.size);
 
     // File content
     nread = read(data_fd, buf, sizeof(buf));
@@ -242,6 +243,113 @@ TEST_F(FiodProcSmallFileFix, send)
     const std::string recvd_file(reinterpret_cast<const char*>(buf),
                                  file_contents.size());
     EXPECT_EQ(file_contents, recvd_file);
+}
+
+/// Causes the final (and only, in this case) transfer status send to fail
+/// temporarily. The server should keep trying until it is able to send the
+/// final status.
+TEST_F(FiodThreadSmallFileFix, send_final_xfer_status_fails)
+{
+    // Pipe to which file will be written
+    int data_pipe[2];
+
+    ASSERT_NE(-1, pipe(data_pipe));
+
+    // Due to edge-trigged mode, more than one EWOULDBLOCK will cause
+    // deadlock. The lone one only works because when the final xfer status send
+    // fails with EWOULDBLOCK, it de-registers the dest fd and registers the
+    // stat fd, causing its events to be re-read.
+    const std::vector<ssize_t> retvals {MOCK_REALRV, -EWOULDBLOCK};
+    mock_write_set_retval_n(retvals.data(), (int)retvals.size());
+
+    const test::unique_fd stat_fd {fiod_send(srv_fd,
+                                             file.name().c_str(),
+                                             data_pipe[1],
+                                             0, 0, false)};
+    close(data_pipe[1]);
+
+    ASSERT_TRUE(stat_fd);
+
+    const test::unique_fd data_fd {data_pipe[0]};
+
+    uint8_t buf [PROT_REQ_MAXSIZE];
+    ssize_t nread;
+    struct prot_file_info ack;
+    struct prot_xfer_stat xfer_stat;
+
+    // Request ACK
+    nread = read(stat_fd, buf, sizeof(ack));
+    ASSERT_EQ(sizeof(ack), nread);
+    ASSERT_EQ(0, prot_unmarshal_file_info(&ack, buf));
+    EXPECT_EQ(PROT_CMD_FILE_INFO, ack.cmd);
+    EXPECT_EQ(PROT_STAT_OK, ack.stat);
+    EXPECT_EQ(file_contents.size(), ack.size);
+
+    // Transfer status update
+    nread = read(stat_fd, buf, sizeof(xfer_stat));
+    ASSERT_EQ(sizeof(xfer_stat), nread);
+    ASSERT_EQ(0, prot_unmarshal_xfer_stat(&xfer_stat, buf));
+    EXPECT_EQ(PROT_CMD_XFER_STAT, xfer_stat.cmd);
+    EXPECT_EQ(PROT_STAT_OK, xfer_stat.stat);
+    EXPECT_EQ(PROT_XFER_COMPLETE, xfer_stat.size);
+
+    // File content
+    nread = read(data_fd, buf, sizeof(buf));
+    ASSERT_EQ(file_contents.size(), nread);
+    const std::string recvd_file(reinterpret_cast<const char*>(buf),
+                                 file_contents.size());
+    EXPECT_EQ(file_contents, recvd_file);
+}
+
+TEST_F(FiodThreadSmallFileFix, send_error_send_fails)
+{
+    // Pipe to which file will be written
+    int data_pipe[2];
+
+    ASSERT_NE(-1, pipe(data_pipe));
+
+    // Due to edge-trigged mode, more than one EWOULDBLOCK will cause
+    // deadlock. The lone one only works because when the final xfer status send
+    // fails with EWOULDBLOCK, it de-registers the dest fd and registers the
+    // stat fd, causing its events to be re-read.
+    const std::vector<ssize_t> write_retvals {MOCK_REALRV, -EWOULDBLOCK};
+    mock_write_set_retval_n(write_retvals.data(), (int)write_retvals.size());
+
+    const test::unique_fd stat_fd {fiod_send(srv_fd,
+                                             file.name().c_str(),
+                                             data_pipe[1],
+                                             0, 0, false)};
+    close(data_pipe[1]);
+
+    mock_sendfile_set_retval(-EIO);
+
+    ASSERT_TRUE(stat_fd);
+
+    const test::unique_fd data_fd {data_pipe[0]};
+
+    uint8_t buf [PROT_REQ_MAXSIZE];
+    ssize_t nread;
+    struct prot_file_info ack;
+    struct prot_hdr err;
+
+    // Request ACK
+    nread = read(stat_fd, buf, sizeof(ack));
+    ASSERT_EQ(sizeof(ack), nread);
+    ASSERT_EQ(0, prot_unmarshal_file_info(&ack, buf));
+    EXPECT_EQ(PROT_CMD_FILE_INFO, ack.cmd);
+    EXPECT_EQ(PROT_STAT_OK, ack.stat);
+    EXPECT_EQ(file_contents.size(), ack.size);
+
+    // Error code
+    nread = read(stat_fd, buf, sizeof(err));
+    ASSERT_EQ(sizeof(err), nread);
+    memcpy(&err, buf, sizeof(err));
+    EXPECT_EQ(PROT_CMD_XFER_STAT, err.cmd);
+    EXPECT_EQ(EIO, err.stat);
+
+    // Not checking data channel because server is under the impression that
+    // fatal error has occured and therefore will not have bothered to close the
+    // data fd.
 }
 
 TEST_F(FiodProcSmallFileFix, read)
@@ -314,7 +422,7 @@ TEST_F(FiodProcSmallFileFix, send_open_file)
     nread = read(stat_fd, buf, sizeof(buf));
     ASSERT_EQ(sizeof(xstat), nread);
     ASSERT_EQ(0, prot_unmarshal_xfer_stat(&xstat, buf));
-    EXPECT_EQ(file_contents.size(), xstat.size);
+    EXPECT_EQ(PROT_XFER_COMPLETE, xstat.size);
 }
 
 TEST_F(FiodProcSmallFileFix, read_range)
@@ -579,7 +687,8 @@ TEST_F(FiodThreadLargeFileFix, send_io_error)
 
     size_t nchunks {};
     ssize_t nread_chunk {};
-    bool got_eof {false};
+    bool got_data_eof {false};
+    bool got_stat_eof {false};
     bool got_errno {false};
 
     for (;;) {
@@ -591,7 +700,7 @@ TEST_F(FiodThreadLargeFileFix, send_io_error)
                      CHUNK_SIZE - (size_t)nread_chunk);
 
         if (nread == 0) {
-            got_eof = true;
+            got_data_eof = true;
             break;
         }
 
@@ -620,23 +729,28 @@ TEST_F(FiodThreadLargeFileFix, send_io_error)
 
     ASSERT_TRUE(set_nonblock(stat_fd, false));
 
-    while (!got_eof) {
+    while (!got_stat_eof) {
         nread = read(stat_fd, stat_buf.data(), sizeof(xfer_stat));
 
         if (nread == 0) {
-            got_eof = true;
+            got_stat_eof = true;
 
+        } else if (nread == -1) {
+            if (wouldblock(nread))
+                continue;
+            else
+                break;
         } else {
             ASSERT_GE(nread, sizeof(struct prot_hdr));
             ASSERT_NE(-1, prot_unmarshal_xfer_stat(&xfer_stat, stat_buf.data()));
             ASSERT_EQ(PROT_CMD_XFER_STAT, xfer_stat.cmd);
-
             if (xfer_stat.stat != PROT_STAT_OK)
                 got_errno = (xfer_stat.stat == EIO);
         }
     }
 
-    EXPECT_TRUE(got_eof);
+    EXPECT_TRUE(got_data_eof);
+    EXPECT_TRUE(got_stat_eof);
     EXPECT_TRUE(got_errno);
     EXPECT_LT(nchunks, NCHUNKS);
 }

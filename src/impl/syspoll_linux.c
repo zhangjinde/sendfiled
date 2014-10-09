@@ -103,13 +103,7 @@ bool syspoll_register(struct syspoll* this, int fd, void* data, unsigned events)
         .data = {.ptr = data}
     };
 
-    if (epoll_ctl(this->epollfd, EPOLL_CTL_ADD, fd, &event) == -1) {
-        fprintf(stderr, "%s: epoll_ctl() on fd %d failed (%s)\n",
-                __func__, fd, strerror(errno));
-        return false;
-    }
-
-    return true;
+    return (epoll_ctl(this->epollfd, EPOLL_CTL_ADD, fd, &event) == 0);
 }
 
 int syspoll_timer(struct syspoll* this, void* data, unsigned millis)
@@ -146,28 +140,12 @@ int syspoll_timer(struct syspoll* this, void* data, unsigned millis)
 bool syspoll_deregister(struct syspoll* this, int fd)
 {
     struct epoll_event event;
-
-    if (epoll_ctl(this->epollfd, EPOLL_CTL_DEL, fd, &event) == -1) {
-        fprintf(stderr, "%s: epoll_ctl() on fd %d failed (%s)\n",
-                __func__, fd, strerror(errno));
-        return false;
-    }
-
-    return true;
+    return (epoll_ctl(this->epollfd, EPOLL_CTL_DEL, fd, &event) == 0);
 }
 
 int syspoll_poll(struct syspoll* this)
 {
-    const int n = epoll_wait(this->epollfd,
-                             this->events, this->nevents,
-                             -1);
-    if (n < 0) {
-        fprintf(stderr, "%s: epoll_wait() failed (%s)\n",
-                __func__, strerror(errno));
-        return -1;
-    }
-
-    return n;
+    return epoll_wait(this->epollfd, this->events, this->nevents, -1);
 }
 
 static bool recvd_term_signal(struct syspoll* this);

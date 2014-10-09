@@ -116,6 +116,10 @@ struct prot_xfer_stat {
     size_t size;
 };
 
+/** The value struct prot_xfer_stat.size is set to in a terminal transfer status
+     notification to indicate a complete transfer */
+#define PROT_XFER_COMPLETE ~(size_t)0
+
 #pragma GCC diagnostic pop
 
 #endif

@@ -49,11 +49,13 @@
                                                                         \
         if (mock_data_##name.i != -1) {                                 \
             const ssize_t rv = mock_data_##name.retvals[mock_data_##name.i++]; \
-                if (rv < 0) {                                           \
-                    errno = (int)-rv;                                   \
-                    return -1;                                          \
-                } else {                                                \
-                    return rv;                                          \
+                if (rv != MOCK_REALRV) {                                \
+                    if (rv < 0) {                                       \
+                        errno = (int)-rv;                               \
+                        return -1;                                      \
+                    } else {                                            \
+                        return rv;                                      \
+                    }                                                   \
                 }                                                       \
         }
 
