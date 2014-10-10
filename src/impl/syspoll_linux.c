@@ -126,13 +126,13 @@ bool syspoll_timer(struct syspoll* this,
     if (timerfd_settime(fd, 0, &time, 0) == -1)
         goto fail;
 
+    resrc->ident = fd;
+
     if(!syspoll_register(this,
                          resrc,
                          SYSPOLL_READ | SYSPOLL_ONESHOT)) {
         goto fail;
     }
-
-    resrc->ident = fd;
 
     return true;
 

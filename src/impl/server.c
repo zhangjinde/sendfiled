@@ -22,7 +22,9 @@
 #pragma GCC diagnostic ignored "-Wpadded"
 
 /**
-   Information about a file being transferred.
+   Information about a file, as it is on disk.
+
+   These values do not change through the course of a transfer.
 */
 struct xfer_file {
     /** File size on disk */
@@ -35,102 +37,103 @@ struct xfer_file {
 
 /*
   Resources are event sources such as the socket on which client requests are
-  received, pipes to which transfer status and/or file data is written, and
-  open file timers.
+  received (the server's 'listen' socket), pipes to which transfer status and/or
+  file data is written, timers for open files, and which are registered with the
+  poller for event notification.
 
-  The registered file descriptor MUST be the first field in the structure.
+  The poller requires all resources to have their registered file descriptors as
+  the first field (they need to be type-punnable to struct syspoll_resrc).
 */
 
+/*
+  Resource type tags.
+
+  All of these resource types will all be returned by the poller, so there needs
+  to be a way to tell them apart from each other.
+*/
+enum {
+    /* Identifies a resource as a file transfer */
+    XFER_RESRC_TAG,
+    /** Tag which identifies a resource as a timer. */
+    TIMER_RESRC_TAG,
+    /** Identifies a response pending delivery */
+    PENDING_RESP_TAG
+};
+
+/**
+   A file transfer resource.
+
+   @note The first few fields must be identical to the other resource structures
+   due to the use of type punning.
+*/
 struct resrc_xfer {
-    /** The data channel file descriptor */
+    /** The data channel file descriptor (registered with poller) */
     int dest_fd;
-    /** The status channel file descriptor */
+    /* The type tag */
+    int tag;
+    /** The status channel file descriptor. Hijacked by other resource
+        structures for use as a type tag (shameful!). */
     int stat_fd;
+    /** The command ID */
+    enum prot_cmd_req cmd;
     /** The unique identifier for this transfer */
-    size_t id;
-    /** Information about the file being transferred */
+    size_t txnid;
+    /** Static information about the file being transferred, as it is on disk */
     struct xfer_file file;
-    /** Context used by data-transfer functions on some platforms */
+    /** Context used by data-transfer functions on some platforms; NULL on
+        others */
     struct fio_ctx* fio_ctx;
     /** Number of bytes left to transfer */
     size_t nbytes_left;
-    /* Command ID */
-    enum prot_cmd_req cmd;
+};
+
+/**
+   A response waiting to be delivered.
+
+   Instances are created when the first attempt to send a transfer error or
+   completion notification fails temporarily.
+*/
+struct resrc_resp {
+    /* Destination file descriptor (registered with poller) */
+    int stat_fd;
+    /* The type tag */
+    int tag;
+    /** The size of the PDU. Error notifications are headers only, but transfer
+        completion notifications have a size_t field in the body. */
+    size_t pdu_size;
+    /** The PDU to be sent */
+    struct prot_xfer_stat pdu;
 };
 
 /**
    A timer set on an open file associated with a nascent file transfer.
 */
 struct resrc_timer {
-    /** Identifies the timer with the poller */
+    /** Identifies the timer (registered with poller) */
     int ident;
-    /** A value of TIMER_TAG identifies this resource as a timer */
+    /** The type tag */
     int tag;
     /** The associated transfer ID */
     size_t txnid;
 };
 
-struct err_retry {
-    int stat_fd;
-    int tag;
-    size_t txnid;
-    int err_code;
-};
-
-struct term_notif_retry {
-    int stat_fd;
-    int tag;
-    size_t txnid;
-};
-
-enum {
-    /** Tag which identifies a resource as a timer */
-    TIMER_TAG = INT_MIN,
-
-    /**
-       Tag which identifies a transfer as being in its 'retrying send of
-       terminal status notification' state.
-    */
-    RETRYING_TERM_NOTIF_DELIV_TAG,
-    RETRYING_ERR_DELIV_TAG
-};
-
-/**
-   Convenience macro for initialising a timer resource.
-
-   @param ident_ The timer identifier. E.g., the value returned by @a timerfd(2)
-   on Linux, or a user-supplied value in the case of @a kqueue.
-
-   @param txnid_ The unique transfer/transaction identifier
-*/
-#define TIMER(ident_, txnid_)                                       \
-    (struct resrc_timer)                                            \
-    {.ident = ident_, .tag = TIMER_TAG, .txnid = txnid_ }
-
-/**
-   Checks whether a resource is a timer.
-*/
-static bool is_timer(const void* p)
-{
-    return (((const struct resrc_timer*)p)->tag == TIMER_TAG);
-}
-
 /**
    Server context.
 */
-struct srv_ctx
+struct server
 {
     /** The poller (epoll, kqueue, etc.) */
     struct syspoll* poller;
     /** The table of running file transfers */
     struct xfer_table* xfers;
-    /** The next transfer ID to be assigned */
-    size_t next_id;
+    /** The next transfer ID to be assigned. Starts at 1 and is incremented by 1
+        for each new transaction. */
+    size_t next_txnid;
     /** The file descriptor upon which client requests are received */
     int reqfd;
     /** The number of milliseconds after which open files are closed */
     unsigned open_file_timeout_ms;
-    /* The user ID */
+    /* The user ID of this, the server process */
     uid_t uid;
 };
 
@@ -148,7 +151,7 @@ static bool errno_is_fatal(int err);
    @post Status and data channel file descriptors are still open, regardless of
    wether the call succeeded or not.
 */
-static struct resrc_xfer* add_xfer(struct srv_ctx* ctx,
+static struct resrc_xfer* add_xfer(struct server* ctx,
                                    const char* filename,
                                    enum prot_cmd_req cmd,
                                    loff_t offset,
@@ -157,24 +160,24 @@ static struct resrc_xfer* add_xfer(struct srv_ctx* ctx,
                                    struct file_info* info);
 
 /** Reverses the effects of add_xfer() */
-static void undo_add_xfer(struct srv_ctx*, struct resrc_xfer*);
-
-/** Sends an error to the client (over the status channel) */
-static bool send_err(int fd, int err);
+static void undo_add_xfer(struct server*, struct resrc_xfer*);
 
 /**
    Releases resources allocated to a transfer.
 */
 static void delete_xfer(void* p);
 
+/** Sends an error to the client (over the status channel) */
+static bool send_err(int fd, int err);
+
 static void close_channel_fds(struct resrc_xfer*);
 
-static bool srv_ctx_construct(struct srv_ctx* ctx,
-                              long open_file_timeout_ms,
-                              int reqfd,
-                              int maxfds);
-static void srv_ctx_destruct(struct srv_ctx* ctx);
-static bool process_events(struct srv_ctx* ctx,
+static bool server_construct(struct server* ctx,
+                             long open_file_timeout_ms,
+                             int reqfd,
+                             int maxfds);
+static void server_destruct(struct server* ctx);
+static bool process_events(struct server* ctx,
                            int nevents,
                            void* buf, size_t buf_size);
 static bool send_xfer_stat(int fd, size_t file_size);
@@ -183,8 +186,8 @@ bool srv_run(const int reqfd,
              const int maxfds,
              const long open_file_timeout_ms)
 {
-    struct srv_ctx ctx;
-    if (!srv_ctx_construct(&ctx, open_file_timeout_ms, reqfd, maxfds))
+    struct server ctx;
+    if (!server_construct(&ctx, open_file_timeout_ms, reqfd, maxfds))
         return false;
 
     if (!syspoll_register(ctx.poller,
@@ -211,26 +214,35 @@ bool srv_run(const int reqfd,
     }
 
     free(recvbuf);
-    srv_ctx_destruct(&ctx);
+    server_destruct(&ctx);
 
     return true;
 
  fail:
-    PRESERVE_ERRNO(srv_ctx_destruct(&ctx));
+    PRESERVE_ERRNO(server_destruct(&ctx));
     return false;
 }
 
-static bool handle_reqfd(struct srv_ctx* ctx,
+static bool handle_reqfd(struct server* ctx,
                          int events,
                          void* buf,
                          size_t buf_size);
 
 /** Removes a transfer from all data structures and releases its resources
     (including data and status channel file descriptors) */
-static void purge_xfer(struct srv_ctx* ctx, struct resrc_xfer* xfer);
-static bool process_file_op(struct srv_ctx* ctx, struct resrc_xfer* xfer);
+static void purge_xfer(struct server* ctx, struct resrc_xfer* xfer);
 
-static bool process_events(struct srv_ctx* ctx,
+static bool process_file_op(struct server* ctx, struct resrc_xfer* xfer);
+
+static bool send_pdu(const int fd, const void* pdu, const size_t size);
+
+static bool is_response(const void*);
+
+static void delete_resrc_resp(struct resrc_resp*);
+
+static bool is_timer(const void*);
+
+static bool process_events(struct server* ctx,
                            const int nevents,
                            void* buf, const size_t buf_size)
 {
@@ -262,16 +274,26 @@ static bool process_events(struct srv_ctx* ctx,
                 close(timer->ident);
                 free(timer);
 
+            } else if (is_response(events.udata)) {
+                struct resrc_resp* r = (struct resrc_resp*)events.udata;
+
+                if (send_pdu(r->stat_fd, &r->pdu, r->pdu_size) ||
+                    errno_is_fatal(errno)) {
+                    delete_resrc_resp(r);
+                }
+
             } else {
                 struct resrc_xfer* const xfer = events.udata;
+
+                assert (xfer->tag == XFER_RESRC_TAG);
 
                 if (events.events & SYSPOLL_ERROR) {
                     syslog(LOG_INFO,
                            "Fatal error on transfer {txnid: %lu; statfd: %d}\n",
-                           xfer->id, xfer->stat_fd);
+                           xfer->txnid, xfer->stat_fd);
                     PRESERVE_ERRNO(purge_xfer(ctx, xfer));
 
-                } else if (!process_file_op(ctx, xfer) || xfer->nbytes_left == 0) {
+                } else if (!process_file_op(ctx, xfer)) {
                     PRESERVE_ERRNO(purge_xfer(ctx, xfer));
                 }
             }
@@ -281,9 +303,25 @@ static bool process_events(struct srv_ctx* ctx,
     return true;
 }
 
-static bool process_request(struct srv_ctx* ctx,
+static bool is_response(const void* p)
+{
+    return (((const struct resrc_resp*)p)->tag == PENDING_RESP_TAG);
+}
+
+static void delete_resrc_resp(struct resrc_resp* r)
+{
+    close(r->stat_fd);
+    free(r);
+}
+
+static bool is_timer(const void* p)
+{
+    return (((const struct resrc_timer*)p)->tag == TIMER_RESRC_TAG);
+}
+
+static bool process_request(struct server* ctx,
                             const void* buf, const size_t size,
-                            int* fds, const size_t nfds);
+                            int* fds);
 
 static void close_fds(int* fds, const size_t nfds)
 {
@@ -292,7 +330,7 @@ static void close_fds(int* fds, const size_t nfds)
         close(fds[1]);
 }
 
-static bool handle_reqfd(struct srv_ctx* ctx,
+static bool handle_reqfd(struct server* ctx,
                          const int events,
                          void* buf,
                          const size_t buf_size)
@@ -328,8 +366,7 @@ static bool handle_reqfd(struct srv_ctx* ctx,
                 send_err(recvd_fds[0], EACCES);
                 close_fds(recvd_fds, nfds);
 
-            } else if (!process_request(ctx, buf, (size_t)nread,
-                                        recvd_fds, nfds)) {
+            } else if (!process_request(ctx, buf, (size_t)nread, recvd_fds)) {
                 close_fds(recvd_fds, nfds);
             }
         }
@@ -338,14 +375,14 @@ static bool handle_reqfd(struct srv_ctx* ctx,
     return true;
 }
 
-static struct resrc_timer* add_open_file(struct srv_ctx* ctx,
+static struct resrc_timer* add_open_file(struct server* ctx,
                                          const char* filename,
                                          loff_t offset,
                                          size_t len,
                                          int stat_fd,
                                          struct file_info* info);
 
-static bool register_xfer(struct srv_ctx* ctx, struct resrc_xfer* xfer);
+static bool register_xfer(struct server* ctx, struct resrc_xfer* xfer);
 
 static bool send_file_info(int fd, const struct file_info* info);
 
@@ -353,9 +390,9 @@ static bool send_open_file_info(int cli_fd,
                                 size_t txnid,
                                 const struct file_info* info);
 
-static bool process_request(struct srv_ctx* ctx,
+static bool process_request(struct server* ctx,
                             const void* buf, const size_t size,
-                            int* fds, const size_t nfds __attribute__((unused)))
+                            int* fds)
 {
     static const char* const malformed_req_msg = "Received malformed request\n";
     static const char* const invalid_cmd_msg =
@@ -462,33 +499,33 @@ static bool process_request(struct srv_ctx* ctx,
     return true;
 }
 
+static bool register_xfer(struct server* ctx, struct resrc_xfer* xfer)
+{
+    return syspoll_register(ctx->poller,
+                            (struct syspoll_resrc*)xfer,
+                            SYSPOLL_WRITE);
+}
+
 static bool has_stat_channel(const struct resrc_xfer* x);
 
-static bool retry_send_err_later(struct srv_ctx* ctx,
-                                 struct resrc_xfer* x,
-                                 const int err);
+/**
+   Sends a terminal response to the client.
 
-static bool retry_terminal_xfer_stat_later(struct srv_ctx* ctx,
-                                           struct resrc_xfer* x);
+   @retval @a true The response will be retried later; no cleanup necessary
 
-static bool process_file_op(struct srv_ctx* ctx, struct resrc_xfer* xfer)
+   @retval @a false The response has been sent, or an unrecoverable error has
+   occured in the process, so purge the transfer.
+*/
+static bool send_term_resp(struct server* ctx,
+                           struct resrc_xfer* x,
+                           const void* pdu, const size_t size);
+
+static bool process_file_op(struct server* ctx, struct resrc_xfer* xfer)
 {
     switch (xfer->cmd) {
     case PROT_CMD_READ:
     case PROT_CMD_SEND: {
         size_t ntotal_written = 0;
-
-        if (xfer->stat_fd == RETRYING_TERM_NOTIF_DELIV_TAG) {
-            const struct term_notif_retry* r = (struct term_notif_retry*)xfer;
-            return (send_xfer_stat(r->stat_fd, PROT_XFER_COMPLETE) ||
-                    !errno_is_fatal(errno));
-
-        } else if (xfer->stat_fd == RETRYING_ERR_DELIV_TAG) {
-            const struct err_retry* e = (struct err_retry*)xfer;
-            if (!send_err(e->stat_fd, e->err_code))
-                return !errno_is_fatal(errno);
-            return false;
-        }
 
         for (;;) {
             const size_t writemax = MIN_(xfer->file.blksize, xfer->nbytes_left);
@@ -512,12 +549,11 @@ static bool process_file_op(struct srv_ctx* ctx, struct resrc_xfer* xfer)
                 if (!has_stat_channel(xfer))
                     return false;
 
-                if (send_err(xfer->stat_fd, write_errno) ||
-                    errno_is_fatal(errno)) {
-                    return false;
-                }
-
-                return retry_send_err_later(ctx, xfer, write_errno);
+                struct prot_hdr pdu = {
+                    .cmd = PROT_CMD_XFER_STAT,
+                    .stat = (uint8_t)write_errno
+                };
+                return send_term_resp(ctx, xfer, &pdu, sizeof(pdu));
 
             } else if (nwritten == 0) {
                 /* FIXME Not sure how to deal with this properly */
@@ -534,10 +570,9 @@ static bool process_file_op(struct srv_ctx* ctx, struct resrc_xfer* xfer)
             if (has_stat_channel(xfer)) {
                 if (xfer->nbytes_left == 0) {
                     /* Terminal notification; delivery is critical */
-                    if (!send_xfer_stat(xfer->stat_fd, PROT_XFER_COMPLETE)) {
-                        return (!errno_is_fatal(errno) &&
-                                retry_terminal_xfer_stat_later(ctx, xfer));
-                    }
+                    struct prot_xfer_stat pdu;
+                    prot_marshal_xfer_stat(&pdu, PROT_XFER_COMPLETE);
+                    return send_term_resp(ctx, xfer, &pdu, sizeof(pdu));
 
                 } else if (nwritten == -1 && ntotal_written > 0) {
                     /* Nonterminal notification; delivery not critical */
@@ -546,6 +581,10 @@ static bool process_file_op(struct srv_ctx* ctx, struct resrc_xfer* xfer)
                         return false;
                     }
                 }
+            } else if (xfer->nbytes_left == 0) {
+                /* Indicate that the caller should purge the transfer. FIXME:
+                   this is rather counter-intuitive. */
+                return false;
             }
 
             return true;
@@ -567,79 +606,90 @@ static bool has_stat_channel(const struct resrc_xfer* x)
     return (x->stat_fd != x->dest_fd);
 }
 
-static bool retry_send_err_later(struct srv_ctx* ctx,
-                                 struct resrc_xfer* x,
-                                 const int err)
+static struct resrc_resp* new_resrc_resp(int fd,
+                                         const void* pdu,
+                                         size_t pdu_size);
+
+static bool send_term_resp(struct server* ctx,
+                           struct resrc_xfer* x,
+                           const void* pdu, const size_t pdu_size)
 {
-    if (!syspoll_deregister(ctx->poller, x->dest_fd)) {
-        syslog(LOG_EMERG, "Unable to de-register transfer's dest fd [%m]\n");
+    /*
+      return false -> x is purged;
+      return true -> nothing is done
+    */
+
+    if (send_pdu(x->stat_fd, pdu, pdu_size) || errno_is_fatal(errno))
+        return false;
+
+    /* Temporary send error--retry it later.
+
+       Any failure past this point is a failure in the retry mechanism, and
+       therefore the client will never see the response. There is no remedy, but
+       at least log it loudly. (The client will be aware that *something* has
+       happened, because all the file descriptors will be closed.)
+    */
+
+    struct resrc_resp* resp = new_resrc_resp(x->stat_fd, pdu, pdu_size);
+    if (!resp) {
+        syslog(LOG_EMERG, "Couldn't allocate memory for response retry [%m]\n");
         return false;
     }
 
-    /* Dest fd has had a fatal error so closing would be redundant */
-
-    struct err_retry* const e = (struct err_retry*)x;
-
-    e->stat_fd = x->stat_fd;
-    e->tag = RETRYING_ERR_DELIV_TAG;
-    e->err_code = err;
-
-    if (!syspoll_register(ctx->poller, (struct syspoll_resrc*)e, SYSPOLL_WRITE)) {
+    if (!syspoll_register(ctx->poller,
+                          (struct syspoll_resrc*)resp,
+                          SYSPOLL_WRITE)) {
         syslog(LOG_EMERG, "Unable to register transfer's stat fd [%m]\n");
-        return false;
-    }
-
-    return true;
-}
-
-static bool retry_terminal_xfer_stat_later(struct srv_ctx* ctx,
-                                           struct resrc_xfer* x)
-{
-    if (!syspoll_deregister(ctx->poller, x->dest_fd)) {
-        syslog(LOG_EMERG, "Unable to de-register transfer's dest fd [%m]\n");
+        free(resp);
         return false;
     }
 
     close(x->dest_fd);
-    /* Prevent xfer from being removed by caller */
-    x->nbytes_left = 1;
-
-    struct term_notif_retry* const n = (struct term_notif_retry*)x;
-
-    n->stat_fd = x->stat_fd;
-    n->tag = RETRYING_TERM_NOTIF_DELIV_TAG;
-
-    if (!syspoll_register(ctx->poller, (struct syspoll_resrc*)n, SYSPOLL_WRITE)) {
-        syslog(LOG_EMERG, "Unable to register transfer's stat fd [%m]\n");
-        return false;
-    }
+    syspoll_deregister(ctx->poller, x->dest_fd);
+    xfer_table_erase(ctx->xfers, x->txnid);
 
     return true;
+}
+
+static struct resrc_resp* new_resrc_resp(int fd,
+                                         const void* pdu,
+                                         size_t pdu_size) {
+    assert (pdu_size <= sizeof(struct prot_xfer_stat));
+    struct resrc_resp* this = malloc(sizeof(*this));
+    if (!this)
+        return NULL;
+    *this = (struct resrc_resp) {
+        .stat_fd = fd,
+        .tag = PENDING_RESP_TAG,
+        .pdu_size = pdu_size,
+    };
+    memcpy(&this->pdu, pdu, pdu_size);
+    return this;
 }
 
 /* --------------- (Uninteresting) Internal implementations ------------- */
 
 static size_t get_txnid(void* p)
 {
-    return ((struct resrc_xfer*)p)->id;
+    return ((struct resrc_xfer*)p)->txnid;
 }
 
-static bool srv_ctx_construct(struct srv_ctx* ctx,
-                              const long open_file_timeout_ms,
-                              const int reqfd,
-                              const int maxfds)
+static bool server_construct(struct server* ctx,
+                             const long open_file_timeout_ms,
+                             const int reqfd,
+                             const int maxfds)
 {
-    *ctx = (struct srv_ctx) {
+    *ctx = (struct server) {
         .poller = syspoll_new(maxfds),
         .xfers = xfer_table_new(get_txnid, (size_t)maxfds),
         .open_file_timeout_ms = (unsigned)open_file_timeout_ms,
         .reqfd = reqfd,
-        .next_id = 1,
+        .next_txnid = 1,
         .uid = geteuid()
     };
 
     if (!ctx->poller || !ctx->xfers) {
-        srv_ctx_destruct(ctx);
+        server_destruct(ctx);
         return false;
     }
 
@@ -652,7 +702,7 @@ static void delete_xfer_and_close_channel_fds(void* p)
     delete_xfer(p);
 }
 
-static void srv_ctx_destruct(struct srv_ctx* ctx)
+static void server_destruct(struct server* ctx)
 {
     syspoll_delete(ctx->poller);
 
@@ -678,48 +728,15 @@ static bool errno_is_fatal(const int err)
     }
 }
 
-static struct resrc_xfer* create_xfer(struct srv_ctx* ctx,
-                                      const enum prot_cmd_req cmd,
-                                      const struct xfer_file* file,
-                                      const loff_t offset,
-                                      const size_t len,
-                                      const int stat_fd,
-                                      const int dest_fd)
-{
-    if (((size_t)offset + len) > file->size) {
-        /* Requested range is invalid */
-        errno = ERANGE;
-        return NULL;
-    }
+static struct resrc_xfer* new_xfer(struct server* ctx,
+                                   const enum prot_cmd_req cmd,
+                                   const struct xfer_file* file,
+                                   const loff_t offset,
+                                   const size_t len,
+                                   const int stat_fd,
+                                   const int dest_fd);
 
-    struct resrc_xfer* xfer = malloc(sizeof(*xfer));
-    if (!xfer)
-        return NULL;
-
-    *xfer = (struct resrc_xfer) {
-        .dest_fd = dest_fd,
-        .stat_fd = stat_fd,
-        .id = ctx->next_id++,
-        .file = *file,
-        .fio_ctx = fio_ctx_new(file->blksize),
-        .nbytes_left = (len > 0 ? len : (file->size - (size_t)offset)),
-        .cmd = cmd,
-    };
-
-    if (!fio_ctx_valid(xfer->fio_ctx)) {
-        free(xfer);
-        return NULL;
-    }
-
-    return xfer;
-}
-
-static bool register_xfer(struct srv_ctx* ctx, struct resrc_xfer* xfer)
-{
-    return syspoll_register(ctx->poller, (struct syspoll_resrc*)xfer, SYSPOLL_WRITE);
-}
-
-static struct resrc_xfer* add_xfer(struct srv_ctx* ctx,
+static struct resrc_xfer* add_xfer(struct server* ctx,
                                    const char* filename,
                                    const enum prot_cmd_req cmd,
                                    const loff_t offset,
@@ -741,11 +758,11 @@ static struct resrc_xfer* add_xfer(struct srv_ctx* ctx,
         .blksize = finfo->blksize
     };
 
-    struct resrc_xfer* const xfer = create_xfer(ctx,
-                                                cmd,
-                                                &file,
-                                                offset, len,
-                                                stat_fd, dest_fd);
+    struct resrc_xfer* const xfer = new_xfer(ctx,
+                                             cmd,
+                                             &file,
+                                             offset, len,
+                                             stat_fd, dest_fd);
     if (!xfer) {
         close(fd);
         return NULL;
@@ -761,13 +778,50 @@ static struct resrc_xfer* add_xfer(struct srv_ctx* ctx,
     return xfer;
 }
 
-static void undo_add_xfer(struct srv_ctx* ctx, struct resrc_xfer* x)
+static struct resrc_xfer* new_xfer(struct server* ctx,
+                                   const enum prot_cmd_req cmd,
+                                   const struct xfer_file* file,
+                                   const loff_t offset,
+                                   const size_t len,
+                                   const int stat_fd,
+                                   const int dest_fd)
 {
-    xfer_table_erase(ctx->xfers, x->id);
+    if (((size_t)offset + len) > file->size) {
+        /* Requested range is invalid */
+        errno = ERANGE;
+        return NULL;
+    }
+
+    struct resrc_xfer* xfer = malloc(sizeof(*xfer));
+    if (!xfer)
+        return NULL;
+
+    *xfer = (struct resrc_xfer) {
+        .dest_fd = dest_fd,
+        .tag = XFER_RESRC_TAG,
+        .stat_fd = stat_fd,
+        .txnid = ctx->next_txnid++,
+        .file = *file,
+        .fio_ctx = fio_ctx_new(file->blksize),
+        .nbytes_left = (len > 0 ? len : (file->size - (size_t)offset)),
+        .cmd = cmd,
+    };
+
+    if (!fio_ctx_valid(xfer->fio_ctx)) {
+        free(xfer);
+        return NULL;
+    }
+
+    return xfer;
+}
+
+static void undo_add_xfer(struct server* ctx, struct resrc_xfer* x)
+{
+    xfer_table_erase(ctx->xfers, x->txnid);
     delete_xfer(x);
 }
 
-static struct resrc_timer* add_open_file(struct srv_ctx* ctx,
+static struct resrc_timer* add_open_file(struct server* ctx,
                                          const char* filename,
                                          loff_t offset,
                                          size_t len,
@@ -787,14 +841,17 @@ static struct resrc_timer* add_open_file(struct srv_ctx* ctx,
     if (!timer)
         goto fail1;
 
-    const int timerid = syspoll_timer(ctx->poller,
-                                      (struct syspoll_resrc*)timer,
-                                      ctx->open_file_timeout_ms);
+    *timer = (struct resrc_timer) {
+        .ident = -1,
+        .tag = TIMER_RESRC_TAG,
+        .txnid = xfer->txnid
+    };
 
-    if (timerid == -1)
+    if (!syspoll_timer(ctx->poller,
+                       (struct syspoll_resrc*)timer,
+                       ctx->open_file_timeout_ms)) {
         goto fail2;
-
-    *timer = TIMER(timerid, xfer->id);
+    }
 
     return timer;
 
@@ -823,9 +880,9 @@ static void close_channel_fds(struct resrc_xfer* x)
         close(x->dest_fd);
 }
 
-static void purge_xfer(struct srv_ctx* ctx, struct resrc_xfer* xfer)
+static void purge_xfer(struct server* ctx, struct resrc_xfer* xfer)
 {
-    xfer_table_erase(ctx->xfers, xfer->id);
+    xfer_table_erase(ctx->xfers, xfer->txnid);
 
     /* The client and server processes share the dest fd's file table entry (it
        was sent over a UNIX socket), so closing it here will not cause it to be
@@ -840,11 +897,11 @@ static void purge_xfer(struct srv_ctx* ctx, struct resrc_xfer* xfer)
     delete_xfer(xfer);
 }
 
-static ssize_t send_pdu(const int fd, const void* pdu, const size_t size)
+static bool send_pdu(const int fd, const void* pdu, const size_t size)
 {
     const ssize_t n = write(fd, pdu, size);
     assert (n == -1 || (size_t)n == size);
-    return n;
+    return ((size_t)n == size);
 }
 
 static bool send_file_info(int fd, const struct file_info* info)
@@ -852,7 +909,7 @@ static bool send_file_info(int fd, const struct file_info* info)
     struct prot_file_info pdu;
     prot_marshal_file_info(&pdu,
                            info->size, info->atime, info->mtime, info->ctime);
-    return (send_pdu(fd, &pdu, sizeof(pdu)) == sizeof(pdu));
+    return send_pdu(fd, &pdu, sizeof(pdu));
 }
 
 static bool send_open_file_info(int cli_fd,
@@ -864,14 +921,14 @@ static bool send_open_file_info(int cli_fd,
                                 info->size,
                                 info->atime, info->mtime, info->ctime,
                                 txnid);
-    return (send_pdu(cli_fd, &pdu, sizeof(pdu)) == sizeof(pdu));
+    return send_pdu(cli_fd, &pdu, sizeof(pdu));
 }
 
 static bool send_xfer_stat(const int fd, const size_t file_size)
 {
     struct prot_xfer_stat pdu;
     prot_marshal_xfer_stat(&pdu, file_size);
-    return (send_pdu(fd, &pdu, sizeof(pdu)) == sizeof(pdu));
+    return send_pdu(fd, &pdu, sizeof(pdu));
 }
 
 static bool send_err(const int fd, const int stat)
@@ -880,5 +937,5 @@ static bool send_err(const int fd, const int stat)
         .cmd = PROT_CMD_XFER_STAT,
         .stat = (uint8_t)stat
     };
-    return (send_pdu(fd, &pdu, sizeof(pdu)) == sizeof(pdu));
+    return send_pdu(fd, &pdu, sizeof(pdu));
 }

@@ -10,7 +10,7 @@
    Request Command IDs.
 
    Responses have bit 7 set, requests do not.
- */
+*/
 enum prot_cmd_req {
     /* Open and send file information */
     PROT_CMD_FILE_OPEN = 0x01,
@@ -26,12 +26,13 @@ enum prot_cmd_req {
    Response Command IDs.
 
    Responses have bit 7 set, requests do not.
- */
+*/
 enum prot_cmd_resp {
-    /* File information as per fstat(2) */
+    /** File information PDU */
     PROT_CMD_FILE_INFO = 0x81,
+    /** Open file information PDU */
     PROT_CMD_OPEN_FILE_INFO = 0x82,
-    /* File transfer request/operation status */
+    /** File transfer request/operation status */
     PROT_CMD_XFER_STAT = 0x83
 };
 
@@ -39,7 +40,7 @@ enum prot_cmd_resp {
 
 enum {
     /* No error */
-    PROT_STAT_OK
+    PROT_STAT_OK = 0
 };
 
 /* Maximum number of file descriptors transferred in a single message */
@@ -117,8 +118,8 @@ struct prot_xfer_stat {
 };
 
 /** The value struct prot_xfer_stat.size is set to in a terminal transfer status
-     notification to indicate a complete transfer */
-#define PROT_XFER_COMPLETE ~(size_t)0
+    notification to indicate a complete transfer */
+#define PROT_XFER_COMPLETE (size_t)-1
 
 #pragma GCC diagnostic pop
 
