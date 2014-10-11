@@ -21,6 +21,14 @@ static bool marshal_req(struct prot_request* pdu,
         return false;
     }
 
+    /*
+      The entire PDU structure is zeroed in order to silence Valgrind which
+      complains about the uninitialised alignment padding inserted into the
+      structure by the compiler.
+
+      Note that using C99 designated aggregate initialisation instead of
+      field-at-a-time intialisation undoes the zeroing memset.
+    */
     memset(pdu, 0, sizeof(*pdu));
 
     pdu->cmd = cmd;
@@ -77,36 +85,36 @@ void prot_marshal_send_open(struct prot_send_open* pdu, const size_t txnid)
     pdu->txnid = txnid;
 }
 
-static int check_hdr(struct prot_hdr* hdr,
-                     const enum prot_cmd_resp expected_cmd)
+#define HDR_OK(buf, cmd)                                              \
+    (prot_get_cmd(buf) == cmd && prot_get_stat(buf) == PROT_STAT_OK)
+
+bool prot_unmarshal_file_info(struct prot_file_info* pdu, const void* buf)
 {
-    if (hdr->cmd != expected_cmd)
-        return -1;
+    if (!HDR_OK(buf, PROT_CMD_FILE_INFO))
+        return false;
 
-    if (hdr->stat != PROT_STAT_OK)
-        return hdr->stat;
-
-    return 0;
-}
-
-int prot_unmarshal_file_info(struct prot_file_info* pdu, const void* buf)
-{
     memcpy(pdu, buf, sizeof(*pdu));
 
-    return check_hdr((struct prot_hdr*)pdu, PROT_CMD_FILE_INFO);
+    return true;
 }
 
-int prot_unmarshal_open_file_info(struct prot_open_file_info* pdu,
-                                  const void* buf)
+bool prot_unmarshal_open_file_info(struct prot_open_file_info* pdu,
+                                   const void* buf)
 {
+    if (!HDR_OK(buf, PROT_CMD_OPEN_FILE_INFO))
+        return false;
+
     memcpy(pdu, buf, sizeof(*pdu));
 
-    return check_hdr((struct prot_hdr*)pdu, PROT_CMD_OPEN_FILE_INFO);
+    return true;
 }
 
-int prot_unmarshal_xfer_stat(struct prot_xfer_stat* pdu, const void* buf)
+bool prot_unmarshal_xfer_stat(struct prot_xfer_stat* pdu, const void* buf)
 {
+    if (!HDR_OK(buf, PROT_CMD_XFER_STAT))
+        return false;
+
     memcpy(pdu, buf, sizeof(*pdu));
 
-    return check_hdr((struct prot_hdr*)pdu, PROT_CMD_XFER_STAT);
+    return true;
 }

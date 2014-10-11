@@ -12,10 +12,6 @@
 extern "C" {
 #endif
 
-    int prot_get_cmd(const void*);
-
-    int prot_get_stat(const void*);
-
     bool prot_unmarshal_request(struct prot_request*,
                                 const void* buf, size_t size);
 

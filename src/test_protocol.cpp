@@ -28,7 +28,7 @@ TEST(Protocol, unmarshal_open_file_info)
     prot_marshal_open_file_info(&pdu1, 111, 222, 333, 444, 777);
 
     struct prot_open_file_info pdu2;
-    ASSERT_EQ(0, prot_unmarshal_open_file_info(&pdu2, &pdu1));
+    ASSERT_TRUE(prot_unmarshal_open_file_info(&pdu2, &pdu1));
 
     EXPECT_EQ(111, pdu2.size);
     EXPECT_EQ(222, pdu2.atime);
@@ -43,7 +43,7 @@ TEST(Protocol, unmarshal_file_info)
     prot_marshal_file_info(&pdu1, 111, 222, 333, 444);
 
     struct prot_file_info pdu2;
-    ASSERT_EQ(0, prot_unmarshal_file_info(&pdu2, &pdu1));
+    ASSERT_TRUE(prot_unmarshal_file_info(&pdu2, &pdu1));
 
     EXPECT_EQ(111, pdu2.size);
     EXPECT_EQ(222, pdu2.atime);
@@ -77,84 +77,78 @@ TEST(Protocol, marshal_send_open)
     EXPECT_EQ(0xDEADBEEF, pdu.txnid);
 }
 
-TEST(Protocol, unmarshal_error_status)
+TEST(Protocol, unmarshal_malformed_xfer_stat)
 {
-    struct prot_xfer_stat stat;
+    struct prot_xfer_stat pdu;
+    std::uint8_t buf [sizeof(pdu)];
 
-    std::uint8_t buf[sizeof(stat)] {}; // Zeroes body_len field
-    buf[0] = PROT_CMD_XFER_STAT;
-    buf[1] = ENOENT;
+    prot_marshal_xfer_stat(&pdu, 0xDEAD);
+    memcpy(buf, &pdu, sizeof(pdu));
 
-    EXPECT_EQ(ENOENT, prot_unmarshal_xfer_stat(&stat, buf));
-    EXPECT_EQ(PROT_CMD_XFER_STAT, stat.cmd);
-    EXPECT_EQ(ENOENT, stat.stat);
+    const auto cmd = pdu.cmd;
+    const auto stat = pdu.stat;
+
+    // Check that we have a valid base PDU
+    ASSERT_TRUE(prot_unmarshal_xfer_stat(&pdu, buf));
+
+    pdu.size = 0xBEEF;
+
+    // Invalid command ID
+    buf[0] = ~buf[0];
+    EXPECT_FALSE(prot_unmarshal_xfer_stat(&pdu, buf));
+    // Body unmodified
+    EXPECT_EQ(0xBEEF, pdu.size);
+    buf[0] = cmd;
+
+    // Nonzero status code (error)
+    buf[1] = PROT_STAT_OK + 1;
+    EXPECT_FALSE(prot_unmarshal_xfer_stat(&pdu, buf));
+    // Body unmodified
+    EXPECT_EQ(0xBEEF, pdu.size);
+    buf[0] = stat;
 }
 
-TEST(Protocol, unmarshal_invalid_cmd)
+TEST(Protocol, unmarshal_malformed_file_info)
 {
-    struct prot_xfer_stat stat;
+    struct prot_file_info pdu;
+    std::uint8_t buf [sizeof(pdu)];
 
-    std::uint8_t buf[sizeof(stat)] {};
-    buf[0] = 0xFF;
-    buf[1] = PROT_STAT_OK;
+    prot_marshal_file_info(&pdu, 0xDEAD, 111, 222, 333);
+    memcpy(buf, &pdu, sizeof(pdu));
 
-    EXPECT_EQ(-1, prot_unmarshal_xfer_stat(&stat, buf));
-    EXPECT_EQ(0xFF, stat.cmd);
-    EXPECT_EQ(PROT_STAT_OK, stat.stat);
+    const auto cmd = pdu.cmd;
+    const auto stat = pdu.stat;
+
+    // Check that we have a valid base PDU
+    ASSERT_TRUE(prot_unmarshal_file_info(&pdu, buf));
+
+    pdu.size = 0xBEEF;
+    pdu.atime = 777;
+    pdu.mtime = 888;
+    pdu.ctime = 999;
+
+    // Invalid command ID
+    buf[0] = ~buf[0];
+    EXPECT_FALSE(prot_unmarshal_file_info(&pdu, buf));
+    // Body unmodified
+    EXPECT_EQ(0xBEEF, pdu.size);
+    EXPECT_EQ(777, pdu.atime);
+    EXPECT_EQ(888, pdu.mtime);
+    EXPECT_EQ(999, pdu.ctime);
+    buf[0] = cmd;
+
+    // Nonzero status code (error)
+    buf[1] = PROT_STAT_OK + 1;
+    EXPECT_FALSE(prot_unmarshal_file_info(&pdu, buf));
+    // Body unmodified
+    EXPECT_EQ(0xBEEF, pdu.size);
+    EXPECT_EQ(777, pdu.atime);
+    EXPECT_EQ(888, pdu.mtime);
+    EXPECT_EQ(999, pdu.ctime);
+    buf[0] = stat;
 }
 
 // ---------------- Server ------------------
-
-TEST(Protocol, unmarshal_malformed_request)
-{
-    const std::string fname {"abc"};
-
-    struct prot_request req;
-    ASSERT_TRUE(prot_marshal_file_open(&req, fname.c_str(), 0xDEAD, 0xBEEF));
-
-    std::vector<uint8_t> buf(PROT_REQ_BASE_SIZE + req.filename_len + 1);
-    memcpy(buf.data(), &req, PROT_REQ_BASE_SIZE);
-    memcpy(buf.data() + PROT_REQ_BASE_SIZE, req.filename, req.filename_len);
-
-    // First confirm that the buffer we have just manually constructed contains
-    // a valid request PDU
-    ASSERT_TRUE(prot_unmarshal_request(&req, buf.data(), buf.size()));
-
-    std::vector<std::uint8_t> b {buf};
-
-    // Too short
-    for (std::size_t i = 0; i < PROT_REQ_MINSIZE; i++)
-        ASSERT_FALSE(prot_unmarshal_request(&req, b.data(), i));
-
-    // Invalid command ID
-    b[0] = ~buf[0];  // Assuming the complement of a valid cmd ID is invalid
-    EXPECT_FALSE(prot_unmarshal_request(&req, b.data(), b.size()));
-    b[0] = buf[0];
-
-    // Nonzero status code (should unmarshal without error)
-    b[1] = PROT_STAT_OK + 1;
-    EXPECT_TRUE(prot_unmarshal_request(&req, b.data(), b.size()));
-    b[1] = buf[1];
-}
-
-TEST(Protocol, unmarshal_malformed_send_open_file)
-{
-    struct prot_send_open pdu;
-    prot_marshal_send_open(&pdu, 0xDEADBEEF);
-
-    std::uint8_t buf [sizeof(pdu)];
-    memcpy(buf, &pdu, sizeof(pdu));
-
-    // First confirm that the buffer we have just manually constructed contains
-    // a valid request PDU
-    ASSERT_TRUE(prot_unmarshal_send_open(&pdu, buf));
-
-    // Caller is responsible for ensuring there's enough data in the buffer
-
-    // Invalid command ID
-    buf[0] = ~pdu.cmd;
-    EXPECT_FALSE(prot_unmarshal_send_open(&pdu, buf));
-}
 
 TEST(Protocol, unmarshal_open_file)
 {
@@ -249,4 +243,78 @@ TEST(Protocol, marshal_open_file_info)
     EXPECT_EQ(333, pdu.mtime);
     EXPECT_EQ(444, pdu.ctime);
     EXPECT_EQ(777, pdu.txnid);
+}
+
+TEST(Protocol, unmarshal_malformed_request)
+{
+    const std::string fname {"abc"};
+
+    struct prot_request req;
+    ASSERT_TRUE(prot_marshal_file_open(&req, fname.c_str(), 0xDEAD, 0xBEEF));
+
+    const auto cmd = req.cmd;
+    const auto stat = req.stat;
+
+    std::vector<uint8_t> buf(PROT_REQ_BASE_SIZE + req.filename_len + 1);
+    memcpy(buf.data(), &req, PROT_REQ_BASE_SIZE);
+    memcpy(buf.data() + PROT_REQ_BASE_SIZE, req.filename, req.filename_len);
+
+    // First confirm that the buffer we have just manually constructed contains
+    // a valid request PDU
+    ASSERT_TRUE(prot_unmarshal_request(&req, buf.data(), buf.size()));
+
+    std::vector<std::uint8_t> b {buf};
+
+    // Too short
+    for (std::size_t i = 0; i < PROT_REQ_MINSIZE; i++)
+        ASSERT_FALSE(prot_unmarshal_request(&req, b.data(), i));
+
+    // Invalid command ID
+    b[0] = ~buf[0];  // Assuming the complement of a valid cmd ID is invalid
+    EXPECT_FALSE(prot_unmarshal_request(&req, b.data(), b.size()));
+    b[0] = cmd;
+
+    // Nonzero status code
+    b[1] = PROT_STAT_OK + 1;
+    EXPECT_FALSE(prot_unmarshal_request(&req, b.data(), b.size()));
+    b[1] = stat;
+
+    // Filename not NUL-terminated
+    b.back() = 'a';
+    EXPECT_FALSE(prot_unmarshal_request(&req, b.data(), b.size()));
+    b.back() = '\0';
+}
+
+TEST(Protocol, unmarshal_malformed_send_open_file)
+{
+    struct prot_send_open pdu;
+    prot_marshal_send_open(&pdu, 0xDEADBEEF);
+
+    const auto cmd = pdu.cmd;
+    const auto stat = pdu.stat;
+
+    std::uint8_t buf [sizeof(pdu)];
+    memcpy(buf, &pdu, sizeof(pdu));
+
+    // First confirm that the buffer we have just manually constructed contains
+    // a valid request PDU
+    ASSERT_TRUE(prot_unmarshal_send_open(&pdu, buf));
+
+    // Caller is responsible for ensuring that there's enough data in the buffer
+
+    pdu.txnid = 123;
+
+    // Invalid command ID
+    buf[0] = ~pdu.cmd;
+    EXPECT_FALSE(prot_unmarshal_send_open(&pdu, buf));
+    // PDU was not actually unmarshaled
+    EXPECT_EQ(123, pdu.txnid);
+    buf[0] = cmd;
+
+    // Nonzero status code
+    buf[1] = PROT_STAT_OK + 1;
+    EXPECT_FALSE(prot_unmarshal_send_open(&pdu, buf));
+    // Body unmodified
+    EXPECT_EQ(123, pdu.txnid);
+    buf[1] = stat;
 }

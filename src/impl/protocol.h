@@ -63,13 +63,25 @@ struct prot_hdr {
 
 /* ------------- File Operation Request PDU ------------ */
 
+/**
+   A request PDU.
+
+   This is currently the only PDU type which is not sent over the 'wire' as-is
+   (bit-by-bit). The 'wire format' looks something like this:
+   CSOOOOOOOOLLLLLLLLFFFFF0, where C = cmd; D = stat; O = offset bytes; L =
+   transfer length bytes; F = filename characters; 0 = filename-terminating
+   NUL. NOTE that the filename_len field is not transmitted.
+ */
 struct prot_request {
     PROT_HDR_FIELDS;
+    /* Offset from the beginning of the file to start reading from */
     loff_t offset;
+    /* Number of bytes to transfer */
     size_t len;
 
-    /* The remaining fields are not sent as-is */
+    /* The name of the file to be read */
     const char* filename;
+    /* The filename length (not sent--for convenience only) */
     size_t filename_len;
 };
 
@@ -120,6 +132,18 @@ struct prot_xfer_stat {
 /** The value struct prot_xfer_stat.size is set to in a terminal transfer status
     notification to indicate a complete transfer */
 #define PROT_XFER_COMPLETE (size_t)-1
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+    int prot_get_cmd(const void*);
+
+    int prot_get_stat(const void*);
+
+#ifdef __cplusplus
+}
+#endif
 
 #pragma GCC diagnostic pop
 

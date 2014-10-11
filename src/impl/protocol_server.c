@@ -7,29 +7,30 @@
 
 #pragma GCC diagnostic pop
 
-int prot_get_cmd(const void* buf)
-{
-    return ((const uint8_t*)buf)[0];
-}
-
-int prot_get_stat(const void* buf)
-{
-    return ((const uint8_t*)buf)[1];
-}
-
 bool prot_unmarshal_request(struct prot_request* pdu,
                             const void* buf, const size_t size)
 {
     if (size < PROT_REQ_MINSIZE)
         return false;
 
-    memcpy(pdu, buf, PROT_REQ_BASE_SIZE);
+    const int cmd = prot_get_cmd(buf);
 
-    if (pdu->cmd != PROT_CMD_SEND &&
-        pdu->cmd != PROT_CMD_READ &&
-        pdu->cmd != PROT_CMD_FILE_OPEN) {
+    if (cmd != PROT_CMD_SEND &&
+        cmd != PROT_CMD_READ &&
+        cmd != PROT_CMD_FILE_OPEN) {
         return false;
     }
+
+    if (prot_get_stat(buf) != PROT_STAT_OK)
+        return false;
+
+    /* Check that filename is NUL-terminated */
+    if (*((uint8_t*)buf + (size - 1)) != '\0')
+        return false;
+
+    memcpy(pdu, buf, PROT_REQ_BASE_SIZE);
+
+    /* The rest of the PDU is the filename */
 
     pdu->filename = (char*)((uint8_t*)buf + PROT_REQ_BASE_SIZE);
     pdu->filename_len = (size - PROT_REQ_BASE_SIZE - 1);
@@ -39,11 +40,24 @@ bool prot_unmarshal_request(struct prot_request* pdu,
 
 bool prot_unmarshal_send_open(struct prot_send_open* pdu, const void* buf)
 {
+    if (prot_get_cmd(buf) != PROT_CMD_SEND_OPEN ||
+        prot_get_stat(buf) != PROT_STAT_OK) {
+        return false;
+    }
+
     memcpy(pdu, buf, sizeof(*pdu));
-    /* This check is somewhat redundant because the server checks the command ID
-       directly before even unmarshaling the PDU. */
-    return (pdu->cmd == PROT_CMD_SEND_OPEN);
+
+    return true;
 }
+
+/*
+  The marshaling functions below zero the entire PDU structure in order to
+  silence Valgrind which complains about the uninitialised alignment padding
+  inserted by the compiler.
+
+  Note that using C99 designated aggregate initialisation instead of
+  field-at-a-time intialisation undoes the zeroing memset.
+*/
 
 void prot_marshal_file_info(struct prot_file_info* pdu,
                             const size_t file_size,

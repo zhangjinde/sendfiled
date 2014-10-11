@@ -27,27 +27,12 @@ extern "C" {
                            const char* filename,
                            loff_t offset, size_t len);
 
-    /**
-       @retval 0 Success
-       @retval -1 Malformed PDU
-       @retval >0 Error code from PDU header
-    */
-    int prot_unmarshal_file_info(struct prot_file_info* pdu, const void* buf);
+    bool prot_unmarshal_file_info(struct prot_file_info* pdu, const void* buf);
 
-    /**
-       @retval 0 Success
-       @retval -1 Malformed PDU
-       @retval >0 Error code from PDU header
-    */
-    int prot_unmarshal_open_file_info(struct prot_open_file_info* pdu,
+    bool prot_unmarshal_open_file_info(struct prot_open_file_info* pdu,
                                       const void* buf);
 
-    /**
-       @retval 0 Success
-       @retval -1 Malformed PDU
-       @retval >0 Error code from PDU header
-    */
-    int prot_unmarshal_xfer_stat(struct prot_xfer_stat* pdu, const void* buf);
+    bool prot_unmarshal_xfer_stat(struct prot_xfer_stat* pdu, const void* buf);
 
 #ifdef __cplusplus
 }
