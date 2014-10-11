@@ -40,7 +40,9 @@ bool prot_unmarshal_request(struct prot_request* pdu,
 bool prot_unmarshal_send_open(struct prot_send_open* pdu, const void* buf)
 {
     memcpy(pdu, buf, sizeof(*pdu));
-    return true;
+    /* This check is somewhat redundant because the server checks the command ID
+       directly before even unmarshaling the PDU. */
+    return (pdu->cmd == PROT_CMD_SEND_OPEN);
 }
 
 void prot_marshal_file_info(struct prot_file_info* pdu,
