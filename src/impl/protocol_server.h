@@ -3,6 +3,7 @@
 
 #include <sys/types.h>
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "protocol.h"
@@ -15,15 +16,10 @@ extern "C" {
 
     int prot_get_stat(const void*);
 
-    /**
-       @retval 0 Success
-       @retval -1 Malformed/invalid PDU
-       @retval >0 Error code from PDU header
-    */
-    int prot_unmarshal_request(struct prot_request*,
-                               const void* buf, size_t size);
+    bool prot_unmarshal_request(struct prot_request*,
+                                const void* buf, size_t size);
 
-    int prot_unmarshal_send_open(struct prot_send_open*, const void* buf);
+    bool prot_unmarshal_send_open(struct prot_send_open*, const void* buf);
 
     void prot_marshal_file_info(struct prot_file_info* pdu,
                                 size_t size,

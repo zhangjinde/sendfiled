@@ -17,40 +17,30 @@ int prot_get_stat(const void* buf)
     return ((const uint8_t*)buf)[1];
 }
 
-int prot_unmarshal_request(struct prot_request* pdu,
-                           const void* buf, const size_t size)
+bool prot_unmarshal_request(struct prot_request* pdu,
+                            const void* buf, const size_t size)
 {
     if (size < PROT_REQ_MINSIZE)
-        return -1;
+        return false;
 
     memcpy(pdu, buf, PROT_REQ_BASE_SIZE);
-
-    if (pdu->stat != PROT_STAT_OK)
-        return pdu->stat;
 
     if (pdu->cmd != PROT_CMD_SEND &&
         pdu->cmd != PROT_CMD_READ &&
         pdu->cmd != PROT_CMD_FILE_OPEN) {
-        return -1;
+        return false;
     }
 
     pdu->filename = (char*)((uint8_t*)buf + PROT_REQ_BASE_SIZE);
     pdu->filename_len = (size - PROT_REQ_BASE_SIZE - 1);
 
-    return 0;
+    return true;
 }
 
-int prot_unmarshal_send_open(struct prot_send_open* pdu, const void* buf)
+bool prot_unmarshal_send_open(struct prot_send_open* pdu, const void* buf)
 {
     memcpy(pdu, buf, sizeof(*pdu));
-
-    if (pdu->stat != PROT_STAT_OK)
-        return pdu->stat;
-
-    if (pdu->cmd != PROT_CMD_SEND_OPEN)
-        return -1;
-
-    return 0;
+    return true;
 }
 
 void prot_marshal_file_info(struct prot_file_info* pdu,

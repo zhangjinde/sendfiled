@@ -413,7 +413,7 @@ static bool process_request(struct server* ctx,
     switch (prot_get_cmd(buf)) {
     case PROT_CMD_FILE_OPEN: {
         struct prot_request pdu;
-        if (prot_unmarshal_request(&pdu, buf, size) == -1) {
+        if (!prot_unmarshal_request(&pdu, buf, size)) {
             syslog(LOG_NOTICE, malformed_req_msg);
             /* TODO: send NACK */
             return false;
@@ -437,7 +437,7 @@ static bool process_request(struct server* ctx,
 
     case PROT_CMD_SEND_OPEN: {
         struct prot_send_open pdu;
-        if (prot_unmarshal_send_open(&pdu, buf) == -1) {
+        if (!prot_unmarshal_send_open(&pdu, buf)) {
             syslog(LOG_NOTICE, malformed_req_msg);
             return false;
         }
@@ -462,7 +462,7 @@ static bool process_request(struct server* ctx,
     case PROT_CMD_READ:
     case PROT_CMD_SEND: {
         struct prot_request pdu;
-        if (prot_unmarshal_request(&pdu, buf, size) == -1) {
+        if (!prot_unmarshal_request(&pdu, buf, size)) {
             syslog(LOG_NOTICE, malformed_req_msg);
             return false;
         }

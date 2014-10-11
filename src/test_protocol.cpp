@@ -117,7 +117,7 @@ TEST(Protocol, unmarshal_open_file)
     memcpy(buf.data() + PROT_REQ_BASE_SIZE, tmp.filename, tmp.filename_len);
 
     struct prot_request pdu;
-    ASSERT_EQ(0, prot_unmarshal_request(&pdu, buf.data(), buf.size()));
+    ASSERT_TRUE(prot_unmarshal_request(&pdu, buf.data(), buf.size()));
     EXPECT_EQ(PROT_CMD_FILE_OPEN, pdu.cmd);
     EXPECT_EQ(PROT_STAT_OK, pdu.stat);
 
@@ -141,7 +141,7 @@ TEST(Protocol, unmarshal_send)
     memcpy(buf.data() + PROT_REQ_BASE_SIZE, tmp.filename, tmp.filename_len);
 
     struct prot_request pdu;
-    ASSERT_EQ(0, prot_unmarshal_request(&pdu, buf.data(), buf.size()));
+    ASSERT_TRUE(prot_unmarshal_request(&pdu, buf.data(), buf.size()));
     EXPECT_EQ(PROT_CMD_SEND, pdu.cmd);
     EXPECT_EQ(PROT_STAT_OK, pdu.stat);
     EXPECT_EQ(0xDEAD, pdu.offset);
@@ -158,7 +158,7 @@ TEST(Protocol, unmarshal_send_open_file)
     prot_marshal_send_open(&tmp, 0xDEADBEEF);
 
     struct prot_send_open pdu;
-    ASSERT_EQ(0, prot_unmarshal_send_open(&pdu, &tmp));
+    ASSERT_TRUE(prot_unmarshal_send_open(&pdu, &tmp));
     EXPECT_EQ(PROT_CMD_SEND_OPEN, pdu.cmd);
     EXPECT_EQ(PROT_STAT_OK, pdu.stat);
     EXPECT_EQ(0xDEADBEEF, pdu.txnid);
