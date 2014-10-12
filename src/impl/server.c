@@ -236,11 +236,13 @@ static bool process_file_op(struct server* ctx, struct resrc_xfer* xfer);
 
 static bool send_pdu(const int fd, const void* pdu, const size_t size);
 
+static bool is_xfer(const void*);
+
+static bool is_timer(const void*);
+
 static bool is_response(const void*);
 
 static void delete_resrc_resp(struct resrc_resp*);
-
-static bool is_timer(const void*);
 
 static bool process_events(struct server* ctx,
                            const int nevents,
@@ -252,23 +254,34 @@ static bool process_events(struct server* ctx,
         if (*(int*)events.udata == ctx->reqfd) {
             if (events.events & SYSPOLL_ERROR ||
                 !handle_reqfd(ctx, events.events, buf, buf_size)) {
-                syslog(LOG_ERR, "Fatal error on request socket\n");
+                syslog(LOG_ERR,
+                       "Fatal error on request socket; shutting down\n");
                 return false;
             }
 
         } else {
-            if (events.events & SYSPOLL_TERM) {
+            if (events.events & SYSPOLL_TERM)
                 return false;
 
-            } else if (is_timer(events.udata)) {
-                struct resrc_timer* const timer = events.udata;
-                struct resrc_xfer* const xfer = xfer_table_find(ctx->xfers,
-                                                                timer->txnid);
+            const bool error_event = (events.events & SYSPOLL_ERROR);
 
-                if (xfer &&
-                    xfer->cmd != PROT_CMD_SEND &&
-                    xfer->cmd != PROT_CMD_READ) {
-                    purge_xfer(ctx, xfer);
+            if (error_event) {
+                syslog(LOG_INFO, "Fatal error on resource fd %d\n",
+                       *(int*)events.udata);
+            }
+
+            if (is_timer(events.udata)) {
+                struct resrc_timer* const timer = events.udata;
+
+                if (!error_event) {
+                    struct resrc_xfer* const xfer =
+                        xfer_table_find(ctx->xfers, timer->txnid);
+
+                    if (xfer &&
+                        xfer->cmd != PROT_CMD_SEND &&
+                        xfer->cmd != PROT_CMD_READ) {
+                        purge_xfer(ctx, xfer);
+                    }
                 }
 
                 close(timer->ident);
@@ -277,7 +290,7 @@ static bool process_events(struct server* ctx,
             } else if (is_response(events.udata)) {
                 struct resrc_resp* r = (struct resrc_resp*)events.udata;
 
-                if (send_pdu(r->stat_fd, &r->pdu, r->pdu_size) ||
+                if (error_event || send_pdu(r->stat_fd, &r->pdu, r->pdu_size) ||
                     errno_is_fatal(errno)) {
                     delete_resrc_resp(r);
                 }
@@ -285,22 +298,25 @@ static bool process_events(struct server* ctx,
             } else {
                 struct resrc_xfer* const xfer = events.udata;
 
-                assert (xfer->tag == XFER_RESRC_TAG);
+                assert (is_xfer(events.udata));
 
-                if (events.events & SYSPOLL_ERROR) {
-                    syslog(LOG_INFO,
-                           "Fatal error on transfer {txnid: %lu; statfd: %d}\n",
-                           xfer->txnid, xfer->stat_fd);
+                if (error_event || !process_file_op(ctx, xfer))
                     PRESERVE_ERRNO(purge_xfer(ctx, xfer));
-
-                } else if (!process_file_op(ctx, xfer)) {
-                    PRESERVE_ERRNO(purge_xfer(ctx, xfer));
-                }
             }
         }
     }
 
     return true;
+}
+
+static bool is_xfer(const void* p)
+{
+    return (((const struct resrc_xfer*)p)->tag == XFER_RESRC_TAG);
+}
+
+static bool is_timer(const void* p)
+{
+    return (((const struct resrc_timer*)p)->tag == TIMER_RESRC_TAG);
 }
 
 static bool is_response(const void* p)
@@ -312,11 +328,6 @@ static void delete_resrc_resp(struct resrc_resp* r)
 {
     close(r->stat_fd);
     free(r);
-}
-
-static bool is_timer(const void* p)
-{
-    return (((const struct resrc_timer*)p)->tag == TIMER_RESRC_TAG);
 }
 
 static bool process_request(struct server* ctx,
