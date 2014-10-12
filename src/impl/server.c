@@ -748,6 +748,12 @@ static struct resrc_xfer* add_xfer(struct server* ctx,
             cmd == PROT_CMD_SEND ||
             cmd == PROT_CMD_FILE_OPEN);
 
+    if (ctx->xfers->size == ctx->xfers->capacity) {
+        syslog(LOG_CRIT, "Transfer table is full (%lu/%lu items)\n",
+               ctx->xfers->size, ctx->xfers->capacity);
+        return false;
+    }
+
     const int fd = file_open_read(filename, offset, len, finfo);
     if (fd == -1)
         return NULL;
@@ -769,6 +775,10 @@ static struct resrc_xfer* add_xfer(struct server* ctx,
     }
 
     if (!xfer_table_insert(ctx->xfers, xfer)) {
+        syslog(LOG_CRIT,
+               "Couldn't insert item into transfer table"
+               " (slot for txnid %lu probably already taken)\n",
+               xfer->txnid);
         PRESERVE_ERRNO(delete_xfer(xfer));
         return NULL;
     }
