@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "protocol_client.h"
+#include "../responses.h"
 
 static bool marshal_req(struct prot_request* pdu,
                         const uint8_t cmd,
@@ -83,38 +84,4 @@ void prot_marshal_send_open(struct prot_send_open* pdu, const size_t txnid)
     pdu->cmd = PROT_CMD_SEND_OPEN;
     pdu->stat = PROT_STAT_OK;
     pdu->txnid = txnid;
-}
-
-#define HDR_OK(buf, cmd)                                              \
-    (prot_get_cmd(buf) == cmd && prot_get_stat(buf) == PROT_STAT_OK)
-
-bool prot_unmarshal_file_info(struct prot_file_info* pdu, const void* buf)
-{
-    if (!HDR_OK(buf, PROT_CMD_FILE_INFO))
-        return false;
-
-    memcpy(pdu, buf, sizeof(*pdu));
-
-    return true;
-}
-
-bool prot_unmarshal_open_file_info(struct prot_open_file_info* pdu,
-                                   const void* buf)
-{
-    if (!HDR_OK(buf, PROT_CMD_OPEN_FILE_INFO))
-        return false;
-
-    memcpy(pdu, buf, sizeof(*pdu));
-
-    return true;
-}
-
-bool prot_unmarshal_xfer_stat(struct prot_xfer_stat* pdu, const void* buf)
-{
-    if (!HDR_OK(buf, PROT_CMD_XFER_STAT))
-        return false;
-
-    memcpy(pdu, buf, sizeof(*pdu));
-
-    return true;
 }

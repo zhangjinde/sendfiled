@@ -27,13 +27,6 @@ extern "C" {
                            const char* filename,
                            loff_t offset, size_t len);
 
-    bool prot_unmarshal_file_info(struct prot_file_info* pdu, const void* buf);
-
-    bool prot_unmarshal_open_file_info(struct prot_open_file_info* pdu,
-                                      const void* buf);
-
-    bool prot_unmarshal_xfer_stat(struct prot_xfer_stat* pdu, const void* buf);
-
 #ifdef __cplusplus
 }
 #endif

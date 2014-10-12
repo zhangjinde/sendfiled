@@ -18,7 +18,8 @@
 
 #include <stdbool.h>
 
-#define FIOD_API  __attribute__((visibility("default")))
+#include "attr.h"
+#include "responses.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -70,7 +71,7 @@ extern "C" {
 
     /**
        @}
-       @name Reading & Sending
+       @name Client Requests
        @{
     */
 

@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include "fiod.h"
 #include "impl/protocol_client.h"
 #include "impl/protocol_server.h"
 
@@ -24,11 +25,11 @@ TEST(Protocol, marshal_file_open)
 
 TEST(Protocol, unmarshal_open_file_info)
 {
-    struct prot_open_file_info pdu1;
+    struct fiod_open_file_info pdu1;
     prot_marshal_open_file_info(&pdu1, 111, 222, 333, 444, 777);
 
-    struct prot_open_file_info pdu2;
-    ASSERT_TRUE(prot_unmarshal_open_file_info(&pdu2, &pdu1));
+    struct fiod_open_file_info pdu2;
+    ASSERT_TRUE(fiod_unmarshal_open_file_info(&pdu2, &pdu1));
 
     EXPECT_EQ(111, pdu2.size);
     EXPECT_EQ(222, pdu2.atime);
@@ -39,11 +40,11 @@ TEST(Protocol, unmarshal_open_file_info)
 
 TEST(Protocol, unmarshal_file_info)
 {
-    struct prot_file_info pdu1;
+    struct fiod_file_info pdu1;
     prot_marshal_file_info(&pdu1, 111, 222, 333, 444);
 
-    struct prot_file_info pdu2;
-    ASSERT_TRUE(prot_unmarshal_file_info(&pdu2, &pdu1));
+    struct fiod_file_info pdu2;
+    ASSERT_TRUE(fiod_unmarshal_file_info(&pdu2, &pdu1));
 
     EXPECT_EQ(111, pdu2.size);
     EXPECT_EQ(222, pdu2.atime);
@@ -79,7 +80,7 @@ TEST(Protocol, marshal_send_open)
 
 TEST(Protocol, unmarshal_malformed_xfer_stat)
 {
-    struct prot_xfer_stat pdu;
+    struct fiod_xfer_stat pdu;
     std::uint8_t buf [sizeof(pdu)];
 
     prot_marshal_xfer_stat(&pdu, 0xDEAD);
@@ -89,20 +90,20 @@ TEST(Protocol, unmarshal_malformed_xfer_stat)
     const auto stat = pdu.stat;
 
     // Check that we have a valid base PDU
-    ASSERT_TRUE(prot_unmarshal_xfer_stat(&pdu, buf));
+    ASSERT_TRUE(fiod_unmarshal_xfer_stat(&pdu, buf));
 
     pdu.size = 0xBEEF;
 
     // Invalid command ID
     buf[0] = ~buf[0];
-    EXPECT_FALSE(prot_unmarshal_xfer_stat(&pdu, buf));
+    EXPECT_FALSE(fiod_unmarshal_xfer_stat(&pdu, buf));
     // Body unmodified
     EXPECT_EQ(0xBEEF, pdu.size);
     buf[0] = cmd;
 
     // Nonzero status code (error)
     buf[1] = PROT_STAT_OK + 1;
-    EXPECT_FALSE(prot_unmarshal_xfer_stat(&pdu, buf));
+    EXPECT_FALSE(fiod_unmarshal_xfer_stat(&pdu, buf));
     // Body unmodified
     EXPECT_EQ(0xBEEF, pdu.size);
     buf[0] = stat;
@@ -110,7 +111,7 @@ TEST(Protocol, unmarshal_malformed_xfer_stat)
 
 TEST(Protocol, unmarshal_malformed_file_info)
 {
-    struct prot_file_info pdu;
+    struct fiod_file_info pdu;
     std::uint8_t buf [sizeof(pdu)];
 
     prot_marshal_file_info(&pdu, 0xDEAD, 111, 222, 333);
@@ -120,7 +121,7 @@ TEST(Protocol, unmarshal_malformed_file_info)
     const auto stat = pdu.stat;
 
     // Check that we have a valid base PDU
-    ASSERT_TRUE(prot_unmarshal_file_info(&pdu, buf));
+    ASSERT_TRUE(fiod_unmarshal_file_info(&pdu, buf));
 
     pdu.size = 0xBEEF;
     pdu.atime = 777;
@@ -129,7 +130,7 @@ TEST(Protocol, unmarshal_malformed_file_info)
 
     // Invalid command ID
     buf[0] = ~buf[0];
-    EXPECT_FALSE(prot_unmarshal_file_info(&pdu, buf));
+    EXPECT_FALSE(fiod_unmarshal_file_info(&pdu, buf));
     // Body unmodified
     EXPECT_EQ(0xBEEF, pdu.size);
     EXPECT_EQ(777, pdu.atime);
@@ -139,7 +140,7 @@ TEST(Protocol, unmarshal_malformed_file_info)
 
     // Nonzero status code (error)
     buf[1] = PROT_STAT_OK + 1;
-    EXPECT_FALSE(prot_unmarshal_file_info(&pdu, buf));
+    EXPECT_FALSE(fiod_unmarshal_file_info(&pdu, buf));
     // Body unmodified
     EXPECT_EQ(0xBEEF, pdu.size);
     EXPECT_EQ(777, pdu.atime);
@@ -211,10 +212,10 @@ TEST(Protocol, unmarshal_send_open_file)
 
 TEST(Protocol, marshal_file_info)
 {
-    struct prot_file_info pdu;
+    struct fiod_file_info pdu;
     prot_marshal_file_info(&pdu, 111, 222, 333, 444);
 
-    EXPECT_EQ(PROT_CMD_FILE_INFO, pdu.cmd);
+    EXPECT_EQ(FIOD_FILE_INFO, pdu.cmd);
     EXPECT_EQ(PROT_STAT_OK, pdu.stat);
 
     EXPECT_EQ(111, pdu.size);
@@ -225,7 +226,7 @@ TEST(Protocol, marshal_file_info)
 
 TEST(Protocol, marshal_open_file_info)
 {
-    struct prot_open_file_info pdu;
+    struct fiod_open_file_info pdu;
 
     prot_marshal_open_file_info(&pdu,
                                 111,  // size
@@ -234,8 +235,8 @@ TEST(Protocol, marshal_open_file_info)
                                 444,  // ctime
                                 777); // open file's descriptor
 
-    EXPECT_EQ(PROT_CMD_OPEN_FILE_INFO, prot_get_cmd(&pdu));
-    EXPECT_EQ(PROT_STAT_OK, prot_get_stat(&pdu));
+    EXPECT_EQ(FIOD_OPEN_FILE_INFO, fiod_get_cmd(&pdu));
+    EXPECT_EQ(PROT_STAT_OK, fiod_get_stat(&pdu));
 
     EXPECT_EQ(111, pdu.size);
 

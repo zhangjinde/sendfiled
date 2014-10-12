@@ -1,6 +1,7 @@
 #include <string.h>
 
 #include "protocol_server.h"
+#include "../responses.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpadded"
@@ -13,7 +14,7 @@ bool prot_unmarshal_request(struct prot_request* pdu,
     if (size < PROT_REQ_MINSIZE)
         return false;
 
-    const int cmd = prot_get_cmd(buf);
+    const int cmd = fiod_get_cmd(buf);
 
     if (cmd != PROT_CMD_SEND &&
         cmd != PROT_CMD_READ &&
@@ -21,7 +22,7 @@ bool prot_unmarshal_request(struct prot_request* pdu,
         return false;
     }
 
-    if (prot_get_stat(buf) != PROT_STAT_OK)
+    if (fiod_get_stat(buf) != PROT_STAT_OK)
         return false;
 
     /* Check that filename is NUL-terminated */
@@ -40,8 +41,8 @@ bool prot_unmarshal_request(struct prot_request* pdu,
 
 bool prot_unmarshal_send_open(struct prot_send_open* pdu, const void* buf)
 {
-    if (prot_get_cmd(buf) != PROT_CMD_SEND_OPEN ||
-        prot_get_stat(buf) != PROT_STAT_OK) {
+    if (fiod_get_cmd(buf) != PROT_CMD_SEND_OPEN ||
+        fiod_get_stat(buf) != PROT_STAT_OK) {
         return false;
     }
 
@@ -59,7 +60,7 @@ bool prot_unmarshal_send_open(struct prot_send_open* pdu, const void* buf)
   field-at-a-time intialisation undoes the zeroing memset.
 */
 
-void prot_marshal_file_info(struct prot_file_info* pdu,
+void prot_marshal_file_info(struct fiod_file_info* pdu,
                             const size_t file_size,
                             const time_t atime,
                             const time_t mtime,
@@ -67,7 +68,7 @@ void prot_marshal_file_info(struct prot_file_info* pdu,
 {
     memset(pdu, 0, sizeof(*pdu));
 
-    pdu->cmd = PROT_CMD_FILE_INFO;
+    pdu->cmd = FIOD_FILE_INFO;
     pdu->stat = PROT_STAT_OK;
     pdu->size = file_size;
     pdu->atime = atime;
@@ -75,7 +76,7 @@ void prot_marshal_file_info(struct prot_file_info* pdu,
     pdu->ctime = ctime;
 }
 
-void prot_marshal_open_file_info(struct prot_open_file_info* pdu,
+void prot_marshal_open_file_info(struct fiod_open_file_info* pdu,
                                  const size_t file_size,
                                  const time_t atime,
                                  const time_t mtime,
@@ -84,7 +85,7 @@ void prot_marshal_open_file_info(struct prot_open_file_info* pdu,
 {
     memset(pdu, 0, sizeof(*pdu));
 
-    pdu->cmd = PROT_CMD_OPEN_FILE_INFO;
+    pdu->cmd = FIOD_OPEN_FILE_INFO;
     pdu->stat = PROT_STAT_OK;
     pdu->size = file_size;
     pdu->atime = atime;
@@ -93,11 +94,11 @@ void prot_marshal_open_file_info(struct prot_open_file_info* pdu,
     pdu->txnid = txnid;
 }
 
-void prot_marshal_xfer_stat(struct prot_xfer_stat* pdu, const size_t file_size)
+void prot_marshal_xfer_stat(struct fiod_xfer_stat* pdu, const size_t file_size)
 {
     memset(pdu, 0, sizeof(*pdu));
 
-    pdu->cmd = PROT_CMD_XFER_STAT;
+    pdu->cmd = FIOD_XFER_STAT;
     pdu->stat = PROT_STAT_OK;
     pdu->size = file_size;
 }

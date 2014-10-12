@@ -102,7 +102,7 @@ struct resrc_resp {
         completion notifications have a size_t field in the body. */
     size_t pdu_size;
     /** The PDU to be sent */
-    struct prot_xfer_stat pdu;
+    struct fiod_xfer_stat pdu;
 };
 
 /**
@@ -409,19 +409,19 @@ static bool process_request(struct server* ctx,
     static const char* const invalid_cmd_msg =
         "Received invalid command ID (%d) in request\n";
 
-    if (prot_get_stat(buf) != PROT_STAT_OK) {
+    if (fiod_get_stat(buf) != PROT_STAT_OK) {
         syslog(LOG_NOTICE,
                "Received error status (%x) in request\n",
-               prot_get_stat(buf));
+               fiod_get_stat(buf));
         return false;
     }
 
-    if (!PROT_IS_REQUEST(prot_get_cmd(buf))) {
-        syslog(LOG_NOTICE, invalid_cmd_msg, prot_get_cmd(buf));
+    if (!PROT_IS_REQUEST(fiod_get_cmd(buf))) {
+        syslog(LOG_NOTICE, invalid_cmd_msg, fiod_get_cmd(buf));
         return false;
     }
 
-    switch (prot_get_cmd(buf)) {
+    switch (fiod_get_cmd(buf)) {
     case PROT_CMD_FILE_OPEN: {
         struct prot_request pdu;
         if (!prot_unmarshal_request(&pdu, buf, size)) {
@@ -503,7 +503,7 @@ static bool process_request(struct server* ctx,
     } break;
 
     default:
-        syslog(LOG_NOTICE, invalid_cmd_msg, prot_get_cmd(buf));
+        syslog(LOG_NOTICE, invalid_cmd_msg, fiod_get_cmd(buf));
         return false;
     }
 
@@ -561,7 +561,7 @@ static bool process_file_op(struct server* ctx, struct resrc_xfer* xfer)
                     return false;
 
                 struct prot_hdr pdu = {
-                    .cmd = PROT_CMD_XFER_STAT,
+                    .cmd = FIOD_XFER_STAT,
                     .stat = (uint8_t)write_errno
                 };
                 return send_term_resp(ctx, xfer, &pdu, sizeof(pdu));
@@ -581,7 +581,7 @@ static bool process_file_op(struct server* ctx, struct resrc_xfer* xfer)
             if (has_stat_channel(xfer)) {
                 if (xfer->nbytes_left == 0) {
                     /* Terminal notification; delivery is critical */
-                    struct prot_xfer_stat pdu;
+                    struct fiod_xfer_stat pdu;
                     prot_marshal_xfer_stat(&pdu, PROT_XFER_COMPLETE);
                     return send_term_resp(ctx, xfer, &pdu, sizeof(pdu));
 
@@ -665,7 +665,7 @@ static bool send_term_resp(struct server* ctx,
 static struct resrc_resp* new_resrc_resp(int fd,
                                          const void* pdu,
                                          size_t pdu_size) {
-    assert (pdu_size <= sizeof(struct prot_xfer_stat));
+    assert (pdu_size <= sizeof(struct fiod_xfer_stat));
     struct resrc_resp* this = malloc(sizeof(*this));
     if (!this)
         return NULL;
@@ -927,7 +927,7 @@ static bool send_pdu(const int fd, const void* pdu, const size_t size)
 
 static bool send_file_info(int fd, const struct file_info* info)
 {
-    struct prot_file_info pdu;
+    struct fiod_file_info pdu;
     prot_marshal_file_info(&pdu,
                            info->size, info->atime, info->mtime, info->ctime);
     return send_pdu(fd, &pdu, sizeof(pdu));
@@ -937,7 +937,7 @@ static bool send_open_file_info(int cli_fd,
                                 const size_t txnid,
                                 const struct file_info* info)
 {
-    struct prot_open_file_info pdu;
+    struct fiod_open_file_info pdu;
     prot_marshal_open_file_info(&pdu,
                                 info->size,
                                 info->atime, info->mtime, info->ctime,
@@ -947,7 +947,7 @@ static bool send_open_file_info(int cli_fd,
 
 static bool send_xfer_stat(const int fd, const size_t file_size)
 {
-    struct prot_xfer_stat pdu;
+    struct fiod_xfer_stat pdu;
     prot_marshal_xfer_stat(&pdu, file_size);
     return send_pdu(fd, &pdu, sizeof(pdu));
 }
@@ -955,7 +955,7 @@ static bool send_xfer_stat(const int fd, const size_t file_size)
 static bool send_err(const int fd, const int stat)
 {
     const struct prot_hdr pdu = {
-        .cmd = PROT_CMD_XFER_STAT,
+        .cmd = FIOD_XFER_STAT,
         .stat = (uint8_t)stat
     };
     return send_pdu(fd, &pdu, sizeof(pdu));

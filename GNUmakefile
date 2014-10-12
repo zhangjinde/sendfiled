@@ -45,7 +45,7 @@ vpath %.png $(htmldir)/img
 
 src_common :=\
 process.c \
-protocol.c\
+responses.c\
 unix_sockets_linux.c\
 util.c\
 
@@ -141,7 +141,7 @@ test: $(builddir)/$(test_target) $(builddir)/$(target)
 	$(info --------------)
 	$(info T E S T S)
 	$(info --------------)
-	@- $< $(GTEST_FLAGS) --gtest_filter=$(GTEST_FILTER)
+	@$< $(GTEST_FLAGS) --gtest_filter=$(GTEST_FILTER)
 
 archive_name := $(projectname)_`date +%Y-%m-%d_%H%M%S`
 .PHONY: bu

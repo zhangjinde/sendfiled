@@ -22,20 +22,6 @@ enum prot_cmd_req {
     PROT_CMD_SEND_OPEN = 0x04
 };
 
-/**
-   Response Command IDs.
-
-   Responses have bit 7 set, requests do not.
-*/
-enum prot_cmd_resp {
-    /** File information PDU */
-    PROT_CMD_FILE_INFO = 0x81,
-    /** Open file information PDU */
-    PROT_CMD_OPEN_FILE_INFO = 0x82,
-    /** File transfer request/operation status */
-    PROT_CMD_XFER_STAT = 0x83
-};
-
 #define PROT_IS_REQUEST(cmd) (((cmd) & 0x80) == 0)
 
 enum {
@@ -102,48 +88,9 @@ struct prot_send_open {
     size_t txnid;
 };
 
-/* --------------- File Information PDU ------------- */
-
-#define PROT_FILE_INFO_FIELDS                   \
-    PROT_HDR_FIELDS;                            \
-    size_t size;                                \
-    time_t atime;                               \
-    time_t mtime;                               \
-    time_t ctime
-
-struct prot_file_info {
-    PROT_FILE_INFO_FIELDS;
-};
-
-/* ------------- Open File Information PDU ------------ */
-
-struct prot_open_file_info {
-    PROT_FILE_INFO_FIELDS;
-    size_t txnid;
-};
-
-/* -------------- Transfer Status PDU -------------- */
-
-struct prot_xfer_stat {
-    PROT_HDR_FIELDS;
-    size_t size;
-};
-
-/** The value struct prot_xfer_stat.size is set to in a terminal transfer status
+/** The value struct fiod_xfer_stat.size is set to in a terminal transfer status
     notification to indicate a complete transfer */
 #define PROT_XFER_COMPLETE (size_t)-1
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-    int prot_get_cmd(const void*);
-
-    int prot_get_stat(const void*);
-
-#ifdef __cplusplus
-}
-#endif
 
 #pragma GCC diagnostic pop
 

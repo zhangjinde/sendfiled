@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include "protocol.h"
+#include "../responses.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -17,20 +18,20 @@ extern "C" {
 
     bool prot_unmarshal_send_open(struct prot_send_open*, const void* buf);
 
-    void prot_marshal_file_info(struct prot_file_info* pdu,
+    void prot_marshal_file_info(struct fiod_file_info* pdu,
                                 size_t size,
                                 const time_t atime,
                                 const time_t mtime,
                                 const time_t ctime);
 
-    void prot_marshal_open_file_info(struct prot_open_file_info* pdu,
+    void prot_marshal_open_file_info(struct fiod_open_file_info* pdu,
                                      size_t size,
                                      const time_t atime,
                                      const time_t mtime,
                                      const time_t ctime,
                                      size_t txnid);
 
-    void prot_marshal_xfer_stat(struct prot_xfer_stat* pdu, size_t val);
+    void prot_marshal_xfer_stat(struct fiod_xfer_stat* pdu, size_t val);
 
 #ifdef __cplusplus
 }
