@@ -24,20 +24,55 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#define _GNU_SOURCE 1
+#define _POSIX_C_SOURCE 200809L
 
-#include <fcntl.h>
-#include <unistd.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 
-#include <assert.h>
 #include <errno.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "fiod.h"
+#include "unix_sockets.h"
 
-int fiod_pipe(int fds[2], const int flags)
+/** @todo Directory not to be hard-coded */
+#define SOCKDIR "/tmp/"
+#define FIOD_PREFIX "fiod."
+#define SOCKEXT ".socket"
+
+const char* us_make_sockpath(const char* srvname)
 {
-    return pipe2(fds, flags);
+    struct sockaddr_un un;
+
+    const size_t nonname_len = strlen(SOCKDIR FIOD_PREFIX SOCKEXT);
+    const size_t namelen_max = (sizeof(un.sun_path) - nonname_len);
+    const size_t namelen = strnlen(srvname, namelen_max);
+    const size_t pathlen = (nonname_len + namelen);
+
+    if (namelen >= namelen_max || pathlen >= sizeof(un.sun_path)) {
+        errno = ENAMETOOLONG;
+        return NULL;
+    }
+
+    char* path = malloc(pathlen + 1);
+    if (!path)
+        return NULL;
+
+    char* p = path;
+
+    memcpy(p, SOCKDIR, strlen(SOCKDIR));
+    p += strlen(SOCKDIR);
+
+    memcpy(p, FIOD_PREFIX, strlen(FIOD_PREFIX));
+    p += strlen(FIOD_PREFIX);
+
+    memcpy(p, srvname, namelen);
+    p += namelen;
+
+    memcpy(p, SOCKEXT, strlen(SOCKEXT));
+    p += strlen(SOCKEXT);
+
+    *p = '\0';
+
+    return path;
 }

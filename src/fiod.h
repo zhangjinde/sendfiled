@@ -60,11 +60,9 @@ extern "C" {
      */
 
     /**
-       Spawns a file I/O process.
+       Spawns a server process.
 
        @param name The instance name. (The name of the server's UNIX socket.)
-
-       @param root The root directory
 
        @param maxfiles The maximum number of open files
 
@@ -76,7 +74,6 @@ extern "C" {
        @retval -1 An error occurred (see @a errno)
      */
     pid_t fiod_spawn(const char* name,
-                     const char* root,
                      int maxfiles,
                      int open_fd_timeout_ms) FIOD_API;
 

@@ -46,6 +46,7 @@ vpath %.png $(htmldir)/img
 src_common :=\
 process.c \
 responses.c\
+unix_sockets.c\
 unix_sockets_linux.c\
 util.c\
 

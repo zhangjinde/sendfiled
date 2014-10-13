@@ -24,20 +24,18 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#define _GNU_SOURCE 1
+#ifndef FIOD_UNIX_SOCKETS_H
+#define FIOD_UNIX_SOCKETS_H
 
-#include <fcntl.h>
-#include <unistd.h>
+/**
+   Constructs the full path to a UNIX socket file based on the provided server
+   name.
 
-#include <assert.h>
-#include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+   @param srvname The server name (*just* a name--not to contain any path
+   components)
 
-#include "fiod.h"
+   @retval Non-NULL The path (to be freed by the caller).
+ */
+const char* us_make_sockpath(const char* srvname);
 
-int fiod_pipe(int fds[2], const int flags)
-{
-    return pipe2(fds, flags);
-}
+#endif

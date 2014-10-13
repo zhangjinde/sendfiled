@@ -28,6 +28,7 @@
 
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <syslog.h>
 #include <unistd.h>
 
 #include <assert.h>
@@ -40,6 +41,8 @@
 
 #include "errors.h"
 #include "unix_socket_server.h"
+#include "unix_sockets.h"
+#include "util.h"
 
 /* Defined in unix_sockets_<platform>.c */
 int us_socket(int, int, int);
@@ -49,13 +52,6 @@ int us_serve(const char* name)
     struct sockaddr_un un = {
         .sun_family = AF_UNIX
     };
-
-    const size_t namelen = strnlen(name, sizeof(un.sun_path));
-
-    if (namelen == sizeof(un.sun_path)) {
-        errno = ENAMETOOLONG;
-        return -1;
-    }
 
     const int fd = us_socket(AF_UNIX, SOCK_DGRAM, 0);
     if (fd == -1)
@@ -69,28 +65,45 @@ int us_serve(const char* name)
         goto fail;
     }
 
-    memcpy(un.sun_path, name, namelen);
-
-    const socklen_t len = (socklen_t)(offsetof(struct sockaddr_un, sun_path) +
-                                      namelen);
-
-    if (bind(fd, (struct sockaddr*)&un, len) == -1)
+    const char* sockpath = us_make_sockpath(name);
+    if (!sockpath)
         goto fail;
+
+    const size_t sockpath_len = strlen(sockpath);
+
+    memcpy(un.sun_path, sockpath, sockpath_len + 1);
+
+    free((void*)sockpath);
+
+    const socklen_t addrlen = (socklen_t)(offsetof(struct sockaddr_un, sun_path) +
+                                          sockpath_len + 1);
+
+    if (bind(fd, (struct sockaddr*)&un, addrlen) == -1) {
+        if (errno != EADDRINUSE)
+            LOGERRNO("bind\n");
+        goto fail;
+    }
 
     return fd;
 
- fail: {
-        const int tmp = errno;
-        close(fd);
-        errno = tmp;
-        return -1;
-    }
+ fail:
+    PRESERVE_ERRNO(close(fd));
+
+    return -1;
 }
 
 void us_stop_serving(const char* name, const int listenfd)
 {
     close(listenfd);
-    unlink(name);
+
+    const char* sockpath = us_make_sockpath(name);
+    if (!sockpath) {
+        syslog(LOG_ALERT,
+               "Unable to generate UNIX socket pathname [errno: %m]");
+    } else {
+        unlink(sockpath);
+        free((void*)sockpath);
+    }
 }
 
 bool us_get_fds_and_creds(struct msghdr* msg,

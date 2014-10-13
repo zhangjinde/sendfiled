@@ -30,14 +30,26 @@
 #include <stdbool.h>
 
 /**
-   Closes all file descriptors except 0, 1, 2, and those in the supplied list.
- */
-bool proc_close_all_fds_except(const int* excluded_fds, size_t nfds);
+   Number of the file descriptor (opened in parent process by fiod_spawn()) to
+   which the server process' startup success (0) or error code is to be written
+   in order to sync with parent and to facilitate error reporting in the parent
+   process.
+*/
+static const int PROC_SYNCFD = 3;
 
-bool proc_common_init(const char* root, const int* excluded_fds, size_t nfds);
+/**
+   Performs setup common to child server processes.
+
+   Redirects stdin, stdout, and stderr to /dev/null, and closes all other file
+   descriptors, excluding those in @a excluded_fds.
+
+   'Child processes' in this context means ones forked by fiod_spawn() and ones
+   going into daemon mode.
+ */
+bool proc_init_child(const int* excluded_fds, size_t nfds);
 
 /** @todo Will probably need to be platform-specific because the glibc and
     FreeBSD implementations apparently differ significantly. */
-bool proc_daemonise(void);
+bool proc_daemonise(const int* noclose_fds, const size_t nfds);
 
 #endif

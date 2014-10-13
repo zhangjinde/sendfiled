@@ -39,7 +39,7 @@ extern "C" {
 
     int us_serve(const char* name);
 
-    void us_stop_serving(const char* name, int listenfd);
+    void us_stop_serving(const char* name, int request_fd);
 
     /**
        Receives a message from a client.

@@ -38,9 +38,8 @@
 
 #include "errors.h"
 #include "unix_socket_client.h"
-
-/** FIXME: not to be hard-coded */
-static const char* const TMPDIR = "/tmp/";
+#include "unix_sockets.h"
+#include "util.h"
 
 /* Defined in unix_sockets_<platform>.c */
 int us_socket(int, int, int);
@@ -51,34 +50,31 @@ int us_connect(const char* srvname)
         .sun_family = AF_UNIX
     };
 
-    const size_t namelen = strnlen(srvname, sizeof(srv_addr.sun_path));
-
-    if (namelen == sizeof(srv_addr.sun_path)) {
-        errno = ENAMETOOLONG;
-        return -1;
-    }
-
     const int fd = us_socket(AF_UNIX, SOCK_DGRAM, 0);
     if (fd == -1)
         return -1;
 
-    strcpy(srv_addr.sun_path, TMPDIR);
-    memcpy(srv_addr.sun_path + strlen(TMPDIR), srvname, namelen);
+    const char* sockpath = us_make_sockpath(srvname);
+    if (!sockpath)
+        goto fail;
 
-    socklen_t len = (socklen_t)(offsetof(struct sockaddr_un, sun_path) +
-                                strlen(TMPDIR) + namelen);
+    const size_t sockpath_len = strlen(sockpath);
 
-    if (connect(fd, (struct sockaddr*)&srv_addr, len) == -1)
-        goto fail1;
+    memcpy(srv_addr.sun_path, sockpath, sockpath_len + 1);
+
+    free((void*)sockpath);
+
+    socklen_t addrlen = (socklen_t)(offsetof(struct sockaddr_un, sun_path) +
+                                    sockpath_len + 1);
+    if (connect(fd, (struct sockaddr*)&srv_addr, addrlen) == -1)
+        goto fail;
 
     return fd;
 
- fail1: {                         /* socket() */
-        const int tmp = errno;
-        close(fd);
-        errno = tmp;
-        return -1;
-    }
+ fail:
+    PRESERVE_ERRNO(close(fd));
+
+    return -1;
 }
 
 void us_attach_fds_and_creds(struct msghdr* msg,

@@ -58,7 +58,7 @@ struct FiodProcFix : public ::testing::Test {
     static pid_t srv_pid;
 
     static void SetUpTestCase() {
-        srv_pid = fiod_spawn(srvname.c_str(), "/tmp", 1000, 1000);
+        srv_pid = fiod_spawn(srvname.c_str(), 1000, 1000);
         if (srv_pid == -1)
             throw std::runtime_error("Couldn't start daemon");
     }
@@ -114,7 +114,7 @@ struct FiodThreadFix : public ::testing::Test {
     }
 
     void run_server() {
-        const std::string path {"/tmp/" + srvname};
+        const std::string path {srvname};
 
         const int listenfd {us_serve(path.c_str())};
         if (listenfd == -1) {

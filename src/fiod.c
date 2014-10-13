@@ -33,6 +33,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -48,34 +49,40 @@
 
 static int wait_child(pid_t pid);
 
+static bool exec_server(const char* filename,
+                        const char* srvname,
+                        int maxfiles,
+                        int open_fd_timeout_ms);
+
 pid_t fiod_spawn(const char* name,
-                 const char* root,
                  const int maxfiles,
                  const int open_fd_timeout_ms)
 {
     /* Pipe used to sync with child */
     int pfd[2];
 
-    if (fiod_pipe(pfd, O_CLOEXEC) == -1)
+    if (fiod_pipe(pfd, O_CLOEXEC) == -1) {
+        LOGERRNO("fiod_pipe()\n");
         return -1;
+    }
 
     const pid_t pid = fork();
 
     if (pid == -1) {
-        fprintf(stderr, "%s: fork failed\n", __func__);
-        close(pfd[0]);
-        close(pfd[1]);
+        LOGERRNO("fork\n");
+        PRESERVE_ERRNO(close(pfd[0]));
+        PRESERVE_ERRNO(close(pfd[1]));
         return -1;
 
     } else if (pid > 0) {
-        /* Parent process */
+        /* In the parent process */
 
         close(pfd[1]);
 
         int child_err = 0;
         if (read(pfd[0], &child_err, sizeof(child_err)) != sizeof(child_err)) {
             LOGERRNO("Read error synching with child\n");
-            close(pfd[0]);
+            PRESERVE_ERRNO(close(pfd[0]));
             return -1;
         }
 
@@ -100,28 +107,84 @@ pid_t fiod_spawn(const char* name,
         return pid;
     }
 
-    /* Child process */
+    /* In the child process */
 
     close(pfd[0]);
 
-    /* Descriptor to which status codes (0 or errno) is written (the write end
-       of the pipe shared with the parent) */
-    int statfd = pfd[1];
+    /* Descriptor to which the status code (0 or errno) is written (the write
+       end of the pipe shared with the parent); the server only writes the
+       status/error code after it has bound to its request socket and is
+       therefore ready to accept requests.
+    */
+    int syncfd = pfd[1];
 
-    /* Dupe the status fd to fd 3 and then close it */
-    if (statfd != 3) {
-        if (dup2(statfd, 3) == -1)
+    /* If the write end of the pipe does not have the value expected be the
+       server (PROC_SYNCFD), dupe it to PROC_SYNCFD and close it */
+    if (syncfd != PROC_SYNCFD) {
+        if (dup2(syncfd, PROC_SYNCFD) == -1)
             goto fail;
-        close(statfd);
-        statfd = 3;
+        close(syncfd);
+        syncfd = PROC_SYNCFD;
     }
 
-    if (!fiod_exec_server("build/fiod", name, root, maxfiles, open_fd_timeout_ms))
+    if (!proc_init_child(&PROC_SYNCFD, 1))
+        goto fail;
+
+    if (!exec_server("build/fiod", name, maxfiles, open_fd_timeout_ms))
         LOGERRNO("Couldn't exec server process\n");
 
  fail:
-    write(statfd, &errno, sizeof(errno));
+    write(syncfd, &errno, sizeof(errno));
     exit(EXIT_FAILURE);
+}
+
+static bool exec_server(const char* path,
+                        const char* srvname,
+                        const int maxfiles,
+                        const int open_fd_timeout_ms)
+{
+    const long line_max = sysconf(_SC_LINE_MAX);
+
+    assert (line_max > 0);
+
+    const size_t srvname_len = strnlen(srvname, (size_t)line_max + 1);
+
+    if (srvname_len == (size_t)line_max + 1) {
+        errno = ENAMETOOLONG;
+        return false;
+    }
+
+    char maxfiles_str [10];
+
+    int ndigits = snprintf(maxfiles_str,
+                           sizeof(maxfiles_str),
+                           "%d", maxfiles);
+
+    if (ndigits >= (int)sizeof(maxfiles_str))
+        return false;
+
+    char open_fd_timeout_ms_str [10];
+
+    ndigits = snprintf(open_fd_timeout_ms_str,
+                       sizeof(open_fd_timeout_ms_str),
+                       "%d", open_fd_timeout_ms);
+
+    if (ndigits >= (int)sizeof(open_fd_timeout_ms_str))
+        return false;
+
+    const char* args[] = {
+        "fiod",
+        "-s", srvname,
+        "-n", maxfiles_str,
+        "-t", open_fd_timeout_ms_str,
+        "-p",
+        NULL
+    };
+
+    execve(path, (char**)args, NULL);
+
+    /* execve does not return on success */
+    return false;
 }
 
 int fiod_connect(const char* name)
@@ -179,8 +242,8 @@ int fiod_read(const int sockfd,
     return fds[0];
 
  fail:
-    close(fds[0]);
-    close(fds[1]);
+    PRESERVE_ERRNO(close(fds[0]));
+    PRESERVE_ERRNO(close(fds[1]));
 
     return -1;
 }
@@ -212,8 +275,8 @@ int fiod_open(int srv_sockfd,
     return fds[0];
 
  fail:
-    close(fds[0]);
-    close(fds[1]);
+    PRESERVE_ERRNO(close(fds[0]));
+    PRESERVE_ERRNO(close(fds[1]));
 
     return -1;
 }
@@ -250,8 +313,8 @@ int fiod_send(const int srv_sockfd,
     return fds[0];
 
  fail:
-    close(fds[0]);
-    close(fds[1]);
+    PRESERVE_ERRNO(close(fds[0]));
+    PRESERVE_ERRNO(close(fds[1]));
 
     return -1;
 }
