@@ -172,11 +172,11 @@ static bool send_err(int fd, int err);
 
 static void close_channel_fds(struct resrc_xfer*);
 
-static bool server_construct(struct server* ctx,
-                             long open_file_timeout_ms,
-                             int reqfd,
-                             int maxfds);
-static void server_destruct(struct server* ctx);
+static bool srv_construct(struct server* ctx,
+                          long open_file_timeout_ms,
+                          int reqfd,
+                          int maxfds);
+static void srv_destruct(struct server* ctx);
 static bool process_events(struct server* ctx,
                            int nevents,
                            void* buf, size_t buf_size);
@@ -187,7 +187,7 @@ bool srv_run(const int reqfd,
              const long open_file_timeout_ms)
 {
     struct server ctx;
-    if (!server_construct(&ctx, open_file_timeout_ms, reqfd, maxfds))
+    if (!srv_construct(&ctx, open_file_timeout_ms, reqfd, maxfds))
         return false;
 
     if (!syspoll_register(ctx.poller,
@@ -214,12 +214,12 @@ bool srv_run(const int reqfd,
     }
 
     free(recvbuf);
-    server_destruct(&ctx);
+    srv_destruct(&ctx);
 
     return true;
 
  fail:
-    PRESERVE_ERRNO(server_destruct(&ctx));
+    PRESERVE_ERRNO(srv_destruct(&ctx));
     return false;
 }
 
@@ -685,10 +685,10 @@ static size_t get_txnid(void* p)
     return ((struct resrc_xfer*)p)->txnid;
 }
 
-static bool server_construct(struct server* ctx,
-                             const long open_file_timeout_ms,
-                             const int reqfd,
-                             const int maxfds)
+static bool srv_construct(struct server* ctx,
+                          const long open_file_timeout_ms,
+                          const int reqfd,
+                          const int maxfds)
 {
     *ctx = (struct server) {
         .poller = syspoll_new(maxfds),
@@ -700,7 +700,7 @@ static bool server_construct(struct server* ctx,
     };
 
     if (!ctx->poller || !ctx->xfers) {
-        server_destruct(ctx);
+        srv_destruct(ctx);
         return false;
     }
 
@@ -713,7 +713,7 @@ static void delete_xfer_and_close_channel_fds(void* p)
     delete_xfer(p);
 }
 
-static void server_destruct(struct server* ctx)
+static void srv_destruct(struct server* ctx)
 {
     syspoll_delete(ctx->poller);
 
