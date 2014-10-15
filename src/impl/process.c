@@ -30,13 +30,11 @@
 #include <sys/resource.h>
 #include <unistd.h>
 
-#include <signal.h>
-
 #include "errors.h"
 #include "process.h"
 #include "util.h"
 
-static bool dup_open_fd(int srcfd, int dstfd);
+static bool dup_to_open_fd(int srcfd, int dstfd);
 
 bool proc_init_child(const int* excluded_fds, size_t nfds)
 {
@@ -47,9 +45,9 @@ bool proc_init_child(const int* excluded_fds, size_t nfds)
         return false;
     }
 
-    if (!dup_open_fd(nullfd, STDIN_FILENO) ||
-        !dup_open_fd(nullfd, STDOUT_FILENO) ||
-        !dup_open_fd(nullfd, STDERR_FILENO)) {
+    if (!dup_to_open_fd(nullfd, STDIN_FILENO) ||
+        !dup_to_open_fd(nullfd, STDOUT_FILENO) ||
+        !dup_to_open_fd(nullfd, STDERR_FILENO)) {
         PRESERVE_ERRNO(close(nullfd));
         return false;
     }
@@ -85,7 +83,7 @@ bool proc_init_child(const int* excluded_fds, size_t nfds)
     return true;
 }
 
-static bool dup_open_fd(const int srcfd, const int dstfd)
+static bool dup_to_open_fd(const int srcfd, const int dstfd)
 {
     if (close(dstfd) == -1 && errno == EBADF) {
         LOGERRNOV("Destination file descriptor %d was not open\n", dstfd);

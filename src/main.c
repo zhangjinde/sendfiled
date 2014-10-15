@@ -157,7 +157,10 @@ int main(const int argc, char** argv)
 
     const bool success = srv_run(requestfd, (int)maxfiles, fd_timeout_ms);
 
-    syslog(LOG_INFO, "Stopping\n");
+    if (!success)
+        syslog(LOG_EMERG, "srv_run() failed [%m]; server shutting down\n");
+    else
+        syslog(LOG_INFO, "Shutting down\n");
 
     us_stop_serving(name, requestfd);
 

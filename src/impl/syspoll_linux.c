@@ -35,10 +35,9 @@
 #include <assert.h>
 #include <errno.h>
 #include <signal.h>
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
+#include "errors.h"
 #include "syspoll.h"
 #include "util.h"
 
@@ -70,7 +69,7 @@ struct syspoll* syspoll_new(const int maxevents)
     };
 
     if (this->epollfd == -1) {
-        fprintf(stderr, "%s: epoll_create1() failed\n", __func__);
+        LOGERRNO("epoll_create1() failed");
         goto fail;
     }
 

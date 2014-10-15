@@ -34,10 +34,10 @@
 
 #define MIN_(a, b) ((a) < (b) ? (a) : (b))
 
-#define PRESERVE_ERRNO(expr)                    \
+#define PRESERVE_ERRNO(statement)               \
     {                                           \
         const int errno_saved_ = errno;         \
-        expr;                                   \
+        statement;                              \
         errno = errno_saved_;                   \
     }
 

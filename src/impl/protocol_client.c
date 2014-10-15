@@ -26,12 +26,10 @@
 
 #define _POSIX_C_SOURCE 200809L /* For strnlen */
 
-#include <assert.h>
 #include <errno.h>
 #include <string.h>
 
 #include "protocol_client.h"
-#include "../responses.h"
 
 static bool marshal_req(struct prot_request* pdu,
                         const uint8_t cmd,

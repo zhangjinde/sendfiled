@@ -29,10 +29,8 @@
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <syslog.h>
 #include <unistd.h>
 
-#include <fcntl.h>
 #include <signal.h>
 #include <stdlib.h>
 

@@ -28,7 +28,6 @@
 
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <unistd.h>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmissing-prototypes"

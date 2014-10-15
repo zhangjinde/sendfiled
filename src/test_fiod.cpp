@@ -43,6 +43,7 @@
 #include "impl/util.h"
 
 #pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wglobal-constructors"
 #pragma GCC diagnostic ignored "-Wexit-time-destructors"
 #pragma GCC diagnostic ignored "-Wpadded"
 

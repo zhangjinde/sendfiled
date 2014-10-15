@@ -30,13 +30,9 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-#include <errno.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
-#include "errors.h"
 #include "unix_socket_client.h"
 #include "unix_sockets.h"
 #include "util.h"

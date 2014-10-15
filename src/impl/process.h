@@ -27,6 +27,8 @@
 #ifndef FIOD_PROCESS_H
 #define FIOD_PROCESS_H
 
+#include <sys/types.h>
+
 #include <stdbool.h>
 
 /**

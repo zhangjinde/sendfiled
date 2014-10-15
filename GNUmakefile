@@ -16,7 +16,6 @@ warnflags :=\
 -Weverything\
 -Werror\
 -Wno-documentation\
--Wno-global-constructors\
 
 warnflags_cxx := $(warnflags) -Wno-c++98-compat
 
@@ -63,18 +62,18 @@ file_io_linux.c\
 process_linux.c\
 protocol_server.c\
 server.c\
+server_xfer_table.c\
 syspoll_linux.c \
 unix_socket_server.c\
 unix_socket_server_linux.c\
-xfer_table.c\
 
 src_test:=\
 protocol_client.c\
 test_fiod.cpp\
 test_interpose_linux.c \
 test_protocol.cpp\
+test_server_xfer_table.cpp\
 test_utils.cpp\
-test_xfer_table.cpp\
 
 obj_c_client:=$(src_client:%=$(builddir)/%.cli.o)
 obj_c_server:=$(src_server:%=$(builddir)/%.srv.o)

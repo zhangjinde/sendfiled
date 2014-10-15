@@ -28,7 +28,6 @@
 #define FIOD_PROTOCOL_H
 
 #include <sys/types.h>
-#include <sys/uio.h>
 
 #include <stdint.h>
 

@@ -32,6 +32,11 @@
 #include "impl/protocol_client.h"
 #include "impl/protocol_server.h"
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wglobal-constructors"
+#pragma GCC diagnostic ignored "-Wexit-time-destructors"
+#pragma GCC diagnostic ignored "-Wpadded"
+
 // ----------------- Client --------------------
 
 TEST(Protocol, marshal_file_open)
@@ -345,3 +350,5 @@ TEST(Protocol, unmarshal_malformed_send_open_file)
     EXPECT_EQ(123, pdu.txnid);
     buf[1] = stat;
 }
+
+#pragma GCC diagnostic pop

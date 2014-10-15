@@ -26,7 +26,7 @@
 
 #include <stdlib.h>
 
-#include "xfer_table.h"
+#include "server_xfer_table.h"
 
 /**
    A ceil() which returns powers of 2.

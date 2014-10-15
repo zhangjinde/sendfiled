@@ -27,11 +27,8 @@
 #define _GNU_SOURCE 1
 
 #include <sys/socket.h>
-#include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
-
-#include <string.h>
 
 #include "protocol.h"
 #include "unix_socket_client.h"

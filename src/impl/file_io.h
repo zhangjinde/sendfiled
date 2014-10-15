@@ -24,13 +24,12 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef FILE_IO_H
-#define FILE_IO_H
+#ifndef FIOD_FILE_IO_H
+#define FIOD_FILE_IO_H
 
 #include <sys/types.h>
 
 #include <stdbool.h>
-#include <stdio.h>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpadded"

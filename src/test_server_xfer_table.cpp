@@ -26,7 +26,12 @@
 
 #include <gtest/gtest.h>
 
-#include "impl/xfer_table.h"
+#include "impl/server_xfer_table.h"
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wglobal-constructors"
+#pragma GCC diagnostic ignored "-Wexit-time-destructors"
+#pragma GCC diagnostic ignored "-Wpadded"
 
 namespace {
 
@@ -143,3 +148,5 @@ TEST_F(XferTableFix100, erase)
         }
     }
 }
+
+#pragma GCC diagnostic pop

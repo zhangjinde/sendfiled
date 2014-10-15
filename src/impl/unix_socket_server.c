@@ -33,11 +33,8 @@
 
 #include <assert.h>
 #include <errno.h>
-#include <stdbool.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #include "errors.h"
 #include "unix_socket_server.h"

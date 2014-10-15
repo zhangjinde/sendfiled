@@ -30,7 +30,6 @@
 
 #include <assert.h>
 #include <errno.h>
-#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -38,11 +37,12 @@
 #include "errors.h"
 #include "file_io.h"
 #include "protocol_server.h"
+#include "../responses.h"
 #include "server.h"
+#include "server_xfer_table.h"
 #include "syspoll.h"
 #include "unix_socket_server.h"
 #include "util.h"
-#include "xfer_table.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpadded"

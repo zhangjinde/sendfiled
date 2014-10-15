@@ -27,13 +27,10 @@
 #define _GNU_SOURCE 1
 
 #include <sys/socket.h>
-#include <sys/types.h>
 #include <sys/uio.h>
 
 #include <assert.h>
 #include <errno.h>
-#include <stdbool.h>
-#include <string.h>
 
 #include "protocol.h"
 #include "unix_socket_server.h"

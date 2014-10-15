@@ -24,10 +24,7 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#define _POSIX_C_SOURCE 200809L /* for fileno */
-
 #include <fcntl.h>
-#include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 

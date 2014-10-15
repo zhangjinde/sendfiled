@@ -28,7 +28,6 @@
 #define FIOD_PROTOCOL_CLIENT_H
 
 #include <sys/types.h>
-#include <sys/uio.h>
 
 #include <stdbool.h>
 

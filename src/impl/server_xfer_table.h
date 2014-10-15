@@ -30,7 +30,6 @@
 #include <sys/types.h>
 
 #include <stdbool.h>
-#include <stdint.h>
 
 typedef void (*xfer_table_elem_deleter) (void*);
 

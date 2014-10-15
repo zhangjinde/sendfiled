@@ -30,10 +30,12 @@
 #include <sys/types.h>
 
 #include <stdbool.h>
-#include <stdint.h>
 
 #include "protocol.h"
-#include "../responses.h"
+
+struct fiod_file_info;
+struct fiod_open_file_info;
+struct fiod_xfer_stat;
 
 #ifdef __cplusplus
 extern "C" {
