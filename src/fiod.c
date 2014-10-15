@@ -62,14 +62,14 @@ pid_t fiod_spawn(const char* name,
     int pfd[2];
 
     if (fiod_pipe(pfd, O_CLOEXEC) == -1) {
-        LOGERRNO("fiod_pipe()\n");
+        LOGERRNO("fiod_pipe()");
         return -1;
     }
 
     const pid_t pid = fork();
 
     if (pid == -1) {
-        LOGERRNO("fork\n");
+        LOGERRNO("fork");
         PRESERVE_ERRNO(close(pfd[0]));
         PRESERVE_ERRNO(close(pfd[1]));
         return -1;
@@ -81,7 +81,7 @@ pid_t fiod_spawn(const char* name,
 
         int child_err = 0;
         if (read(pfd[0], &child_err, sizeof(child_err)) != sizeof(child_err)) {
-            LOGERRNO("Read error synching with child\n");
+            LOGERRNO("Read error synching with child");
             PRESERVE_ERRNO(close(pfd[0]));
             return -1;
         }
@@ -132,7 +132,7 @@ pid_t fiod_spawn(const char* name,
         goto fail;
 
     if (!exec_server("build/fiod", name, maxfiles, open_fd_timeout_ms))
-        LOGERRNO("Couldn't exec server process\n");
+        LOGERRNO("Couldn't exec server process");
 
  fail:
     write(syncfd, &errno, sizeof(errno));

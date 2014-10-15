@@ -43,7 +43,7 @@ bool proc_init_child(const int* excluded_fds, size_t nfds)
     /* Redirect stdin, stdout, and stderr to /dev/null */
     const int nullfd = open("/dev/null", O_RDWR);
     if (nullfd == -1) {
-        LOGERRNO("open()\n");
+        LOGERRNO("open()");
         return false;
     }
 
@@ -60,7 +60,7 @@ bool proc_init_child(const int* excluded_fds, size_t nfds)
     struct rlimit rl;
 
     if (getrlimit(RLIMIT_NOFILE, &rl) == -1) {
-        LOGERRNO("getrlimit\n");
+        LOGERRNO("getrlimit");
         return false;
     }
 

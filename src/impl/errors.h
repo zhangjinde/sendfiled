@@ -33,7 +33,7 @@
 
 #define LOGERRNO(msg) {                                 \
         const int tmp__ = errno;                        \
-        fprintf(stderr, "%s [errno %d %s] %s",          \
+        fprintf(stderr, "%s [errno %d %s] %s\n",        \
                 __func__, errno, strerror(errno), msg); \
         errno = tmp__;                                  \
     }

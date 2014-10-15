@@ -80,7 +80,7 @@ int us_serve(const char* name)
 
     if (bind(fd, (struct sockaddr*)&un, addrlen) == -1) {
         if (errno != EADDRINUSE)
-            LOGERRNO("bind\n");
+            LOGERRNO("bind");
         goto fail;
     }
 

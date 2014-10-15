@@ -55,7 +55,7 @@ static long opt_strtol(const char* s)
 
     if (errno != 0 || l == 0 || l == LONG_MIN || l == LONG_MAX) {
         if (errno != 0)
-            LOGERRNO("strtol\n");
+            LOGERRNO("strtol");
         return -1;
     } else {
         return l;
@@ -126,20 +126,20 @@ int main(const int argc, char** argv)
     if (sigemptyset(&sigmask) == -1 ||
         sigaddset(&sigmask, SIGPIPE) == -1 ||
         sigprocmask(SIG_BLOCK, &sigmask, NULL) == -1) {
-        LOGERRNO("Couldn't ignore SIGPIPE\n");
+        LOGERRNO("Couldn't ignore SIGPIPE");
         return EXIT_FAILURE;;
     }
 
     const int requestfd = us_serve(name);
     if (requestfd == -1) {
         if (do_sync && !sync_parent(errno))
-            LOGERRNO("Failed to write errno to sync fd\n");
+            LOGERRNO("Failed to write errno to sync fd");
         return EXIT_FAILURE;
     }
 
     if (do_sync) {
         if (!sync_parent(0)) {
-            LOGERRNO("Failed to sync with parent\n");
+            LOGERRNO("Failed to sync with parent");
             return EXIT_FAILURE;
         }
         close(PROC_SYNCFD);
