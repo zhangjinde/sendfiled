@@ -149,7 +149,8 @@ bool syspoll_timer(struct syspoll* this,
     time.it_interval.tv_sec = 0;
     time.it_interval.tv_nsec = 0;
 
-    if (timerfd_settime(fd, 0, &time, 0) == -1)
+    const int flag_relative_time = 0;
+    if (timerfd_settime(fd, flag_relative_time, &time, NULL) == -1)
         goto fail;
 
     resrc->ident = fd;

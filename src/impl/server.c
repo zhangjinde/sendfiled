@@ -306,6 +306,7 @@ static bool process_events(struct server* ctx,
                     if (xfer &&
                         xfer->cmd != PROT_CMD_SEND &&
                         xfer->cmd != PROT_CMD_READ) {
+                        send_err(xfer->stat_fd, ETIME);
                         purge_xfer(ctx, xfer);
                     }
                 }
@@ -481,8 +482,8 @@ static bool process_request(struct server* ctx,
 
         struct resrc_xfer* const xfer = xfer_table_find(ctx->xfers, pdu.txnid);
         if (!xfer) {
-            /* Timer probably expired */
-            send_err(fds[0], ENOENT);
+            /* Timer probably expired; can't send any errors because the status
+               channel would've been closed when the timer expired */
             return false;
         }
 
@@ -879,7 +880,7 @@ static struct resrc_timer* add_open_file(struct server* ctx,
                                              filename,
                                              PROT_CMD_FILE_OPEN,
                                              offset, len,
-                                             stat_fd, 0,
+                                             stat_fd, -1,
                                              finfo);
     if (!xfer)
         return false;
@@ -923,7 +924,7 @@ static void delete_xfer(void* p)
 static void close_channel_fds(struct resrc_xfer* x)
 {
     close(x->stat_fd);
-    if (x->dest_fd != x->stat_fd)
+    if (x->dest_fd != x->stat_fd && x->dest_fd >= 0)
         close(x->dest_fd);
 }
 

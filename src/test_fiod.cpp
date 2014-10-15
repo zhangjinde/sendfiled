@@ -90,7 +90,9 @@ pid_t FiodProcFix::srv_pid;
  * Currently exists solely to make it easier to control the mocked versions of
  * system calls such as sendfile(2) and splice(2).
  */
+template<long OpenFileTimeoutMs>
 struct FiodThreadFix : public ::testing::Test {
+    static constexpr long open_file_timeout_ms {OpenFileTimeoutMs};
     static constexpr int maxfiles {1000};
     static const std::string srvname;
 
@@ -124,7 +126,7 @@ struct FiodThreadFix : public ::testing::Test {
 
         srv_barr.wait();
 
-        srv_run(listenfd, maxfiles, 3000);
+        srv_run(listenfd, maxfiles, OpenFileTimeoutMs);
 
         us_stop_serving(path.c_str(), listenfd);
     }
@@ -139,8 +141,14 @@ struct FiodThreadFix : public ::testing::Test {
     std::thread thr;
 };
 
-const int FiodThreadFix::maxfiles;
-const std::string FiodThreadFix::srvname {"testing123_thread"};
+template<long OpenFileTimeoutMs>
+constexpr long FiodThreadFix<OpenFileTimeoutMs>::open_file_timeout_ms;
+
+template<long OpenFileTimeoutMs>
+constexpr int FiodThreadFix<OpenFileTimeoutMs>::maxfiles;
+
+template<long OpenFileTimeoutMs>
+const std::string FiodThreadFix<OpenFileTimeoutMs>::srvname {"testing123_thread"};
 
 struct SmallFile {
     static const std::string file_contents;
@@ -179,7 +187,10 @@ std::vector<std::uint8_t> LargeFile::file_chunk(LargeFile::CHUNK_SIZE);
 
 struct FiodProcSmallFileFix : public FiodProcFix, public SmallFile {};
 
-struct FiodThreadSmallFileFix : public FiodThreadFix, public SmallFile {};
+struct FiodThreadSmallFileFix : public FiodThreadFix<1000>, public SmallFile {};
+
+struct FiodThreadSmallFileShortOpenFileTimeoutFix :
+        public FiodThreadFix<100>, public SmallFile {};
 
 struct FiodProcLargeFileFix : public FiodProcFix, public LargeFile {
     static void SetUpTestCase() {
@@ -188,7 +199,7 @@ struct FiodProcLargeFileFix : public FiodProcFix, public LargeFile {
     }
 };
 
-struct FiodThreadLargeFileFix : public FiodThreadFix, public LargeFile {
+struct FiodThreadLargeFileFix : public FiodThreadFix<1000>, public LargeFile {
     static void SetUpTestCase() {
         LargeFile::SetUpTestCase();
     }
@@ -419,9 +430,9 @@ TEST_F(FiodProcSmallFileFix, send_open_file)
                                              0, 0, false)};
     ASSERT_TRUE(stat_fd);
 
-    uint8_t buf [64];
     ssize_t nread;
     struct fiod_open_file_info ack;
+    uint8_t buf [sizeof(ack)];
 
     // Receive 'ACK' with file stats
     nread = read(stat_fd, buf, sizeof(ack));
@@ -449,6 +460,60 @@ TEST_F(FiodProcSmallFileFix, send_open_file)
     ASSERT_EQ(sizeof(xstat), nread);
     ASSERT_TRUE(fiod_unmarshal_xfer_stat(&xstat, buf));
     EXPECT_EQ(PROT_XFER_COMPLETE, xstat.size);
+}
+
+/**
+ * Opens a file, waits too long, then requests server to send the opened
+ * file. By this time the timer should've expired and the open file closed,
+ * resulting in an error message from the server.
+ */
+TEST_F(FiodThreadSmallFileShortOpenFileTimeoutFix, open_file_timeout)
+{
+    // Create pipe to which file will ultimately be written
+    int pfd [2];
+    ASSERT_NE(-1, pipe(pfd));
+    const test::unique_fd pipe_read {pfd[0]};
+    test::unique_fd pipe_write {pfd[1]};
+
+    // Open the file
+    const test::unique_fd stat_fd {fiod_open(srv_fd,
+                                             file.name().c_str(),
+                                             0, 0, false)};
+    ASSERT_TRUE(stat_fd);
+
+    struct fiod_open_file_info ack;
+    uint8_t buf [sizeof(ack)];
+    ssize_t nread;
+
+    // Confirm that the file was opened
+    nread = read(stat_fd, buf, sizeof(ack));
+    ASSERT_EQ(sizeof(ack), nread);
+    ASSERT_EQ(FIOD_OPEN_FILE_INFO, fiod_get_cmd(buf));
+    ASSERT_EQ(PROT_STAT_OK, fiod_get_stat(buf));
+    ASSERT_TRUE(fiod_unmarshal_open_file_info(&ack, buf));
+    ASSERT_EQ(file_contents.size(), ack.size);
+    ASSERT_GT(ack.txnid, 0);
+
+    // Sleep for longer than the server's open file timeout
+    std::this_thread::sleep_for(std::chrono::milliseconds{open_file_timeout_ms});
+
+    // Send 'open file'
+    ASSERT_TRUE(fiod_send_open(srv_fd, ack.txnid, pipe_write));
+    ::close(pipe_write);
+
+    // Server should've written the timeout error message to the status
+    // channel...
+    nread = read(stat_fd, buf, sizeof(buf));
+    EXPECT_EQ(sizeof(struct prot_hdr), nread);
+    EXPECT_EQ(FIOD_XFER_STAT, fiod_get_cmd(buf));
+    EXPECT_EQ(ETIME, fiod_get_stat(buf));
+    // ... and then should've closed the status channel.
+    EXPECT_EQ(0, read(stat_fd, buf, sizeof(buf)));
+
+    // Data channel should have been closed at timeout, before any data had been
+    // written to it.
+    nread = read(pipe_read, buf, sizeof(buf));
+    EXPECT_EQ(0, nread);
 }
 
 TEST_F(FiodProcSmallFileFix, read_range)
