@@ -34,6 +34,9 @@
 
 #include "errors.h"
 #include "process.h"
+#include "util.h"
+
+static bool dup_open_fd(int srcfd, int dstfd);
 
 bool proc_init_child(const int* excluded_fds, size_t nfds)
 {
@@ -44,11 +47,10 @@ bool proc_init_child(const int* excluded_fds, size_t nfds)
         return false;
     }
 
-    if (dup2(nullfd, STDIN_FILENO) != STDIN_FILENO ||
-        dup2(nullfd, STDOUT_FILENO) != STDOUT_FILENO ||
-        dup2(nullfd, STDERR_FILENO) != STDERR_FILENO) {
-        LOGERRNO("dup2()\n");
-        close(nullfd);
+    if (!dup_open_fd(nullfd, STDIN_FILENO) ||
+        !dup_open_fd(nullfd, STDOUT_FILENO) ||
+        !dup_open_fd(nullfd, STDERR_FILENO)) {
+        PRESERVE_ERRNO(close(nullfd));
         return false;
     }
 
@@ -81,4 +83,14 @@ bool proc_init_child(const int* excluded_fds, size_t nfds)
     }
 
     return true;
+}
+
+static bool dup_open_fd(const int srcfd, const int dstfd)
+{
+    if (close(dstfd) == -1 && errno == EBADF) {
+        LOGERRNOV("Destination file descriptor %d was not open\n", dstfd);
+        return false;
+    }
+
+    return (dup2(srcfd, STDIN_FILENO) == STDIN_FILENO);
 }
