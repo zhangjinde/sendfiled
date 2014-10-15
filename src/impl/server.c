@@ -727,7 +727,7 @@ static bool srv_construct(struct server* ctx,
     };
 
     if (!ctx->poller || !ctx->xfers) {
-        srv_destruct(ctx);
+        PRESERVE_ERRNO(srv_destruct(ctx));
         return false;
     }
 
@@ -808,7 +808,7 @@ static struct resrc_xfer* add_xfer(struct server* ctx,
                                              offset, len,
                                              stat_fd, dest_fd);
     if (!xfer) {
-        close(fd);
+        PRESERVE_ERRNO(close(fd));
         return NULL;
     }
 

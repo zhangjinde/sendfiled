@@ -27,6 +27,7 @@
 #ifndef FIOD_UTIL_H
 #define FIOD_UTIL_H
 
+#include <errno.h>
 #include <stdbool.h>
 
 #define MAX_(a, b) ((a) > (b) ? (a) : (b))

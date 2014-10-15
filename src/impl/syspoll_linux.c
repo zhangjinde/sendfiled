@@ -40,6 +40,7 @@
 #include <string.h>
 
 #include "syspoll.h"
+#include "util.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpadded"
@@ -95,7 +96,8 @@ struct syspoll* syspoll_new(const int maxevents)
     return this;
 
  fail:
-    syspoll_delete(this);
+    PRESERVE_ERRNO(syspoll_delete(this));
+
     return NULL;
 }
 
@@ -164,7 +166,7 @@ bool syspoll_timer(struct syspoll* this,
     return true;
 
  fail:
-    close(fd);
+    PRESERVE_ERRNO(close(fd));
 
     return false;
 }

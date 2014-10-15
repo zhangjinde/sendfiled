@@ -49,9 +49,8 @@ int fiod_pipe(int fds[2], const int flags)
     return 0;
 
  fail:
-    const int tmp = errno;
-    close(fds[0]);
-    close(fds[1]);
-    errno = tmp;
+    PRESERVE_ERRNO(close(fds[0]));
+    PRESERVE_ERRNO(close(fds[1]));
+
     return -1;
 }

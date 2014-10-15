@@ -32,6 +32,7 @@
 #include <unistd.h>
 
 #include "file_io.h"
+#include "util.h"
 
 /**
    Read-locks a file.
@@ -65,7 +66,7 @@ int file_open_read(const char* name,
     return fd;
 
  fail:
-    close(fd);
+    PRESERVE_ERRNO(close(fd));
 
     return -1;
 }

@@ -100,6 +100,7 @@ pid_t fiod_spawn(const char* name,
                 fprintf(stderr, "%s: child failed with errno %d [%s]\n",
                         __func__, child_err, strerror(child_err));
                 wait_child(pid);
+                errno = child_err;
                 return -1;
             }
         }

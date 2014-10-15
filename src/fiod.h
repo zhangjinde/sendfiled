@@ -71,7 +71,9 @@ extern "C" {
 
        @retval >0 The process id
        @retval 0 Process of same name was already running
-       @retval -1 An error occurred (see @a errno)
+
+       @retval -1 An error occurred (see @a errno). If the error occurred in the
+       server process, @a errno will contain the @e server's error code.
      */
     pid_t fiod_spawn(const char* name,
                      int maxfiles,
