@@ -35,6 +35,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <fiod_config.h>
+
 #include "fiod.h"
 
 #include "impl/errors.h"
@@ -148,7 +150,7 @@ int main(const int argc, char** argv)
     if (daemonise && !proc_daemonise(&requestfd, 1))
         return EXIT_FAILURE;
 
-    openlog("fiod", LOG_CONS | LOG_PID, LOG_DAEMON);
+    openlog(FIOD_PROGNAME, LOG_CONS | LOG_PID, LOG_DAEMON);
 
     syslog(LOG_INFO,
            "Starting; name: %s;"

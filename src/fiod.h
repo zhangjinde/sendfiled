@@ -62,7 +62,11 @@ extern "C" {
     /**
        Spawns a server process.
 
-       @param name The instance name. (The name of the server's UNIX socket.)
+       @param server_name The server instance name. (The name of the server's
+       'listening' UNIX socket will be based on this value.)
+
+       @param bindir The directory in which to look for the 'fiod' binary (the
+       name of the server binary).
 
        @param maxfiles The maximum number of open files
 
@@ -75,7 +79,8 @@ extern "C" {
        @retval -1 An error occurred (see @a errno). If the error occurred in the
        server process, @a errno will contain the @e server's error code.
      */
-    pid_t fiod_spawn(const char* name,
+    pid_t fiod_spawn(const char* server_name,
+                     const char* bindir,
                      int maxfiles,
                      int open_fd_timeout_ms) FIOD_API;
 

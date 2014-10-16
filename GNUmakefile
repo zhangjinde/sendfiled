@@ -3,12 +3,18 @@ target := $(projectname)
 target_so := lib$(projectname).so
 test_target := tests
 
+builddir := build
+srcdir := src
+docdir := doc
+htmldir := $(docdir)/html
+
 CC := /usr/local/llvm342/bin/clang
 CXX := /usr/local/llvm342/bin/clang++
 
 lib_search_dirs := -L/usr/local/llvm342/lib
 
 header_search_dirs :=\
+-I$(builddir)\
 -isystem/usr/local/llvm342/include\
 -isystem/usr/local/llvm342/include/c++/v1\
 
@@ -31,11 +37,6 @@ NM ?= nm
 VALGRIND ?= valgrind
 
 GTEST_FILTER ?= *
-
-builddir := build
-srcdir := src
-docdir := doc
-htmldir := $(docdir)/html
 
 vpath %.c $(srcdir) $(srcdir)/impl
 vpath %.cpp $(srcdir) $(srcdir)/impl
@@ -82,7 +83,13 @@ obj_test:=$(src_test:%=$(builddir)/%.tst.o)
 $(builddir)/test_%.cpp.tst.o: CXXFLAGS += -Wno-error
 
 .PHONY: all
-all: $(builddir)/$(target) $(builddir)/$(target_so) build_tests
+all: config $(builddir)/$(target) $(builddir)/$(target_so) build_tests
+
+.PHONY: config
+config: $(builddir)/fiod_config.h
+
+$(builddir)/fiod_config.h: $(lastword $(MAKEFILE_LIST))
+	@echo "#define FIOD_PROGNAME \"$(projectname)\"" > $@
 
 .PHONY: build_tests
 build_tests: $(builddir)/$(test_target)
@@ -94,16 +101,16 @@ ifneq ($(MAKECMDGOALS), clean)
 -include $(src_test:%=$(builddir)/%.tst.d)
 endif
 
-$(builddir)/%.c.srv.d: %.c
+$(builddir)/%.c.srv.d: %.c $(builddir)/$(projectname)_config.h
 	$(CC) $(CFLAGS) -MM -MT "$(builddir)/$*.c.srv.o $(builddir)/$*.c.srv.d" $< > $@
 
-$(builddir)/%.c.cli.d: %.c
+$(builddir)/%.c.cli.d: %.c $(builddir)/$(projectname)_config.h
 	$(CC) $(CFLAGS) -MM -MT "$(builddir)/$*.c.cli.o $(builddir)/$*.c.cli.d" $< > $@
 
-$(builddir)/%.cpp.tst.d: %.cpp
+$(builddir)/%.cpp.tst.d: %.cpp $(builddir)/$(projectname)_config.h
 	$(CXX) $(CXXFLAGS) -MM -MT "$(builddir)/$*.cpp.tst.o $(builddir)/$*.cpp.tst.d" $< > $@
 
-$(builddir)/%.c.tst.d: %.c
+$(builddir)/%.c.tst.d: %.c $(builddir)/$(projectname)_config.h
 	$(CC) $(CFLAGS) -MM -MT "$(builddir)/$*.c.tst.o $(builddir)/$*.c.tst.d" $< > $@
 
 $(builddir)/%.c.srv.o: %.c

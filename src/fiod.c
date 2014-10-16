@@ -36,6 +36,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <fiod_config.h>
+
 #include "impl/errors.h"
 #include "impl/fiod.h"
 #include "impl/process.h"
@@ -53,10 +55,21 @@ static bool exec_server(const char* filename,
                         int maxfiles,
                         int open_fd_timeout_ms);
 
-pid_t fiod_spawn(const char* name,
+static const char* make_exec_path(const char* bindir, size_t bindir_len);
+
+pid_t fiod_spawn(const char* srvname,
+                 const char* bindir,
                  const int maxfiles,
                  const int open_fd_timeout_ms)
 {
+    static const size_t dirpath_maxlen = 256;
+
+    const size_t bindir_len = strnlen(bindir, dirpath_maxlen);
+    if (bindir_len == dirpath_maxlen) {
+        errno = ENAMETOOLONG;
+        return -1;
+    }
+
     /* Pipe used to sync with child */
     int pfd[2];
 
@@ -91,7 +104,7 @@ pid_t fiod_spawn(const char* name,
             if (child_err == EADDRINUSE) {
                 printf("%s: daemon named '%s' already running"
                        " (UNIX socket exists)\n",
-                       __func__, name);
+                       __func__, srvname);
                 wait_child(pid);
                 return 0;
 
@@ -130,12 +143,41 @@ pid_t fiod_spawn(const char* name,
     if (!proc_init_child(&PROC_SYNCFD, 1))
         goto fail;
 
-    if (!exec_server("build/fiod", name, maxfiles, open_fd_timeout_ms))
-        LOGERRNO("Couldn't exec server process");
+    const char* path = make_exec_path(bindir, bindir_len);
+    if (!path)
+        goto fail;
+
+    exec_server(path, srvname, maxfiles, open_fd_timeout_ms);
+
+    /* exec_server() only returns on failure, so something has gone wrong */
 
  fail:
+    LOGERRNO("Couldn't exec server process");
     write(syncfd, &errno, sizeof(errno));
+
     exit(EXIT_FAILURE);
+}
+
+static const char* make_exec_path(const char* bindir, const size_t bindir_len)
+{
+    char* path = malloc(bindir_len + strlen("/") + strlen(FIOD_PROGNAME) + 1);
+    if (!path)
+        return NULL;
+
+    char* p = path;
+
+    memcpy(p, bindir, bindir_len);
+    p += bindir_len;
+
+    if (bindir[bindir_len - 1] != '/')
+        *p++ = '/';
+
+    memcpy(p, FIOD_PROGNAME, strlen(FIOD_PROGNAME));
+    p += strlen(FIOD_PROGNAME);
+
+    *p = '\0';
+
+    return path;
 }
 
 static bool exec_server(const char* path,
@@ -173,7 +215,7 @@ static bool exec_server(const char* path,
         return false;
 
     const char* args[] = {
-        "fiod",
+        FIOD_PROGNAME,
         "-s", srvname,
         "-n", maxfiles_str,
         "-t", open_fd_timeout_ms_str,
@@ -181,7 +223,7 @@ static bool exec_server(const char* path,
         NULL
     };
 
-    execve(path, (char**)args, NULL);
+    execve(path, (char**)args, (char**){NULL});
 
     /* execve does not return on success */
     return false;
