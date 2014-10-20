@@ -44,7 +44,7 @@ int us_passcred_option(void)
 ssize_t us_recv(int srv_fd,
                 void* buf, size_t len,
                 int* recvd_fds, size_t* nfds,
-                uid_t* uid, gid_t* gid)
+                uid_t* uid, gid_t* gid, pid_t* pid)
 {
     assert (recvd_fds && nfds && *nfds > 0);
 
@@ -88,6 +88,7 @@ ssize_t us_recv(int srv_fd,
 
     *uid = creds.uid;
     *gid = creds.gid;
+    *pid = creds.pid;
 
     return nrecvd;
 }

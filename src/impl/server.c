@@ -111,6 +111,8 @@ struct resrc_xfer {
     struct fio_ctx* fio_ctx;
     /** Number of bytes left to transfer */
     size_t nbytes_left;
+    /** The client process ID */
+    pid_t client_pid;
 };
 
 /**
@@ -178,10 +180,8 @@ static bool errno_is_fatal(int err);
    wether the call succeeded or not.
 */
 static struct resrc_xfer* add_xfer(struct server* ctx,
-                                   const char* filename,
-                                   enum prot_cmd_req cmd,
-                                   loff_t offset,
-                                   size_t len,
+                                   const struct prot_request* req,
+                                   pid_t client_pid,
                                    int stat_fd, int dest_fd,
                                    struct file_info* info);
 
@@ -359,7 +359,7 @@ static void delete_resrc_resp(struct resrc_resp* r)
 
 static bool process_request(struct server* ctx,
                             const void* buf, const size_t size,
-                            int* fds);
+                            pid_t client_pid, const int* fds);
 
 static void close_fds(int* fds, const size_t nfds)
 {
@@ -379,6 +379,7 @@ static bool handle_reqfd(struct server* ctx,
     size_t nfds;
     uid_t uid;
     gid_t gid;
+    pid_t pid;
 
     for (;;) {
         nfds = PROT_MAXFDS;
@@ -386,7 +387,7 @@ static bool handle_reqfd(struct server* ctx,
         const ssize_t nread = us_recv(ctx->reqfd,
                                       buf, buf_size,
                                       recvd_fds, &nfds,
-                                      &uid, &gid);
+                                      &uid, &gid, &pid);
 
         /* Recv of zero makes no sense on a UDP (connectionless) socket */
         assert (nread != 0);
@@ -404,7 +405,10 @@ static bool handle_reqfd(struct server* ctx,
                 send_err(recvd_fds[0], EACCES);
                 close_fds(recvd_fds, nfds);
 
-            } else if (!process_request(ctx, buf, (size_t)nread, recvd_fds)) {
+            } else if (!process_request(ctx,
+                                        buf,
+                                        (size_t)nread,
+                                        pid, recvd_fds)) {
                 close_fds(recvd_fds, nfds);
             }
         }
@@ -414,10 +418,8 @@ static bool handle_reqfd(struct server* ctx,
 }
 
 static struct resrc_timer* add_open_file(struct server* ctx,
-                                         const char* filename,
-                                         loff_t offset,
-                                         size_t len,
-                                         int stat_fd,
+                                         const struct prot_request* req,
+                                         pid_t client_pid, int stat_fd,
                                          struct file_info* info);
 
 static bool register_xfer(struct server* ctx, struct resrc_xfer* xfer);
@@ -430,7 +432,7 @@ static bool send_open_file_info(int cli_fd,
 
 static bool process_request(struct server* ctx,
                             const void* buf, const size_t size,
-                            int* fds)
+                            const pid_t client_pid, const int* fds)
 {
     static const char* const malformed_req_msg = "Received malformed request\n";
     static const char* const invalid_cmd_msg =
@@ -459,9 +461,8 @@ static bool process_request(struct server* ctx,
 
         struct file_info finfo;
         const struct resrc_timer* const timer = add_open_file(ctx,
-                                                              pdu.filename,
-                                                              pdu.offset,
-                                                              pdu.len,
+                                                              &pdu,
+                                                              client_pid,
                                                               fds[0],
                                                               &finfo);
 
@@ -487,6 +488,16 @@ static bool process_request(struct server* ctx,
             return false;
         }
 
+        if (xfer->client_pid != client_pid) {
+            /* Client is asking to send a file it did not itself open */
+            syslog(LOG_ALERT,
+                   "Client with PID %d asked to send open file with"
+                   " mismatching PID %d (txnid %lu)\n",
+                   client_pid, xfer->client_pid, xfer->txnid);
+            undo_add_xfer(ctx, xfer);
+            return false;
+        }
+
         xfer->cmd = PROT_CMD_SEND;
         xfer->dest_fd = fds[0];
 
@@ -508,9 +519,8 @@ static bool process_request(struct server* ctx,
         struct file_info finfo;
         struct resrc_xfer* const xfer =
             add_xfer(ctx,
-                     pdu.filename,
-                     pdu.cmd,
-                     (loff_t)pdu.offset, pdu.len,
+                     &pdu,
+                     client_pid,
                      fds[0], (pdu.cmd == PROT_CMD_SEND ? fds[1] : fds[0]),
                      &finfo);
 
@@ -767,24 +777,21 @@ static bool errno_is_fatal(const int err)
 }
 
 static struct resrc_xfer* new_xfer(struct server* ctx,
-                                   const enum prot_cmd_req cmd,
                                    const struct xfer_file* file,
-                                   const loff_t offset,
-                                   const size_t len,
-                                   const int stat_fd,
-                                   const int dest_fd);
+                                   const struct prot_request* req,
+                                   pid_t client_pid,
+                                   int stat_fd,
+                                   int dest_fd);
 
 static struct resrc_xfer* add_xfer(struct server* ctx,
-                                   const char* filename,
-                                   const enum prot_cmd_req cmd,
-                                   const loff_t offset,
-                                   const size_t len,
+                                   const struct prot_request* req,
+                                   const pid_t client_pid,
                                    const int stat_fd, const int dest_fd,
                                    struct file_info* finfo)
 {
-    assert (cmd == PROT_CMD_READ ||
-            cmd == PROT_CMD_SEND ||
-            cmd == PROT_CMD_FILE_OPEN);
+    assert (req->cmd == PROT_CMD_READ ||
+            req->cmd == PROT_CMD_SEND ||
+            req->cmd == PROT_CMD_FILE_OPEN);
 
     if (ctx->xfers->size == ctx->xfers->capacity) {
         syslog(LOG_CRIT, "Transfer table is full (%lu/%lu items)\n",
@@ -792,7 +799,7 @@ static struct resrc_xfer* add_xfer(struct server* ctx,
         return false;
     }
 
-    const int fd = file_open_read(filename, offset, len, finfo);
+    const int fd = file_open_read(req->filename, req->offset, req->len, finfo);
     if (fd == -1)
         return NULL;
 
@@ -803,9 +810,9 @@ static struct resrc_xfer* add_xfer(struct server* ctx,
     };
 
     struct resrc_xfer* const xfer = new_xfer(ctx,
-                                             cmd,
                                              &file,
-                                             offset, len,
+                                             req,
+                                             client_pid,
                                              stat_fd, dest_fd);
     if (!xfer) {
         PRESERVE_ERRNO(close(fd));
@@ -827,14 +834,13 @@ static struct resrc_xfer* add_xfer(struct server* ctx,
 }
 
 static struct resrc_xfer* new_xfer(struct server* ctx,
-                                   const enum prot_cmd_req cmd,
                                    const struct xfer_file* file,
-                                   const loff_t offset,
-                                   const size_t len,
+                                   const struct prot_request* req,
+                                   const pid_t client_pid,
                                    const int stat_fd,
                                    const int dest_fd)
 {
-    if (((size_t)offset + len) > file->size) {
+    if (((size_t)req->offset + req->len) > file->size) {
         /* Requested range is invalid */
         errno = ERANGE;
         return NULL;
@@ -851,8 +857,11 @@ static struct resrc_xfer* new_xfer(struct server* ctx,
         .txnid = ctx->next_txnid++,
         .file = *file,
         .fio_ctx = fio_ctx_new(file->blksize),
-        .nbytes_left = (len > 0 ? len : (file->size - (size_t)offset)),
-        .cmd = cmd,
+        .nbytes_left = (req->len > 0 ?
+                        req->len :
+                        (file->size - (size_t)req->offset)),
+        .cmd = req->cmd,
+        .client_pid = client_pid
     };
 
     if (!fio_ctx_valid(xfer->fio_ctx)) {
@@ -870,16 +879,14 @@ static void undo_add_xfer(struct server* ctx, struct resrc_xfer* x)
 }
 
 static struct resrc_timer* add_open_file(struct server* ctx,
-                                         const char* filename,
-                                         loff_t offset,
-                                         size_t len,
+                                         const struct prot_request* req,
+                                         const pid_t client_pid,
                                          const int stat_fd,
                                          struct file_info* finfo)
 {
     struct resrc_xfer* const xfer = add_xfer(ctx,
-                                             filename,
-                                             PROT_CMD_FILE_OPEN,
-                                             offset, len,
+                                             req,
+                                             client_pid,
                                              stat_fd, -1,
                                              finfo);
     if (!xfer)

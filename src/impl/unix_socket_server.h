@@ -56,9 +56,11 @@ extern "C" {
 
        @param nfds The number of file descriptors in @a recvd_fds
 
-       @param uid The user ID of the client process
+       @param[out] uid The user ID of the client process
 
-       @param gid The group ID of the client process
+       @param[out] gid The group ID of the client process
+
+       @param[out] pid The client process ID
 
        @return The number of bytes received, or -1 on error, in which case errno
        will have been set.
@@ -72,7 +74,7 @@ extern "C" {
     ssize_t us_recv(int fd,
                     void* buf, size_t len,
                     int* recvd_fds, size_t* nfds,
-                    uid_t* uid, gid_t* gid);
+                    uid_t* uid, gid_t* gid, pid_t* pid);
 
     int us_passcred_option(void);
 
