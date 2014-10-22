@@ -24,6 +24,7 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+#include <errno.h>
 #include <string.h>
 
 #include "protocol_server.h"
@@ -55,12 +56,19 @@ bool prot_unmarshal_request(struct prot_request* pdu,
     if (*((uint8_t*)buf + (size - 1)) != '\0')
         return false;
 
+    const size_t fname_len = (size - PROT_REQ_BASE_SIZE - 1);
+
+    if (fname_len > PROT_FILENAME_MAX) {
+        errno = ENAMETOOLONG;
+        return false;
+    }
+
     memcpy(pdu, buf, PROT_REQ_BASE_SIZE);
 
     /* The rest of the PDU is the filename */
 
     pdu->filename = (char*)((uint8_t*)buf + PROT_REQ_BASE_SIZE);
-    pdu->filename_len = (size - PROT_REQ_BASE_SIZE - 1);
+    pdu->filename_len = fname_len;
 
     return true;
 }

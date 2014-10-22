@@ -287,7 +287,7 @@ TEST(Protocol, unmarshal_malformed_request)
     const auto cmd = req.cmd;
     const auto stat = req.stat;
 
-    std::vector<uint8_t> buf(PROT_REQ_BASE_SIZE + req.filename_len + 1);
+    std::vector<std::uint8_t> buf(PROT_REQ_BASE_SIZE + req.filename_len + 1);
     memcpy(buf.data(), &req, PROT_REQ_BASE_SIZE);
     memcpy(buf.data() + PROT_REQ_BASE_SIZE, req.filename, req.filename_len);
 
@@ -315,6 +315,26 @@ TEST(Protocol, unmarshal_malformed_request)
     b.back() = 'a';
     EXPECT_FALSE(prot_unmarshal_request(&req, b.data(), b.size()));
     b.back() = '\0';
+}
+
+TEST(Protocol, unmarshal_request_with_oversized_filename)
+{
+    std::string fname(PROT_FILENAME_MAX + 1, 'a');
+
+    struct prot_request req = {
+        PROT_CMD_SEND,
+        PROT_STAT_OK,
+        0xDEAD,
+        0xBEEF,
+        nullptr, 0
+    };
+
+    std::vector<std::uint8_t> buf(PROT_REQ_BASE_SIZE + fname.size() + 1, '\0');
+    std::memcpy(buf.data(), &req, PROT_REQ_BASE_SIZE);
+    std::memcpy(buf.data() + PROT_REQ_BASE_SIZE, fname.data(), fname.size());
+
+    EXPECT_FALSE(prot_unmarshal_request(&req, buf.data(), buf.size()));
+    EXPECT_EQ(ENAMETOOLONG, errno);
 }
 
 TEST(Protocol, unmarshal_malformed_send_open_file)
