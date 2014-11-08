@@ -438,7 +438,7 @@ static bool process_request(struct server* ctx,
     static const char* const invalid_cmd_msg =
         "Received invalid command ID (%d) in request\n";
 
-    if (fiod_get_stat(buf) != PROT_STAT_OK) {
+    if (fiod_get_stat(buf) != FIOD_STAT_OK) {
         syslog(LOG_NOTICE,
                "Received error status (%x) in request\n",
                fiod_get_stat(buf));

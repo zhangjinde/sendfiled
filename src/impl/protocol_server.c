@@ -49,7 +49,7 @@ bool prot_unmarshal_request(struct prot_request* pdu,
         return false;
     }
 
-    if (fiod_get_stat(buf) != PROT_STAT_OK)
+    if (fiod_get_stat(buf) != FIOD_STAT_OK)
         return false;
 
     /* Check that filename is NUL-terminated */
@@ -76,7 +76,7 @@ bool prot_unmarshal_request(struct prot_request* pdu,
 bool prot_unmarshal_send_open(struct prot_send_open* pdu, const void* buf)
 {
     if (fiod_get_cmd(buf) != PROT_CMD_SEND_OPEN ||
-        fiod_get_stat(buf) != PROT_STAT_OK) {
+        fiod_get_stat(buf) != FIOD_STAT_OK) {
         return false;
     }
 
@@ -103,7 +103,7 @@ void prot_marshal_file_info(struct fiod_file_info* pdu,
     memset(pdu, 0, sizeof(*pdu));
 
     pdu->cmd = FIOD_FILE_INFO;
-    pdu->stat = PROT_STAT_OK;
+    pdu->stat = FIOD_STAT_OK;
     pdu->size = file_size;
     pdu->atime = atime;
     pdu->mtime = mtime;
@@ -120,7 +120,7 @@ void prot_marshal_open_file_info(struct fiod_open_file_info* pdu,
     memset(pdu, 0, sizeof(*pdu));
 
     pdu->cmd = FIOD_OPEN_FILE_INFO;
-    pdu->stat = PROT_STAT_OK;
+    pdu->stat = FIOD_STAT_OK;
     pdu->size = file_size;
     pdu->atime = atime;
     pdu->mtime = mtime;
@@ -133,6 +133,6 @@ void prot_marshal_xfer_stat(struct fiod_xfer_stat* pdu, const size_t file_size)
     memset(pdu, 0, sizeof(*pdu));
 
     pdu->cmd = FIOD_XFER_STAT;
-    pdu->stat = PROT_STAT_OK;
+    pdu->stat = FIOD_STAT_OK;
     pdu->size = file_size;
 }

@@ -56,6 +56,11 @@ enum {
     FIOD_XFER_STAT = 0x83
 };
 
+enum {
+    /* No error */
+    FIOD_STAT_OK = 0
+};
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpadded"
 

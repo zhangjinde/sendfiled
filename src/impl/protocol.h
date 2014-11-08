@@ -49,11 +49,6 @@ enum prot_cmd_req {
 
 #define PROT_IS_REQUEST(cmd) (((cmd) & 0x80) == 0)
 
-enum {
-    /* No error */
-    PROT_STAT_OK = 0
-};
-
 /* Maximum number of file descriptors transferred in a single message */
 #define PROT_MAXFDS 2
 

@@ -264,7 +264,7 @@ TEST_F(FiodProcSmallFileFix, send)
     ASSERT_EQ(sizeof(ack), nread);
     ASSERT_TRUE(fiod_unmarshal_file_info(&ack, buf));
     EXPECT_EQ(FIOD_FILE_INFO, ack.cmd);
-    EXPECT_EQ(PROT_STAT_OK, ack.stat);
+    EXPECT_EQ(FIOD_STAT_OK, ack.stat);
     EXPECT_EQ(file_contents.size(), ack.size);
 
     // Transfer status update
@@ -272,7 +272,7 @@ TEST_F(FiodProcSmallFileFix, send)
     ASSERT_EQ(sizeof(xfer_stat), nread);
     ASSERT_TRUE(fiod_unmarshal_xfer_stat(&xfer_stat, buf));
     EXPECT_EQ(FIOD_XFER_STAT, xfer_stat.cmd);
-    EXPECT_EQ(PROT_STAT_OK, xfer_stat.stat);
+    EXPECT_EQ(FIOD_STAT_OK, xfer_stat.stat);
     EXPECT_EQ(PROT_XFER_COMPLETE, xfer_stat.size);
 
     // File content
@@ -320,7 +320,7 @@ TEST_F(FiodThreadSmallFileFix, send_final_xfer_status_fails)
     ASSERT_EQ(sizeof(ack), nread);
     ASSERT_TRUE(fiod_unmarshal_file_info(&ack, buf));
     EXPECT_EQ(FIOD_FILE_INFO, ack.cmd);
-    EXPECT_EQ(PROT_STAT_OK, ack.stat);
+    EXPECT_EQ(FIOD_STAT_OK, ack.stat);
     EXPECT_EQ(file_contents.size(), ack.size);
 
     // Transfer status update
@@ -328,7 +328,7 @@ TEST_F(FiodThreadSmallFileFix, send_final_xfer_status_fails)
     ASSERT_EQ(sizeof(xfer_stat), nread);
     ASSERT_TRUE(fiod_unmarshal_xfer_stat(&xfer_stat, buf));
     EXPECT_EQ(FIOD_XFER_STAT, xfer_stat.cmd);
-    EXPECT_EQ(PROT_STAT_OK, xfer_stat.stat);
+    EXPECT_EQ(FIOD_STAT_OK, xfer_stat.stat);
     EXPECT_EQ(PROT_XFER_COMPLETE, xfer_stat.size);
 
     // File content
@@ -375,7 +375,7 @@ TEST_F(FiodThreadSmallFileFix, send_error_send_fails)
     ASSERT_EQ(sizeof(ack), nread);
     ASSERT_TRUE(fiod_unmarshal_file_info(&ack, buf));
     EXPECT_EQ(FIOD_FILE_INFO, ack.cmd);
-    EXPECT_EQ(PROT_STAT_OK, ack.stat);
+    EXPECT_EQ(FIOD_STAT_OK, ack.stat);
     EXPECT_EQ(file_contents.size(), ack.size);
 
     // Error code
@@ -406,7 +406,7 @@ TEST_F(FiodProcSmallFileFix, read)
     ASSERT_EQ(sizeof(ack), nread);
     ASSERT_TRUE(fiod_unmarshal_file_info(&ack, buf));
     EXPECT_EQ(FIOD_FILE_INFO, ack.cmd);
-    EXPECT_EQ(PROT_STAT_OK, ack.stat);
+    EXPECT_EQ(FIOD_STAT_OK, ack.stat);
     EXPECT_EQ(file_contents.size(), ack.size);
 
     // File content
@@ -440,7 +440,7 @@ TEST_F(FiodProcSmallFileFix, send_open_file)
     ASSERT_EQ(sizeof(ack), nread);
     ASSERT_TRUE(fiod_unmarshal_open_file_info(&ack, buf));
     EXPECT_EQ(FIOD_OPEN_FILE_INFO, ack.cmd);
-    EXPECT_EQ(PROT_STAT_OK, ack.stat);
+    EXPECT_EQ(FIOD_STAT_OK, ack.stat);
     EXPECT_EQ(file_contents.size(), ack.size);
     EXPECT_GT(ack.txnid, 0);
 
@@ -490,7 +490,7 @@ TEST_F(FiodThreadSmallFileShortOpenFileTimeoutFix, open_file_timeout)
     nread = read(stat_fd, buf, sizeof(ack));
     ASSERT_EQ(sizeof(ack), nread);
     ASSERT_EQ(FIOD_OPEN_FILE_INFO, fiod_get_cmd(buf));
-    ASSERT_EQ(PROT_STAT_OK, fiod_get_stat(buf));
+    ASSERT_EQ(FIOD_STAT_OK, fiod_get_stat(buf));
     ASSERT_TRUE(fiod_unmarshal_open_file_info(&ack, buf));
     ASSERT_EQ(file_contents.size(), ack.size);
     ASSERT_GT(ack.txnid, 0);
@@ -536,7 +536,7 @@ TEST_F(FiodProcSmallFileFix, read_range)
     ASSERT_EQ(sizeof(ack), nread);
     ASSERT_TRUE(fiod_unmarshal_file_info(&ack, buf));
     EXPECT_EQ(FIOD_FILE_INFO, ack.cmd);
-    EXPECT_EQ(PROT_STAT_OK, ack.stat);
+    EXPECT_EQ(FIOD_STAT_OK, ack.stat);
     EXPECT_EQ(len, ack.size);
 
     // File content
@@ -573,7 +573,7 @@ TEST_F(FiodProcLargeFileFix, multiple_reading_clients)
         ASSERT_EQ(sizeof(ack), nread);
         ASSERT_TRUE(fiod_unmarshal_file_info(&ack, buf));
         EXPECT_EQ(FIOD_FILE_INFO, ack.cmd);
-        EXPECT_EQ(PROT_STAT_OK, ack.stat);
+        EXPECT_EQ(FIOD_STAT_OK, ack.stat);
         EXPECT_EQ(CHUNK_SIZE * NCHUNKS, ack.size);
     }
 
@@ -655,7 +655,7 @@ TEST_F(FiodProcFix, multiple_clients_reading_different_large_files)
         ASSERT_EQ(sizeof(ack), nread);
         ASSERT_TRUE(fiod_unmarshal_file_info(&ack, buf));
         EXPECT_EQ(FIOD_FILE_INFO, ack.cmd);
-        EXPECT_EQ(PROT_STAT_OK, ack.stat);
+        EXPECT_EQ(FIOD_STAT_OK, ack.stat);
         EXPECT_EQ(CHUNK_SIZE * NCHUNKS, ack.size);
     }
 
@@ -710,7 +710,7 @@ TEST_F(FiodThreadLargeFileFix, read_io_error)
     ASSERT_EQ(sizeof(ack), nread);
     ASSERT_TRUE(fiod_unmarshal_file_info(&ack, buf));
     EXPECT_EQ(FIOD_FILE_INFO, ack.cmd);
-    EXPECT_EQ(PROT_STAT_OK, ack.stat);
+    EXPECT_EQ(FIOD_STAT_OK, ack.stat);
     EXPECT_EQ(CHUNK_SIZE * NCHUNKS, ack.size);
 
     // File content
@@ -774,7 +774,7 @@ TEST_F(FiodThreadLargeFileFix, send_io_error)
     ASSERT_EQ(sizeof(ack), nread);
     ASSERT_TRUE(fiod_unmarshal_file_info(&ack, stat_buf.data()));
     EXPECT_EQ(FIOD_FILE_INFO, ack.cmd);
-    EXPECT_EQ(PROT_STAT_OK, ack.stat);
+    EXPECT_EQ(FIOD_STAT_OK, ack.stat);
     EXPECT_EQ(CHUNK_SIZE * NCHUNKS, ack.size);
 
     size_t nchunks {};
@@ -813,7 +813,7 @@ TEST_F(FiodThreadLargeFileFix, send_io_error)
         ASSERT_GE(sizeof(struct prot_hdr), nread);
         ASSERT_EQ(FIOD_XFER_STAT, fiod_get_cmd(stat_buf.data()));
         got_errno = (fiod_get_stat(stat_buf.data()) == EIO);
-        if (fiod_get_stat(stat_buf.data()) != PROT_STAT_OK)
+        if (fiod_get_stat(stat_buf.data()) != FIOD_STAT_OK)
             break;
     }
 

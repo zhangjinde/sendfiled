@@ -47,7 +47,7 @@ TEST(Protocol, marshal_file_open)
     EXPECT_TRUE(prot_marshal_file_open(&pdu, fname.c_str(), 0xDEAD, 0xBEEF));
 
     EXPECT_EQ(PROT_CMD_FILE_OPEN, pdu.cmd);
-    EXPECT_EQ(PROT_STAT_OK, pdu.stat);
+    EXPECT_EQ(FIOD_STAT_OK, pdu.stat);
 
     EXPECT_EQ(0xDEAD, pdu.offset);
     EXPECT_EQ(0xBEEF, pdu.len);
@@ -91,7 +91,7 @@ TEST(Protocol, marshal_send)
     EXPECT_TRUE(prot_marshal_send(&pdu, fname.c_str(), 0xDEAD, 0xBEEF));
 
     EXPECT_EQ(PROT_CMD_SEND, pdu.cmd);
-    EXPECT_EQ(PROT_STAT_OK, pdu.stat);
+    EXPECT_EQ(FIOD_STAT_OK, pdu.stat);
 
     EXPECT_EQ(0xDEAD, pdu.offset);
     EXPECT_EQ(0xBEEF, pdu.len);
@@ -105,7 +105,7 @@ TEST(Protocol, marshal_send_open)
     prot_marshal_send_open(&pdu, 0xDEADBEEF);
 
     EXPECT_EQ(PROT_CMD_SEND_OPEN, pdu.cmd);
-    EXPECT_EQ(PROT_STAT_OK, pdu.stat);
+    EXPECT_EQ(FIOD_STAT_OK, pdu.stat);
     EXPECT_EQ(0xDEADBEEF, pdu.txnid);
 }
 
@@ -133,7 +133,7 @@ TEST(Protocol, unmarshal_malformed_xfer_stat)
     buf[0] = cmd;
 
     // Nonzero status code (error)
-    buf[1] = PROT_STAT_OK + 1;
+    buf[1] = FIOD_STAT_OK + 1;
     EXPECT_FALSE(fiod_unmarshal_xfer_stat(&pdu, buf));
     // Body unmodified
     EXPECT_EQ(0xBEEF, pdu.size);
@@ -170,7 +170,7 @@ TEST(Protocol, unmarshal_malformed_file_info)
     buf[0] = cmd;
 
     // Nonzero status code (error)
-    buf[1] = PROT_STAT_OK + 1;
+    buf[1] = FIOD_STAT_OK + 1;
     EXPECT_FALSE(fiod_unmarshal_file_info(&pdu, buf));
     // Body unmodified
     EXPECT_EQ(0xBEEF, pdu.size);
@@ -196,7 +196,7 @@ TEST(Protocol, unmarshal_open_file)
     struct prot_request pdu;
     ASSERT_TRUE(prot_unmarshal_request(&pdu, buf.data(), buf.size()));
     EXPECT_EQ(PROT_CMD_FILE_OPEN, pdu.cmd);
-    EXPECT_EQ(PROT_STAT_OK, pdu.stat);
+    EXPECT_EQ(FIOD_STAT_OK, pdu.stat);
 
     ASSERT_EQ(fname.size(), pdu.filename_len);
     const std::string recvd_fname(pdu.filename);
@@ -220,7 +220,7 @@ TEST(Protocol, unmarshal_send)
     struct prot_request pdu;
     ASSERT_TRUE(prot_unmarshal_request(&pdu, buf.data(), buf.size()));
     EXPECT_EQ(PROT_CMD_SEND, pdu.cmd);
-    EXPECT_EQ(PROT_STAT_OK, pdu.stat);
+    EXPECT_EQ(FIOD_STAT_OK, pdu.stat);
     EXPECT_EQ(0xDEAD, pdu.offset);
     EXPECT_EQ(0xBEEF, pdu.len);
 
@@ -237,7 +237,7 @@ TEST(Protocol, unmarshal_send_open_file)
     struct prot_send_open pdu;
     ASSERT_TRUE(prot_unmarshal_send_open(&pdu, &tmp));
     EXPECT_EQ(PROT_CMD_SEND_OPEN, pdu.cmd);
-    EXPECT_EQ(PROT_STAT_OK, pdu.stat);
+    EXPECT_EQ(FIOD_STAT_OK, pdu.stat);
     EXPECT_EQ(0xDEADBEEF, pdu.txnid);
 }
 
@@ -247,7 +247,7 @@ TEST(Protocol, marshal_file_info)
     prot_marshal_file_info(&pdu, 111, 222, 333, 444);
 
     EXPECT_EQ(FIOD_FILE_INFO, pdu.cmd);
-    EXPECT_EQ(PROT_STAT_OK, pdu.stat);
+    EXPECT_EQ(FIOD_STAT_OK, pdu.stat);
 
     EXPECT_EQ(111, pdu.size);
     EXPECT_EQ(222, pdu.atime);
@@ -267,7 +267,7 @@ TEST(Protocol, marshal_open_file_info)
                                 777); // open file's descriptor
 
     EXPECT_EQ(FIOD_OPEN_FILE_INFO, fiod_get_cmd(&pdu));
-    EXPECT_EQ(PROT_STAT_OK, fiod_get_stat(&pdu));
+    EXPECT_EQ(FIOD_STAT_OK, fiod_get_stat(&pdu));
 
     EXPECT_EQ(111, pdu.size);
 
@@ -307,7 +307,7 @@ TEST(Protocol, unmarshal_malformed_request)
     b[0] = cmd;
 
     // Nonzero status code
-    b[1] = PROT_STAT_OK + 1;
+    b[1] = FIOD_STAT_OK + 1;
     EXPECT_FALSE(prot_unmarshal_request(&req, b.data(), b.size()));
     b[1] = stat;
 
@@ -323,7 +323,7 @@ TEST(Protocol, unmarshal_request_with_oversized_filename)
 
     struct prot_request req = {
         PROT_CMD_SEND,
-        PROT_STAT_OK,
+        FIOD_STAT_OK,
         0xDEAD,
         0xBEEF,
         nullptr, 0
@@ -364,7 +364,7 @@ TEST(Protocol, unmarshal_malformed_send_open_file)
     buf[0] = cmd;
 
     // Nonzero status code
-    buf[1] = PROT_STAT_OK + 1;
+    buf[1] = FIOD_STAT_OK + 1;
     EXPECT_FALSE(prot_unmarshal_send_open(&pdu, buf));
     // Body unmodified
     EXPECT_EQ(123, pdu.txnid);

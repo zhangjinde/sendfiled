@@ -41,7 +41,7 @@ int fiod_get_stat(const void* buf)
 }
 
 #define HDR_OK(buf, cmd)                                              \
-    (fiod_get_cmd(buf) == cmd && fiod_get_stat(buf) == PROT_STAT_OK)
+    (fiod_get_cmd(buf) == cmd && fiod_get_stat(buf) == FIOD_STAT_OK)
 
 bool fiod_unmarshal_file_info(struct fiod_file_info* pdu, const void* buf)
 {
