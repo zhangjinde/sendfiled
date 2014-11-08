@@ -53,7 +53,7 @@ bool prot_unmarshal_request(struct prot_request* pdu,
         return false;
 
     /* Check that filename is NUL-terminated */
-    if (*((uint8_t*)buf + (size - 1)) != '\0')
+    if (*((char*)buf + (size - 1)) != '\0')
         return false;
 
     const size_t fname_len = (size - PROT_REQ_BASE_SIZE - 1);
@@ -67,7 +67,7 @@ bool prot_unmarshal_request(struct prot_request* pdu,
 
     /* The rest of the PDU is the filename */
 
-    pdu->filename = (char*)((uint8_t*)buf + PROT_REQ_BASE_SIZE);
+    pdu->filename = (char*)buf + PROT_REQ_BASE_SIZE;
     pdu->filename_len = fname_len;
 
     return true;

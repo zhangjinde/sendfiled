@@ -25,10 +25,9 @@
 */
 
 /**
-   @defgroup mod_client Client Interface
+   @defgroup mod_client Client API
 
-   Interface through which client applications interact with the file I/O
-   server.
+   Constructs which facilitate interaction with the server.
  */
 
 /**
@@ -55,7 +54,7 @@ extern "C" {
        @addtogroup mod_client
        @{
 
-       @name Process Control
+       @name Server interaction
        @{
      */
 
@@ -68,16 +67,18 @@ extern "C" {
        @param bindir The directory in which to look for the 'fiod' binary (the
        name of the server binary).
 
-       @param maxfiles The maximum number of open files
+       @param maxfiles The maximum number of concurrent file transfers
 
-       @param open_fd_timeout_ms The number of milliseconds after which unused,
-       open file descriptors should be closed
+       @param open_fd_timeout_ms The number of milliseconds after which open
+       file descriptors should be closed
 
        @retval >0 The process id
-       @retval 0 Process of same name was already running
+
+       @retval 0 Server instance of the same name was already running
 
        @retval -1 An error occurred (see @a errno). If the error occurred in the
-       server process, @a errno will contain the @e server's error code.
+       server process, @a errno will contain the @e server process's @a errno
+       value.
      */
     pid_t fiod_spawn(const char* server_name,
                      const char* bindir,
@@ -85,115 +86,165 @@ extern "C" {
                      int open_fd_timeout_ms) FIOD_API;
 
     /**
-       Connects to a running instance of the FIOD process.
+       Connects to a running server instance.
 
-       @param name The server instance name
+       @param server_name The server instance name
 
-       @retval >0 The request channel socket file descriptor
+       @retval >0 A socket connected to the server instance
+
        @retval -1 An error occurred
      */
-    int fiod_connect(const char* name) FIOD_API;
+    int fiod_connect(const char* server_name) FIOD_API;
 
     /**
-       Shuts down a file I/O process.
+       Shuts down a server instance.
+
+       Signals the process to shut down and waits for it to terminate.
+
+       @param pid The server instance's process ID.
+
+       @return -1 on error; otherwise the status value as per @a waitpid(2)
+       which can be inspected using the associated macros such as @c WIFEXITED,
+       @c WEXITSTATUS, etc.
      */
     int fiod_shutdown(pid_t pid) FIOD_API;
 
     /**
        @}
-       @name Client Requests
+       @name File transfer operations (client requests)
        @{
     */
 
     /**
-       Reads a file into a pipe.
+       Requests the server to write the contents of a file to a pipe.
 
-       The server will write data read from the file into a pipe of which the
-       read end is returned to the caller.
+       The server will first respond with a message of type struct
+       fiod_file_info to confirm the transfer, after which it will write the
+       data read from the file into the returned pipe.
 
-       @note This operation is only zero-copy on Linux. On other systems a
-       userspace buffer is used between the file read and pipe write.
+       @note This operation is much more efficient on Linux than on other
+       systems due to the use of the splice system call, which minimises the
+       amount of copying and does not cross the kernel/userspace boundary. On
+       non-Linux systems this operation degrades to the usual read/write with a
+       userspace buffer inbetween, and therefore fiod_send() or fiod_send_open()
+       should be preferred.
 
-       @param srv_sockfd A socket connected to the server (see fiod_connect())
+       @param srv_sockfd A socket connected to the server
 
-       @param filename The name of the file to be read
+       @param path Path to the file
 
-       @param offset The beginning file offset
+       @param offset The starting file offset
 
        @param len The number of bytes, starting from @a offset, to read from the
-       file
+       file. May be @a zero, in which case the read will be to the end of the
+       file.
 
        @param dest_fd_nonblock Whether or not the destination pipe file
        descriptor should be non-blocking
 
        @retval >0 The read end of the pipe to which the file will be written
+
        @retval -1 An error occurred
      */
     int fiod_read(int srv_sockfd,
-                  const char* filename,
+                  const char* path,
                   loff_t offset, size_t len,
                   bool dest_fd_nonblock) FIOD_API;
 
     /**
-       Writes a file to a user-supplied file descriptor.
+       Requests the server to write the contents of a file to an open file
+       descriptor.
 
-       The result of each I/O operation will be reported on the status channel
-       (the returned file descriptor).
+       The server will first respond with a message of type struct
+       fiod_file_info to confirm the transfer, after which it will write the
+       data read from the file to the destination file descriptor, reporting the
+       progress of the transfer in messages of type struct fiod_xfer_stat on the
+       status channel.
 
-       @param srv_sockfd A socket connected to the server (see fiod_connect())
+       @note This operation is implemented in terms of @a sendfile(2), which
+       places certain constraints on @a destination_fd on some platforms. E.g.,
+       on OS X and FreeBSD, the destination descriptor must be a socket,
+       otherwise the operation degrades to the usual read/write with a userspace
+       buffer inbetween.
 
-       @param filename The name of the file to be sent
+       @param srv_sockfd A socket connected to the server
 
-       @param dest_fd The descriptor to which the file will be written (the
-       'data channel')
+       @param path Path to the file
 
-       @param offset The start file offset
+       @param destination_fd The descriptor to which the file will be written
+       (the data channel)
 
-       @param len The number of bytes from the file to be sent
+       @param offset The starting file offset
+
+       @param len The number of bytes, starting from @a offset, to read from the
+       file. May be @a zero, in which case the read will be to the end of the
+       file.
 
        @param stat_fd_nonblock Whether or not the status channel file descriptor
        should be non-blocking.
 
-       @retval >0 The status channel file descriptor
+       @retval >0 The status channel descriptor
        @retval -1 An error occurred
-
-       @note This operation is implemented in terms of @a sendfile(2), which
-       places certain constraints on @a dest_fd on some platforms. E.g., on OS X
-       and FreeBSD, the destination descriptor must refer to a socket.
      */
     int fiod_send(int srv_sockfd,
-                  const char* filename,
-                  int dest_fd,
+                  const char* path,
+                  int destination_fd,
                   loff_t offset, size_t len,
                   bool stat_fd_nonblock) FIOD_API;
 
     /**
        Requests the server to open and return information about a file.
 
-       The server will write the file information (size and timestamps) and
-       server-internal file number to the status channel (the returned file
-       descriptor).
+       This operation is useful in cases where the client needs access to the
+       file metadata before the transfer begins. E.g., many protocols require
+       the file size to precede the file contents.
+
+       The server will confirm the request on the status channel with a message
+       of type struct fiod_open_file_info. Besides the file size and file system
+       timestamps, the message will also include a unique transfer identifier to
+       be passed to the subsequent call to fiod_send_open().
+
+       A timer will be set on the open file, after the expiraton of which the
+       file will be closed and its associated state purged.
+
+       @param offset The starting file offset
+
+       @param len The number of bytes, starting from @a offset, to read from the
+       file. May be @a zero, in which case the read will be to the end of the
+       file.
 
        @retval >0 The status channel file descriptor
        @retval -1 An error occurred
      */
     int fiod_open(int srv_sockfd,
-                  const char* filename,
+                  const char* path,
                   loff_t offset, size_t len,
                   bool stat_fd_nonblock) FIOD_API;
 
     /**
-       Sends a file previously opened with fiod_open().
+       Request that a file previously opened with fiod_open() be written to an
+       open file descriptor.
 
-       @param srv_sockfd A socket connected to the server (see fiod_connect())
+       The server will immediately commence the transfer, and write transfer
+       progress messages of type struct fiod_xfer_stat to the status channel, as
+       usual.
 
-       @param txnid Transaction ID/open file ID
+       If the provided file identifier is invalid, the server will assume that
+       it is due to the expiration of the timer associated with the open file
+       and will silently ignore the request. (The client will, however, receive
+       EOF when it tries to read from the status channel returned previously by
+       fiod_open().)
 
-       @param dest_fd The file descriptor to which to write the file
+       @param srv_sockfd A socket connected to the server
+
+       @param txnid Open file identifier
+
+       @param destination_fd The file descriptor to which the file will be
+       written
      */
     bool fiod_send_open(int srv_sockfd,
                         size_t txnid,
-                        int dest_fd) FIOD_API;
+                        int destination_fd) FIOD_API;
 
     /**@}*/
 

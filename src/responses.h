@@ -111,7 +111,7 @@ extern "C" {
 #endif
 
     /**
-       @name Server Responses
+       @name Server responses
        @{
     */
 
