@@ -1,108 +1,92 @@
-# Overview {#mainpage}
+Fiod is a background server process which sends or reads files on behalf of
+client applications.
 
-## What
+# Goals
 
-* All file I/O is done in one or more separate processes
+To provide event-based applications with:
 
-* File operation requests are transported over UDP through a UNIX domain socket
-  (for passing file descriptors between the client and server processes)
+* **Non-blocking file transfer**. Unlike other types of file descriptors,
+   non-blocking semantics cannot be achieved reliably on disk-backed file
+   descriptors. If the file data is not yet in the page cache, the read will
+   block. For this reason the only way to achieve truly non-blocking file I/O is
+   by doing it in a separate thread of execution.
 
-* File operation status updates are transferred over a pipe (the *status* file
-  descriptor)
+* **Reduced copying**. *Fiod* makes use of platform facilities such as
+   [sendfile] and [splice] to achieve file transfer with [minimal
+   copying][data_copying].
 
-* File data is written to the *destination* file descriptor (which may or may
-  not equal the status file descriptor), a userspace buffer, or a socket
+* **Reduced contention**. See [this section][impl_processes] for the details
+    (which would be out of scope at this point).
 
-* Best attempts are made at achieving zero-copy by using platform-specific
-   mechanisms such as *splice(2)* on Linux and *sendfile(2)* on other systems.
+# Architectural overview
 
-## Why?
+* The fiod server runs in a separate process and transfers files on behalf of
+  client processes.
 
-### Zero-Copy
+* File transfer requests are transported over a [UDP][impl_udp_vs_tcp] [UNIX
+  domain][impl_unix_sockets] socket.
 
-Copying files is expensive, so it is worthwhile trying to keep this to a
-minimum. This library tries to use the best method of achieving zero-zopy I/O on
-each supported platform, which is *splice(2)* on Linux and *sendfile(2)* on
-other platforms.
+* File transfer status updates are transferred over a transaction-unique pipe
+  (the [status channel][status_channel]).
 
-### Non-Blocking
+* File data is written to a client-provided file descriptor (the [data
+  channel][data_channel]) or to a pipe automatically created between the client
+  and the server.
 
-Event-based applications usually make heavy use of non-blocking operations in
-order to improve concurrency. Most types of I/O interfaces (e.g., sockets,
-pipes, etc.) provide non-blocking modes of operation.
+* Client applications interact with the server via a shared library written in
+  C.
 
-One notable exception, however, is disk-backed file descriptors. I/O on these
-will block even if non-blocking mode was explicitly requested, until the
-corresponding portion of the file is in the file cache (i.e., has been read off
-of the disk).
+<h1 id="semantics">File transfer operations</h1>
 
-There are basically only two ways of avoiding this:
+* [Send File:] [Send File] the server writes the contents of a file to an
+  arbitrary, client-provided file descriptor.
 
-1. **POSIX Asynchronous I/O**. There is a lot of information on the Web about
-the [shortcomings] [1] of [this] [2] [API] [3] and its various implementations, but
-the gist of it seems to be:
+* [Read File:] [Read File] the server writes the contents of a file to a pipe
+  connected to the client.
 
-  [1]: http://neugierig.org/software/blog/2011/12/nonblocking-disk-io.html
-  [2]: http://bert-hubert.blogspot.com/2012/05/on-linux-asynchronous-file-io.html
-  [3]: http://blog.libtorrent.org/2012/10/asynchronous-disk-io/
+* [Send Open File:] [Send Open File] the server sends a previously-opened file
+  to an arbitrary, client-provided file descriptor. This allows the client and
+  server to synchronise on the point between the opening of the file (i.e., the
+  provision of file metadata to the client) and the commencement of the
+  transfer.
 
-  * Implementation quality and consistency varies; some operations can still
-    block, and an operation which doesn't block on one implementation may block
-    on another
+# More information
 
-  * The API is complicated to use; e.g., how well does it integrate with
-    *select*, *poll*, *epoll*, *kqueue*?
+* [Client/server communications](messages.html)
 
-  * Some implementations simply use a background thread or thread pool (read on
-    for why this is not ideal)
-  
-2. **Blocking file I/O in background thread(s) or process(es)**.
+* [Code examples] (code_examples.html)
 
-### Processes over threads
+* [Implementation issues](implementation.html)
 
-The benefits of running in a separate process instead of a thread include:
-
-1. A single instance can be shared between multiple applications
-
-2. Clients benefit from process environment isolation
-
-3. Reduced system thread count (a single process vs. an additional thread per
-  client), resulting in:
-
-  * reduced contention on the OS' file I/O stack (file system, volume manager,
-    block device interface, disk driver, etc.) and the physical disk(s)
-
-  * more regular file I/O usage patterns
-
-  * a decoupling of the application thread count and the I/O thread count
-
-Although various optimisations such as caching and I/O operation serialisation
-are transparently employed by the operating system and the physical disk,
-reducing contention at the application level can still be beneficial to
-performance.
-
-#### Contention in the File I/O Stack
-
-There is a multi-layer software stack between the application and the physical
-disk within which there are multiple points of contention such as file system
-locks and kernel I/O queues. Contention on these points increases with thread
-count.
-
-#### More Regular Usage Patterns
-
-(*Usage patterns are not of much concern for solid-state drives*.)
-
-Consider a server sending files to one or more clients over a network. It would
-make sense for the server to fill the client socket's send buffer with as much
-file content as it can hold before moving on to the next client's
-transfer. Assuming that the socket's send buffer is larger than the file's
-optimal I/O block size (a very realistic assumption), multiple reads would be
-required.
-
-If this were the only thread using the disk, the reads would be issued
-sequentially, which is very efficient. However, the more threads performing file
-I/O there are, the more likely the reads are to be interleaved with unrelated
-file I/O operations, leading to less regular and thus less efficient usage
-patterns.
-
-#### Decoupling Application and I/O Thread Counts 
+  [status_channel]: messages.html#status_channel
+  [data_channel]: messages.html#data_channel
+  [data_copying]: implementation.html#data_copying
+  [impl_unix_sockets]: implementation.html#unix_sockets
+  [impl_udp_vs_tcp]: implementation.html#udp_vs_tcp
+  [impl_processes]: implementation.html#processes
+  [Read File]: messages.html#read_file
+  [Send File]: messages.html#send_file
+  [Send Open File]: messages.html#send_open_file
+  [File Information]: messages.html#file_information "File Information Message"
+  [Open File Information]: messages.html#open_file_information "Open File Information Message"
+  [Transfer Status]: messages.html#transfer_status "Transfer Status Message"
+  [1]: http://adrianchadd.blogspot.com/2013/12/experimenting-with-zero-copy-network-io.html
+  [2]: https://git.kernel.org/cgit/linux/kernel/git/stable/linux-stable.git/commit/?id=485ddb4b9741bafb70b22e5c1f9b4f37dc3e85bd
+  [3]: https://svnweb.freebsd.org/base?view=revision&revision=255608
+  [4]: http://neugierig.org/software/blog/2011/12/nonblocking-disk-io.html
+  [5]: http://bert-hubert.blogspot.com/2012/05/on-linux-asynchronous-file-io.html
+  [6]: http://blog.libtorrent.org/2012/10/asynchronous-disk-io/
+  [unix]: http://linux.die.net/man/7/unix "unix(7)"
+  [open]: http://linux.die.net/man/2/open "open(2)"
+  [close]: http://linux.die.net/man/2/close "close(2)"
+  [stat]: http://linux.die.net/man/2/stat "stat(2)"
+  [fstat]: http://linux.die.net/man/2/fstat "fstat(2)"
+  [signalfd]: http://linux.die.net/man/2/signalfd "signalfd(2)"
+  [splice]: http://linux.die.net/man/2/splice "splice(2)"
+  [sendfile]: https://www.freebsd.org/cgi/man.cgi?query=sendfile "sendfile(2)"
+  [select]: http://linux.die.net/man/2/select "select(2)"
+  [poll]: http://linux.die.net/man/2/poll "poll(2)"
+  [epoll]: http://linux.die.net/man/7/epoll "epoll(7)"
+  [kqueue]: https://www.freebsd.org/cgi/man.cgi?query=kqueue "kqueue(2)"
+  [kqueue_freebsd]: https://www.freebsd.org/cgi/man.cgi?query=kqueue "kqueue(2)"
+  [kqueue_osx]: https://developer.apple.com/library/Mac/documentation/Darwin/Reference/ManPages/man2/kqueue.2.html "kqueue(2)"

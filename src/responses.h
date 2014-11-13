@@ -57,7 +57,7 @@ enum {
 };
 
 enum {
-    /* No error */
+    /** No error */
     FIOD_STAT_OK = 0
 };
 

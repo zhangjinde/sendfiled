@@ -156,13 +156,8 @@ bu:
 	git gc --quiet
 	tarsnap --exclude $(builddir) --exclude $(htmldir) -cf $(archive_name) .
 
-%.png: %.odg
-	$(LODRAW) --headless --convert-to png  --outdir $(htmldir)/img $<
-	$(CONVERT) -resize 50% -trim \
-	$(htmldir)/img/$@ $(htmldir)/img/$(@:%.png=%_small.png)
-
 .PHONY: doc
-doc: $(doc_img_src:%.odg=%.png)
+doc:
 	$(DOXYGEN) doxyfile
 
 .PHONY: exports
