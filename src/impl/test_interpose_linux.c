@@ -38,6 +38,10 @@
 
 #include "test_interpose_impl.h"
 
+/* Turning off '-pedantic' for the cast from dlsym() to function pointer. */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-pedantic"
+
 DEFINE_MOCK_CONSTRUCTS(write)
 DEFINE_MOCK_CONSTRUCTS(splice)
 DEFINE_MOCK_CONSTRUCTS(sendfile)
@@ -78,3 +82,5 @@ ssize_t sendfile(int out_fd, int in_fd, off_t* offset, size_t count)
 
     return real_sendfile(out_fd, in_fd, offset, count);
 }
+
+#pragma GCC diagnostic pop

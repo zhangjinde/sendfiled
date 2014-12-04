@@ -232,7 +232,7 @@ TEST_F(FiodProcSmallFileFix, file_not_found)
     // Request ACK
     const ssize_t nread {read(stat_fd, buf, sizeof(ack))};
     ASSERT_EQ(sizeof(struct prot_hdr), nread);
-    EXPECT_EQ(FIOD_XFER_STAT, fiod_get_cmd(buf));
+    EXPECT_EQ(FIOD_FILE_INFO, fiod_get_cmd(buf));
     EXPECT_EQ(ENOENT, fiod_get_stat(buf));
     EXPECT_FALSE(fiod_unmarshal_xfer_stat(&ack, buf));
 }

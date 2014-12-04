@@ -73,10 +73,14 @@ bool proc_daemonise(const int* noclose_fds, const size_t nfds)
       (Not sure what this does, to be honest.)
      */
     struct sigaction sa = {
+#ifdef __clang__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdisabled-macro-expansion"
+#endif
         .sa_handler = SIG_IGN
+#ifdef __clang__
 #pragma GCC diagnostic pop
+#endif
     };
     sigemptyset(&sa.sa_mask);
 

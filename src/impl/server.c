@@ -193,8 +193,13 @@ static void undo_add_xfer(struct server*, struct resrc_xfer*);
 */
 static void delete_xfer(void* p);
 
-/** Sends an error to the client (over the status channel) */
-static bool send_err(int fd, int err);
+/** Sends an error in response to a request to the client (over the status
+    channel) */
+static bool send_req_err(int fd, int err);
+
+/** Sends an error which occurred during a transfer to the client (over the
+    status channel) */
+static bool send_xfer_err(int fd, int err);
 
 static void close_channel_fds(struct resrc_xfer*);
 
@@ -231,7 +236,8 @@ bool srv_run(const int reqfd,
 
         if (nready == -1) {
             if (errno != EINTR && errno_is_fatal(errno)) {
-                syslog(LOG_ERR, "Fatal error in syspoll_poll(): [%m]\n");
+                syslog(LOG_ERR, "Fatal error in syspoll_poll(): [%s]\n",
+                       strerror(errno));
                 break;
             }
         } else if (!process_events(&ctx, nready, recvbuf, PROT_REQ_MAXSIZE)) {
@@ -306,7 +312,7 @@ static bool process_events(struct server* ctx,
                     if (xfer &&
                         xfer->cmd != PROT_CMD_SEND &&
                         xfer->cmd != PROT_CMD_READ) {
-                        send_err(xfer->stat_fd, ETIME);
+                        send_xfer_err(xfer->stat_fd, ETIME);
                         purge_xfer(ctx, xfer);
                     }
                 }
@@ -402,7 +408,7 @@ static bool handle_reqfd(struct server* ctx,
                        (int)nfds);
 
             } else if (uid != ctx->uid) {
-                send_err(recvd_fds[0], EACCES);
+                send_xfer_err(recvd_fds[0], EACCES);
                 close_fds(recvd_fds, nfds);
 
             } else if (!process_request(ctx,
@@ -430,14 +436,13 @@ static bool send_open_file_info(int cli_fd,
                                 size_t txnid,
                                 const struct file_info* info);
 
+#define MALFORMED_REQ_MSG "Received malformed request\n"
+#define INVALID_CMD_MSG "Received invalid command ID (%d) in request\n"
+
 static bool process_request(struct server* ctx,
                             const void* buf, const size_t size,
                             const pid_t client_pid, const int* fds)
 {
-    static const char* const malformed_req_msg = "Received malformed request\n";
-    static const char* const invalid_cmd_msg =
-        "Received invalid command ID (%d) in request\n";
-
     if (fiod_get_stat(buf) != FIOD_STAT_OK) {
         syslog(LOG_NOTICE,
                "Received error status (%x) in request\n",
@@ -446,7 +451,7 @@ static bool process_request(struct server* ctx,
     }
 
     if (!PROT_IS_REQUEST(fiod_get_cmd(buf))) {
-        syslog(LOG_NOTICE, invalid_cmd_msg, fiod_get_cmd(buf));
+        syslog(LOG_NOTICE, INVALID_CMD_MSG, fiod_get_cmd(buf));
         return false;
     }
 
@@ -454,7 +459,7 @@ static bool process_request(struct server* ctx,
     case PROT_CMD_FILE_OPEN: {
         struct prot_request pdu;
         if (!prot_unmarshal_request(&pdu, buf, size)) {
-            syslog(LOG_NOTICE, malformed_req_msg);
+            syslog(LOG_NOTICE, MALFORMED_REQ_MSG);
             /* TODO: send NACK */
             return false;
         }
@@ -467,7 +472,7 @@ static bool process_request(struct server* ctx,
                                                               &finfo);
 
         if (!timer) {
-            send_err(fds[0], errno);
+            send_req_err(fds[0], errno);
             return false;
         }
 
@@ -477,7 +482,7 @@ static bool process_request(struct server* ctx,
     case PROT_CMD_SEND_OPEN: {
         struct prot_send_open pdu;
         if (!prot_unmarshal_send_open(&pdu, buf)) {
-            syslog(LOG_NOTICE, malformed_req_msg);
+            syslog(LOG_NOTICE, MALFORMED_REQ_MSG);
             return false;
         }
 
@@ -502,7 +507,7 @@ static bool process_request(struct server* ctx,
         xfer->dest_fd = fds[0];
 
         if (!register_xfer(ctx, xfer)) {
-            send_err(xfer->stat_fd, errno);
+            send_xfer_err(xfer->stat_fd, errno);
             undo_add_xfer(ctx, xfer);
             return false;
         }
@@ -512,7 +517,7 @@ static bool process_request(struct server* ctx,
     case PROT_CMD_SEND: {
         struct prot_request pdu;
         if (!prot_unmarshal_request(&pdu, buf, size)) {
-            syslog(LOG_NOTICE, malformed_req_msg);
+            syslog(LOG_NOTICE, MALFORMED_REQ_MSG);
             return false;
         }
 
@@ -525,12 +530,12 @@ static bool process_request(struct server* ctx,
                      &finfo);
 
         if (!xfer) {
-            send_err(fds[0], errno);
+            send_req_err(fds[0], errno);
             return false;
         }
 
         if (!register_xfer(ctx, xfer)) {
-            send_err(xfer->stat_fd, errno);
+            send_req_err(xfer->stat_fd, errno);
             undo_add_xfer(ctx, xfer);
             return false;
         }
@@ -540,7 +545,7 @@ static bool process_request(struct server* ctx,
     } break;
 
     default:
-        syslog(LOG_NOTICE, invalid_cmd_msg, fiod_get_cmd(buf));
+        syslog(LOG_NOTICE, INVALID_CMD_MSG, fiod_get_cmd(buf));
         return false;
     }
 
@@ -680,14 +685,16 @@ static bool send_term_resp(struct server* ctx,
 
     struct resrc_resp* resp = new_resrc_resp(x->stat_fd, pdu, pdu_size);
     if (!resp) {
-        syslog(LOG_EMERG, "Couldn't allocate memory for response retry [%m]\n");
+        syslog(LOG_EMERG, "Couldn't allocate memory for response retry [%s]\n",
+               strerror(errno));
         return false;
     }
 
     if (!syspoll_register(ctx->poller,
                           (struct syspoll_resrc*)resp,
                           SYSPOLL_WRITE)) {
-        syslog(LOG_EMERG, "Unable to register transfer's stat fd [%m]\n");
+        syslog(LOG_EMERG, "Unable to register transfer's stat fd [%s]\n",
+               strerror(errno));
         free(resp);
         return false;
     }
@@ -986,7 +993,17 @@ static bool send_xfer_stat(const int fd, const size_t file_size)
     return send_pdu(fd, &pdu, sizeof(pdu));
 }
 
-static bool send_err(const int fd, const int stat)
+static bool send_req_err(const int fd, const int stat)
+{
+    const struct prot_hdr pdu = {
+        .cmd = FIOD_FILE_INFO,
+        .stat = (uint8_t)stat
+    };
+    return send_pdu(fd, &pdu, sizeof(pdu));
+}
+
+
+static bool send_xfer_err(const int fd, const int stat)
 {
     const struct prot_hdr pdu = {
         .cmd = FIOD_XFER_STAT,

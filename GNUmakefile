@@ -8,29 +8,71 @@ srcdir := src
 docdir := doc
 htmldir := $(docdir)/html
 
-CC := /usr/local/llvm342/bin/clang
-CXX := /usr/local/llvm342/bin/clang++
+# ----------------
+# CLANG
+# ----------------
+#CC := /usr/local/llvm342/bin/clang
+#warnflags :=\
+#-Werror\
+#-Wall\
+#-Wextra\
+#-Weverything\
+#-Wno-documentation\
 
-lib_search_dirs := -L/usr/local/llvm342/lib
+# ----------------------
+# GCC/default C compiler
+# ----------------------
+CC := c99
+warnflags :=\
+-Werror\
+-Wall\
+-Wextra\
+-pedantic\
+-Wformat-security\
+-Winit-self\
+-Wswitch\
+-Wconversion\
+-Wbad-function-cast\
+-Wcast-align\
+-Wwrite-strings\
+-Wlogical-op\
+-Wmissing-prototypes -Wmissing-declarations\
+-Wpadded \
+-Winline \
+-Wdisabled-optimization\
+#-Wjump-misses-init\
+
+CXX := /usr/local/llvm342/bin/clang++
+warnflags_cxx := \
+-Wall\
+-Wextra\
+-Weverything\
+-Werror\
+-Wno-c++98-compat\
+-Wno-documentation\
+
+lib_search_dirs :=
+lib_search_dirs_cxx := -L/usr/local/llvm342/lib
 
 header_search_dirs :=\
 -I$(builddir)\
+
+header_search_dirs_cxx :=\
+	$(header_search_dirs) \
 -isystem/usr/local/llvm342/include\
 -isystem/usr/local/llvm342/include/c++/v1\
 
-warnflags :=\
--Weverything\
--Werror\
--Wno-documentation\
+ifdef NDEBUG
+	dbgflags := -O2
+else
+	dbgflags := -g -O0
+endif
 
-warnflags_cxx := $(warnflags) -Wno-c++98-compat
-
-dbgflags := -g -O0
 soflags := -fPIC -fvisibility=hidden
 
-CFLAGS := -std=c99 $(dbgflags) $(warnflags) $(header_search_dirs)
-CXXFLAGS := -std=c++11 -stdlib=libc++\
-$(dbgflags) $(warnflags_cxx) $(header_search_dirs)
+CFLAGS += $(dbgflags) $(warnflags) $(header_search_dirs)
+CXXFLAGS += -std=c++11 -stdlib=libc++\
+$(dbgflags) $(warnflags_cxx) $(header_search_dirs_cxx)
 
 DOXYGEN ?= doxygen
 NM ?= nm
@@ -132,7 +174,7 @@ $(builddir)/$(target_so): $(obj_c_client)
 	$(CC) $(CFLAGS) $(soflags) $(lib_search_dirs) -shared -o $@ $^ $(linkflags)
 
 $(builddir)/$(test_target): $(obj_c_server) $(obj_test) $(builddir)/$(target_so)
-	$(CXX) $(CXXFLAGS) $(lib_search_dirs) -o $@ $^ \
+	$(CXX) $(CXXFLAGS) $(lib_search_dirs_cxx) -o $@ $^ \
 	$(linkflags) -ldl -lgtest -lgtest_main
 
 .PHONY: clean

@@ -36,8 +36,8 @@
 static size_t clp2(const size_t x)
 {
     size_t i = 0;
-    while ((1 << i) < x) { i++; }
-    return (1 << i);
+    while ((1U << i) < x) { i++; }
+    return (1U << i);
 }
 
 bool xfer_table_construct(struct xfer_table* this,

@@ -145,7 +145,7 @@ bool syspoll_timer(struct syspoll* this,
 
     struct itimerspec time;
     time.it_value.tv_sec = millis / 1000;
-    millis -= time.it_value.tv_sec * 1000;
+    millis -= (unsigned)time.it_value.tv_sec * 1000;
     time.it_value.tv_nsec = millis * 1000000;
     time.it_interval.tv_sec = 0;
     time.it_interval.tv_nsec = 0;

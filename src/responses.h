@@ -78,6 +78,14 @@ struct fiod_file_info {
 };
 
 /**
+   The size, in bytes, of a PDU header.
+
+   The header includes the command ID and status code.
+ */
+#define FIOD_HDR_SIZE (offsetof(struct fiod_file_info, stat) +  \
+                       sizeof(((struct fiod_file_info*)NULL)->stat))
+
+/**
    Information pertaining to an opened file.
 
    These files have been opened and read-locked, but their transfers are only

@@ -151,11 +151,22 @@ pid_t fiod_spawn(const char* srvname,
 
     /* exec_server() only returns on failure, so something has gone wrong */
 
- fail:
-    LOGERRNO("Couldn't exec server process");
-    write(syncfd, &errno, sizeof(errno));
+ fail: {
+        LOGERRNO("Couldn't exec server process");
 
-    exit(EXIT_FAILURE);
+        size_t total_nwritten = 0;
+
+        while (total_nwritten < sizeof(errno)) {
+            const ssize_t nwritten = write(syncfd, &errno, sizeof(errno));
+            if (nwritten < 0) {
+                LOGERRNO("Couldn't send errno to parent process");
+                break;
+            }
+            total_nwritten += (size_t)nwritten;
+        }
+
+        exit(EXIT_FAILURE);
+    }
 }
 
 static const char* make_exec_path(const char* bindir, const size_t bindir_len)

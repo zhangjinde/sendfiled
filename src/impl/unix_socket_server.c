@@ -33,6 +33,7 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -96,7 +97,8 @@ void us_stop_serving(const char* name, const int listenfd)
     const char* sockpath = us_make_sockpath(name);
     if (!sockpath) {
         syslog(LOG_ALERT,
-               "Unable to generate UNIX socket pathname [errno: %m]");
+               "Unable to generate UNIX socket pathname [errno: %s]\n",
+               strerror(errno));
     } else {
         unlink(sockpath);
         free((void*)sockpath);

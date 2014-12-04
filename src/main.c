@@ -160,7 +160,8 @@ int main(const int argc, char** argv)
     const bool success = srv_run(requestfd, (int)maxfiles, fd_timeout_ms);
 
     if (!success)
-        syslog(LOG_EMERG, "srv_run() failed [%m]; server shutting down\n");
+        syslog(LOG_EMERG, "srv_run() failed [%s]; server shutting down\n",
+               strerror(errno));
     else
         syslog(LOG_INFO, "Shutting down\n");
 

@@ -29,6 +29,8 @@
 #include <fcntl.h>
 #include <sys/sendfile.h>
 
+#include <stddef.h>
+
 #include "file_io.h"
 
 struct fio_ctx* fio_ctx_new(size_t capacity __attribute__((unused)))
