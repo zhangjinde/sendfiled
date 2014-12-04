@@ -119,7 +119,7 @@ struct FiodThreadFix : public ::testing::Test {
     void run_server() {
         const std::string path {srvname};
 
-        const int listenfd {us_serve(path.c_str())};
+        const int listenfd {us_serve(path.c_str(), getuid(), getgid())};
         if (listenfd == -1) {
             perror("us_serve");
             throw std::runtime_error("Couldn't start server");

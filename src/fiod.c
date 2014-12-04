@@ -228,6 +228,7 @@ static bool exec_server(const char* path,
     const char* args[] = {
         FIOD_PROGNAME,
         "-s", srvname,
+        "-r", "/",
         "-n", maxfiles_str,
         "-t", open_fd_timeout_ms_str,
         "-p",

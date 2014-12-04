@@ -24,8 +24,11 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#define _POSIX_C_SOURCE 200809L
+#define _XOPEN_SOURCE 500       /* For chroot, primarily */
 
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <syslog.h>
 #include <unistd.h>
 
@@ -47,25 +50,13 @@
 static const long OPEN_FD_TIMEOUT_MS_MAX = 60 * 60 * 1000;
 
 static void print_usage(const char* progname, long fd_timeout_ms);
-
-static bool sync_parent(int stat);
-
-static long opt_strtol(const char* s)
-{
-    errno = 0;
-    const long l = strtol(s, NULL, 10);
-
-    if (errno != 0 || l == 0 || l == LONG_MIN || l == LONG_MAX) {
-        if (errno != 0)
-            LOGERRNO("strtol");
-        return -1;
-    } else {
-        return l;
-    }
-}
+static bool sync_parent(int status_code);
+static long opt_strtol(const char*);
+static bool chroot_and_drop_privs(const char* root_dir);
 
 int main(const int argc, char** argv)
 {
+    const char* root_dir = NULL;
     const char* name = NULL;
     long maxfiles = 0;
     bool do_sync = false;
@@ -73,8 +64,11 @@ int main(const int argc, char** argv)
     bool daemonise = false;
 
     int opt;
-    while ((opt = getopt(argc, argv, "+s:n:t:pd")) != -1) {
+    while ((opt = getopt(argc, argv, "+s:n:t:r:pd")) != -1) {
         switch (opt) {
+        case 'r':
+            root_dir = optarg;
+            break;
         case 's':
             name = optarg;
             break;
@@ -118,7 +112,7 @@ int main(const int argc, char** argv)
         }
     }
 
-    if (!name || (maxfiles == 0)) {
+    if (!root_dir || !name || (maxfiles == 0)) {
         print_usage(argv[0], fd_timeout_ms);
         return EXIT_FAILURE;
     }
@@ -132,7 +126,7 @@ int main(const int argc, char** argv)
         return EXIT_FAILURE;;
     }
 
-    const int requestfd = us_serve(name);
+    const int requestfd = us_serve(name, getuid(), getgid());
     if (requestfd == -1) {
         if (do_sync && !sync_parent(errno))
             LOGERRNO("Failed to write errno to sync fd");
@@ -150,20 +144,26 @@ int main(const int argc, char** argv)
     if (daemonise && !proc_daemonise(&requestfd, 1))
         return EXIT_FAILURE;
 
-    openlog(FIOD_PROGNAME, LOG_CONS | LOG_PID, LOG_DAEMON);
+    openlog(FIOD_PROGNAME, LOG_NDELAY | LOG_CONS | LOG_PID, LOG_DAEMON);
+
+    if (!chroot_and_drop_privs(root_dir)) {
+        us_stop_serving(name, requestfd);
+        return EXIT_FAILURE;
+    }
 
     syslog(LOG_INFO,
-           "Starting; name: %s;"
+           "Starting; name: %s; root_dir: %s;"
            " maxfiles: %ld; fd_timeout_ms: %ld\n",
-           name, maxfiles, fd_timeout_ms);
+           name, root_dir, maxfiles, fd_timeout_ms);
 
     const bool success = srv_run(requestfd, (int)maxfiles, fd_timeout_ms);
 
-    if (!success)
+    if (!success) {
         syslog(LOG_EMERG, "srv_run() failed [%s]; server shutting down\n",
                strerror(errno));
-    else
+    } else {
         syslog(LOG_INFO, "Shutting down\n");
+    }
 
     us_stop_serving(name, requestfd);
 
@@ -172,11 +172,63 @@ int main(const int argc, char** argv)
     return (success ? EXIT_SUCCESS : EXIT_FAILURE);
 }
 
+static bool chroot_and_drop_privs(const char* root_dir)
+{
+    const uid_t ruid = getuid();
+    const uid_t euid = geteuid();
+
+    if (ruid == 0) {
+        syslog(LOG_ERR, "Refusing to run as root\n");
+        return false;
+    }
+
+    if (euid != 0) {
+        syslog(LOG_ERR, "Executable doesn't appear to be setuid\n");
+        return false;
+    }
+
+    if (chroot(root_dir) == -1) {
+        syslog(LOG_ERR, "Couldn't chroot to %s\n", root_dir);
+        return false;
+    }
+
+    if (chdir("/") == -1) {
+        syslog(LOG_ERR, "Couldn't chdir to '/'\n");
+        return false;
+    }
+
+    if (setuid(ruid) == -1) {
+        syslog(LOG_ERR, "Couldn't setuid to UID %d: %s\n",
+               ruid, strerror(errno));
+        return false;
+    }
+
+    return true;
+}
+
+static long opt_strtol(const char* s)
+{
+    errno = 0;
+    const long l = strtol(s, NULL, 10);
+
+    if (errno != 0 || l == 0 || l == LONG_MIN || l == LONG_MAX) {
+        if (errno != 0)
+            LOGERRNO("strtol");
+        return -1;
+    } else {
+        return l;
+    }
+}
+
 static void print_usage(const char* progname, const long fd_timeout_ms)
 {
-    printf("Usage %s -s <server_name> -n <maxfiles>"
-           " [-p (sync with parent process)]"
-           " [-t <open_fd_timeout_ms> (default: %ld)]\n",
+    printf("Usage:\n"
+           "%s\n"
+           "-r <root_dir>\n"
+           "-s <server_name>\n"
+           "-n <maxfiles>\n"
+           "[-p (sync with parent process)]\n"
+           "[-t <open_fd_timeout_ms> (default: %ld)]\n",
            progname, fd_timeout_ms);
 }
 

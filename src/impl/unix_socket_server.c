@@ -31,6 +31,8 @@
 #include <syslog.h>
 #include <unistd.h>
 
+#include <sys/stat.h>
+
 #include <assert.h>
 #include <errno.h>
 #include <stddef.h>
@@ -45,12 +47,8 @@
 /* Defined in unix_sockets_<platform>.c */
 int us_socket(int, int, int);
 
-int us_serve(const char* name)
+int us_serve(const char* name, const uid_t socket_uid, const uid_t socket_gid)
 {
-    struct sockaddr_un un = {
-        .sun_family = AF_UNIX
-    };
-
     const int fd = us_socket(AF_UNIX, SOCK_DGRAM, 0);
     if (fd == -1)
         return -1;
@@ -60,31 +58,48 @@ int us_serve(const char* name)
     if (setsockopt(fd,
                    SOL_SOCKET, us_passcred_option(),
                    &on, sizeof(on)) < 0) {
-        goto fail;
+        goto fail1;
     }
 
-    const char* sockpath = us_make_sockpath(name);
+    /* FIXME: this could reside in the DATA segment as there are no other
+       threads at this time. */
+    const char* const sockpath = us_make_sockpath(name);
     if (!sockpath)
-        goto fail;
+        goto fail1;
 
     const size_t sockpath_len = strlen(sockpath);
 
+    unlink(sockpath);
+
+    struct sockaddr_un un = {
+        .sun_family = AF_UNIX
+    };
     memcpy(un.sun_path, sockpath, sockpath_len + 1);
-
-    free((void*)sockpath);
-
     const socklen_t addrlen = (socklen_t)(offsetof(struct sockaddr_un, sun_path) +
                                           sockpath_len + 1);
-
     if (bind(fd, (struct sockaddr*)&un, addrlen) == -1) {
         if (errno != EADDRINUSE)
             LOGERRNO("bind");
-        goto fail;
+        goto fail2;
     }
+
+    if (chown(sockpath, socket_uid, socket_gid) == -1) {
+        LOGERRNO("chown");
+        goto fail2;
+    }
+
+    if (chmod(sockpath, S_IRUSR | S_IWUSR | S_IXUSR) == -1) {
+        LOGERRNO("chmod");
+        goto fail2;
+    }
+
+    free((void*)sockpath);
 
     return fd;
 
- fail:
+ fail2:
+    free((void*)sockpath);
+ fail1:
     PRESERVE_ERRNO(close(fd));
 
     return -1;
