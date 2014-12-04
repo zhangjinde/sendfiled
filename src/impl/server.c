@@ -408,6 +408,8 @@ static bool handle_reqfd(struct server* ctx,
                        (int)nfds);
 
             } else if (uid != ctx->uid) {
+                syslog(LOG_ERR, "Invalid UID: expected %d; got %d\n",
+                       ctx->uid, uid);
                 send_xfer_err(recvd_fds[0], EACCES);
                 close_fds(recvd_fds, nfds);
 
