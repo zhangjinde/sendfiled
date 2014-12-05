@@ -51,13 +51,15 @@
 static int wait_child(pid_t pid);
 
 static bool exec_server(const char* filename,
+                        const char* srv_sockdir,
                         const char* srvname,
                         int maxfiles,
                         int open_fd_timeout_ms);
 
 static const char* make_exec_path(const char* bindir, size_t bindir_len);
 
-pid_t fiod_spawn(const char* srvname,
+pid_t fiod_spawn(const char* sockdir,
+                 const char* srvname,
                  const char* bindir,
                  const int maxfiles,
                  const int open_fd_timeout_ms)
@@ -147,7 +149,7 @@ pid_t fiod_spawn(const char* srvname,
     if (!path)
         goto fail;
 
-    exec_server(path, srvname, maxfiles, open_fd_timeout_ms);
+    exec_server(path, sockdir, srvname, maxfiles, open_fd_timeout_ms);
 
     /* exec_server() only returns on failure, so something has gone wrong */
 
@@ -192,6 +194,7 @@ static const char* make_exec_path(const char* bindir, const size_t bindir_len)
 }
 
 static bool exec_server(const char* path,
+                        const char* srv_sockdir,
                         const char* srvname,
                         const int maxfiles,
                         const int open_fd_timeout_ms)
@@ -227,6 +230,7 @@ static bool exec_server(const char* path,
 
     const char* args[] = {
         FIOD_PROGNAME,
+        "-S", srv_sockdir,
         "-s", srvname,
         "-r", "/",
         "-n", maxfiles_str,
@@ -241,9 +245,9 @@ static bool exec_server(const char* path,
     return false;
 }
 
-int fiod_connect(const char* name)
+int fiod_connect(const char* sockdir, const char* name)
 {
-    const int fd = us_connect(name);
+    const int fd = us_connect(sockdir, name);
     if (fd != -1)
         shutdown(fd, SHUT_RD);
     return fd;

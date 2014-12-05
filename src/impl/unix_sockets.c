@@ -30,29 +30,40 @@
 #include <sys/un.h>
 
 #include <errno.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "unix_sockets.h"
 
-/** @todo Directory not to be hard-coded */
-#define SOCKDIR "/tmp/"
 #define FIOD_PREFIX "fiod."
 #define SOCKEXT ".socket"
 
-const char* us_make_sockpath(const char* srvname)
+const char* us_make_sockpath(const char* dir, const char* srvname)
 {
     struct sockaddr_un un;
 
-    const size_t nonname_len = strlen(SOCKDIR FIOD_PREFIX SOCKEXT);
-    const size_t namelen_max = (sizeof(un.sun_path) - nonname_len);
-    const size_t namelen = strnlen(srvname, namelen_max);
-    const size_t pathlen = (nonname_len + namelen);
+    const size_t nonname_len = strlen(FIOD_PREFIX SOCKEXT);
+    size_t pathlen_max = (sizeof(un.sun_path) - nonname_len);
 
-    if (namelen >= namelen_max || pathlen >= sizeof(un.sun_path)) {
+    const size_t dirlen = strnlen(dir, pathlen_max);
+    if (dirlen == pathlen_max) {
         errno = ENAMETOOLONG;
         return NULL;
     }
+    pathlen_max -= dirlen;
+
+    const bool dir_needs_slash = (dirlen > 0 && dir[dirlen - 1] != '/');
+
+    const size_t namelen = strnlen(srvname, pathlen_max);
+    if (namelen == pathlen_max) {
+        errno = ENAMETOOLONG;
+        return NULL;
+    }
+
+    const size_t pathlen = (nonname_len +
+                            dirlen + (dir_needs_slash ? 1 : 0)  +
+                            namelen);
 
     char* path = malloc(pathlen + 1);
     if (!path)
@@ -60,8 +71,11 @@ const char* us_make_sockpath(const char* srvname)
 
     char* p = path;
 
-    memcpy(p, SOCKDIR, strlen(SOCKDIR));
-    p += strlen(SOCKDIR);
+    memcpy(p, dir, dirlen);
+    p += dirlen;
+
+    if (dir_needs_slash)
+        *p++ = '/';
 
     memcpy(p, FIOD_PREFIX, strlen(FIOD_PREFIX));
     p += strlen(FIOD_PREFIX);

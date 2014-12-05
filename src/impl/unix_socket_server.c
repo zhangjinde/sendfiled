@@ -47,7 +47,9 @@
 /* Defined in unix_sockets_<platform>.c */
 int us_socket(int, int, int);
 
-int us_serve(const char* name, const uid_t socket_uid, const uid_t socket_gid)
+int us_serve(const char* sockdir,
+             const char* srvname,
+             const uid_t socket_uid, const uid_t socket_gid)
 {
     const int fd = us_socket(AF_UNIX, SOCK_DGRAM, 0);
     if (fd == -1)
@@ -63,7 +65,7 @@ int us_serve(const char* name, const uid_t socket_uid, const uid_t socket_gid)
 
     /* FIXME: this could reside in the DATA segment as there are no other
        threads at this time. */
-    const char* const sockpath = us_make_sockpath(name);
+    const char* const sockpath = us_make_sockpath(sockdir, srvname);
     if (!sockpath)
         goto fail1;
 
@@ -105,11 +107,13 @@ int us_serve(const char* name, const uid_t socket_uid, const uid_t socket_gid)
     return -1;
 }
 
-void us_stop_serving(const char* name, const int listenfd)
+void us_stop_serving(const char* sockdir,
+                     const char* srv_name,
+                     const int listenfd)
 {
     close(listenfd);
 
-    const char* sockpath = us_make_sockpath(name);
+    const char* sockpath = us_make_sockpath(sockdir, srv_name);
     if (!sockpath) {
         syslog(LOG_ALERT,
                "Unable to generate UNIX socket pathname [errno: %s]\n",

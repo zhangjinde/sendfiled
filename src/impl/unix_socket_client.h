@@ -34,7 +34,7 @@
 struct iovec;
 struct msghdr;
 
-int us_connect(const char* server_name);
+int us_connect(const char* server_sockdir, const char* server_name);
 
 ssize_t us_sendv(int srv_fd,
                  const struct iovec* iovs, size_t niovs,

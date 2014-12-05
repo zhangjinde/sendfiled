@@ -8,6 +8,9 @@ srcdir := src
 docdir := doc
 htmldir := $(docdir)/html
 
+# The directory in which the server's UNIX socket will be located (default value)
+default_server_sockdir := /tmp
+
 # ----------------
 # CLANG
 # ----------------
@@ -132,6 +135,7 @@ config: $(builddir)/fiod_config.h
 
 $(builddir)/fiod_config.h: $(lastword $(MAKEFILE_LIST))
 	@echo "#define FIOD_PROGNAME \"$(projectname)\"" > $@
+	@echo "#define FIOD_SRV_SOCKDIR \"$(default_server_sockdir)\"" >> $@
 
 .PHONY: build_tests
 build_tests: $(builddir)/$(test_target)

@@ -31,11 +31,14 @@
    Constructs the full path to a UNIX socket file based on the provided server
    name.
 
+   @param dir The containing directory
+
    @param srvname The server name (*just* a name--not to contain any path
    components)
 
    @retval Non-NULL The path (to be freed by the caller).
  */
-const char* us_make_sockpath(const char* srvname);
+const char* us_make_sockpath(const char* dir,
+                             const char* srvname);
 
 #endif

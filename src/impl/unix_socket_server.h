@@ -37,9 +37,13 @@ struct msghdr;
 extern "C" {
 #endif
 
-    int us_serve(const char* name, uid_t socket_uid, uid_t socket_gid);
+    int us_serve(const char* sockdir,
+                 const char* srv_instance_name,
+                 uid_t socket_uid, uid_t socket_gid);
 
-    void us_stop_serving(const char* name, int request_fd);
+    void us_stop_serving(const char* sockdir,
+                         const char* srv_instance_name,
+                         int request_fd);
 
     /**
        Receives a message from a client.

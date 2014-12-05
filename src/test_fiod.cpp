@@ -33,6 +33,8 @@
 
 #include <gtest/gtest.h>
 
+#include <fiod_config.h>
+
 #include "impl/test_utils.hpp"
 
 #include "fiod.h"
@@ -59,7 +61,7 @@ struct FiodProcFix : public ::testing::Test {
     static pid_t srv_pid;
 
     static void SetUpTestCase() {
-        srv_pid = fiod_spawn(srvname.c_str(), "build", 1000, 1000);
+        srv_pid = fiod_spawn(FIOD_SRV_SOCKDIR, srvname.c_str(), "build", 1000, 1000);
         if (srv_pid == -1)
             throw std::runtime_error("Couldn't start daemon");
     }
@@ -74,7 +76,7 @@ struct FiodProcFix : public ::testing::Test {
         }
     }
 
-    FiodProcFix() : srv_fd(fiod_connect(srvname.c_str())) {
+    FiodProcFix() : srv_fd(fiod_connect(FIOD_SRV_SOCKDIR, srvname.c_str())) {
         if (!srv_fd)
             throw std::runtime_error("Couldn't connect to daemon");
     }
@@ -102,8 +104,9 @@ struct FiodThreadFix : public ::testing::Test {
 
         srv_barr.wait();
 
-        srv_fd = fiod_connect(srvname.c_str());
+        srv_fd = fiod_connect(FIOD_SRV_SOCKDIR, srvname.c_str());
         if (!srv_fd) {
+            perror("fiod_connect()");
             stop_thread();
             throw std::runtime_error("Couldn't connect to daemon");
         }
@@ -117,9 +120,9 @@ struct FiodThreadFix : public ::testing::Test {
     }
 
     void run_server() {
-        const std::string path {srvname};
-
-        const int listenfd {us_serve(path.c_str(), getuid(), getgid())};
+        const int listenfd {us_serve(FIOD_SRV_SOCKDIR,
+                                         srvname.c_str(),
+                                         getuid(), getgid())};
         if (listenfd == -1) {
             perror("us_serve");
             throw std::runtime_error("Couldn't start server");
@@ -129,7 +132,7 @@ struct FiodThreadFix : public ::testing::Test {
 
         srv_run(listenfd, maxfiles, OpenFileTimeoutMs);
 
-        us_stop_serving(path.c_str(), listenfd);
+        us_stop_serving(FIOD_SRV_SOCKDIR, srvname.c_str(), listenfd);
     }
 
     void stop_thread() {

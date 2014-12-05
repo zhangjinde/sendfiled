@@ -61,6 +61,9 @@ extern "C" {
     /**
        Spawns a server process.
 
+       @param sockdir The directory in which to place the server's UNIX socket
+       file.
+
        @param server_name The server instance name. (The name of the server's
        'listening' UNIX socket will be based on this value.)
 
@@ -80,7 +83,8 @@ extern "C" {
        server process, @a errno will contain the @e server process's @a errno
        value.
      */
-    pid_t fiod_spawn(const char* server_name,
+    pid_t fiod_spawn(const char* sockdir,
+                     const char* server_name,
                      const char* bindir,
                      int maxfiles,
                      int open_fd_timeout_ms) FIOD_API;
@@ -88,13 +92,17 @@ extern "C" {
     /**
        Connects to a running server instance.
 
+       @param server_sockdir The directory in which the server's UNIX socket is
+       located
+
        @param server_name The server instance name
 
        @retval >0 A socket connected to the server instance
 
        @retval -1 An error occurred
      */
-    int fiod_connect(const char* server_name) FIOD_API;
+    int fiod_connect(const char* server_sockdir,
+                     const char* server_name) FIOD_API;
 
     /**
        Shuts down a server instance.

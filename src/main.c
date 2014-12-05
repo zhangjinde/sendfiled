@@ -62,6 +62,7 @@ int main(const int argc, char** argv)
 {
     const char* srvname = NULL;
     const char* root_dir = NULL;
+    const char* sockdir = FIOD_SRV_SOCKDIR;
     const char* uname = NULL;
     const char* gname = NULL;
     long maxfiles = 0;
@@ -70,7 +71,7 @@ int main(const int argc, char** argv)
     bool daemonise = false;
 
     int opt;
-    while ((opt = getopt(argc, argv, "+s:n:t:r:u:g:pd")) != -1) {
+    while ((opt = getopt(argc, argv, "+s:S:n:t:r:u:g:pd")) != -1) {
         switch (opt) {
         case 'r':
             root_dir = optarg;
@@ -84,7 +85,9 @@ int main(const int argc, char** argv)
         case 's':
             srvname = optarg;
             break;
-
+        case 'S':
+            sockdir = optarg;
+            break;
         case 'n': {
             maxfiles = opt_strtol(optarg);
 
@@ -157,7 +160,7 @@ int main(const int argc, char** argv)
         return EXIT_FAILURE;;
     }
 
-    const int requestfd = us_serve(srvname, new_uid, new_gid);
+    const int requestfd = us_serve(sockdir, srvname, new_uid, new_gid);
     if (requestfd == -1) {
         if (do_sync && !sync_parent(errno))
             LOGERRNO("Failed to write errno to sync fd");
@@ -178,7 +181,7 @@ int main(const int argc, char** argv)
     openlog(FIOD_PROGNAME, LOG_NDELAY | LOG_CONS | LOG_PID, LOG_DAEMON);
 
     if (!chroot_and_drop_privs(root_dir, new_uid, new_gid)) {
-        us_stop_serving(srvname, requestfd);
+        us_stop_serving(sockdir, srvname, requestfd);
         goto fail1;
     }
 
@@ -199,12 +202,12 @@ int main(const int argc, char** argv)
         syslog(LOG_INFO, "Shutting down\n");
     }
 
-    us_stop_serving(srvname, requestfd);
+    us_stop_serving(sockdir, srvname, requestfd);
 
     return (success ? EXIT_SUCCESS : EXIT_FAILURE);
 
  fail1:
-    us_stop_serving(srvname, requestfd);
+    us_stop_serving(sockdir, srvname, requestfd);
 
     return EXIT_FAILURE;
 }
@@ -283,6 +286,8 @@ static void print_usage(const long fd_timeout_ms)
            "-r <root_dir> (chroot to this directory)\n"
            "-s <server_name> (user-friendly name to identify server instance)\n"
            "-n <maxfiles> (maximum number of concurrent file transfers)\n"
+           "[-d] (run as a daemon)\n"
+           "[-S <server_unix_socket_dir>] (default: \""FIOD_SRV_SOCKDIR"\")\n"
            "[-u <user_name>] (run as different user)\n"
            "[-g <group_name>] (run as different group)\n"
            "[-p (sync with parent process (via a pipe))]\n"

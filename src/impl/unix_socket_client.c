@@ -41,7 +41,7 @@
 /* Defined in unix_sockets_<platform>.c */
 int us_socket(int, int, int);
 
-int us_connect(const char* srvname)
+int us_connect(const char* sockdir, const char* srvname)
 {
     struct sockaddr_un srv_addr = {
         .sun_family = AF_UNIX
@@ -51,7 +51,7 @@ int us_connect(const char* srvname)
     if (fd == -1)
         return -1;
 
-    const char* sockpath = us_make_sockpath(srvname);
+    const char* sockpath = us_make_sockpath(sockdir, srvname);
     if (!sockpath)
         goto fail;
 
