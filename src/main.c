@@ -27,6 +27,8 @@
 #define _XOPEN_SOURCE 500       /* For chroot, primarily */
 
 #include <fcntl.h>
+#include <grp.h>
+#include <pwd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <syslog.h>
@@ -52,45 +54,53 @@ static const long OPEN_FD_TIMEOUT_MS_MAX = 60 * 60 * 1000;
 static void print_usage(const char* progname, long fd_timeout_ms);
 static bool sync_parent(int status_code);
 static long opt_strtol(const char*);
-static bool chroot_and_drop_privs(const char* root_dir);
+static bool chroot_and_drop_privs(const char* root_dir,
+                                  uid_t new_uid,
+                                  gid_t new_gid);
 
 int main(const int argc, char** argv)
 {
+    const char* srvname = NULL;
     const char* root_dir = NULL;
-    const char* name = NULL;
+    const char* uname = NULL;
+    const char* gname = NULL;
     long maxfiles = 0;
     bool do_sync = false;
     long fd_timeout_ms = 30000;
     bool daemonise = false;
 
     int opt;
-    while ((opt = getopt(argc, argv, "+s:n:t:r:pd")) != -1) {
+    while ((opt = getopt(argc, argv, "+s:n:t:r:u:g:pd")) != -1) {
         switch (opt) {
         case 'r':
             root_dir = optarg;
             break;
+        case 'u':
+            uname = optarg;
+            break;
+        case 'g':
+            gname = optarg;
+            break;
         case 's':
-            name = optarg;
+            srvname = optarg;
             break;
 
         case 'n': {
             maxfiles = opt_strtol(optarg);
+
             if (maxfiles == -1) {
-                const int tmp = errno;
-                fprintf(stderr, "Invalid value '%s' for max files\n", optarg);
-                errno = tmp;
+                LOGERRNOV("Invalid value '%s' for max files\n", optarg);
                 return EXIT_FAILURE;
             }
         } break;
 
         case 't':
             fd_timeout_ms = opt_strtol(optarg);
+
             if (fd_timeout_ms == -1 || fd_timeout_ms > OPEN_FD_TIMEOUT_MS_MAX) {
-                const int tmp = errno;
-                fprintf(stderr,
-                        "Invalid value '%s' for open file descriptor timeout\n",
-                        optarg);
-                errno = tmp;
+                LOGERRNOV("Invalid value '%s' for open"
+                          " file descriptor timeout\n",
+                          optarg);
                 return EXIT_FAILURE;
             }
             break;
@@ -112,9 +122,30 @@ int main(const int argc, char** argv)
         }
     }
 
-    if (!root_dir || !name || (maxfiles == 0)) {
+    if (!root_dir || !srvname || (maxfiles == 0)) {
         print_usage(argv[0], fd_timeout_ms);
         return EXIT_FAILURE;
+    }
+
+    uid_t new_uid = getuid();
+    gid_t new_gid = getgid();
+
+    if (uname) {
+        struct passwd* pwd = getpwnam(uname);
+        if (!pwd) {
+            syslog(LOG_ERR, "Couldn't find user %s\n", uname);
+            return EXIT_FAILURE;
+        }
+        new_uid = pwd->pw_uid;
+    }
+
+    if (gname) {
+        struct group* grp = getgrnam(gname);
+        if (!grp) {
+            syslog(LOG_ERR, "Couldn't find group %s\n", gname);
+            return EXIT_FAILURE;
+        }
+        new_gid = grp->gr_gid;
     }
 
     /* Ignore SIGPIPE */
@@ -126,7 +157,7 @@ int main(const int argc, char** argv)
         return EXIT_FAILURE;;
     }
 
-    const int requestfd = us_serve(name, getuid(), getgid());
+    const int requestfd = us_serve(srvname, new_uid, new_gid);
     if (requestfd == -1) {
         if (do_sync && !sync_parent(errno))
             LOGERRNO("Failed to write errno to sync fd");
@@ -146,15 +177,17 @@ int main(const int argc, char** argv)
 
     openlog(FIOD_PROGNAME, LOG_NDELAY | LOG_CONS | LOG_PID, LOG_DAEMON);
 
-    if (!chroot_and_drop_privs(root_dir)) {
-        us_stop_serving(name, requestfd);
+    if (!chroot_and_drop_privs(root_dir, new_uid, new_gid)) {
+        us_stop_serving(srvname, requestfd);
         return EXIT_FAILURE;
     }
 
     syslog(LOG_INFO,
            "Starting; name: %s; root_dir: %s;"
+           " uid: %d (%s); gid: %d (%s);"
            " maxfiles: %ld; fd_timeout_ms: %ld\n",
-           name, root_dir, maxfiles, fd_timeout_ms);
+           srvname, root_dir,
+           getuid(), uname, getgid(), gname, maxfiles, fd_timeout_ms);
 
     const bool success = srv_run(requestfd, (int)maxfiles, fd_timeout_ms);
 
@@ -165,20 +198,27 @@ int main(const int argc, char** argv)
         syslog(LOG_INFO, "Shutting down\n");
     }
 
-    us_stop_serving(name, requestfd);
+    us_stop_serving(srvname, requestfd);
 
     closelog();
 
     return (success ? EXIT_SUCCESS : EXIT_FAILURE);
 }
 
-static bool chroot_and_drop_privs(const char* root_dir)
+static bool chroot_and_drop_privs(const char* root_dir,
+                                  const uid_t new_uid,
+                                  const gid_t new_gid)
 {
-    const uid_t ruid = getuid();
     const uid_t euid = geteuid();
+    const gid_t gid = getgid();
 
-    if (ruid == 0) {
-        syslog(LOG_ERR, "Refusing to run as root\n");
+    if (new_uid == 0) {
+        syslog(LOG_ERR, "Refusing to run as root user\n");
+        return false;
+    }
+
+    if (new_gid == 0) {
+        syslog(LOG_ERR, "Refusing to switch to 'root' group\n");
         return false;
     }
 
@@ -197,9 +237,15 @@ static bool chroot_and_drop_privs(const char* root_dir)
         return false;
     }
 
-    if (setuid(ruid) == -1) {
+    if (new_gid != gid && setgid(new_gid) == -1) {
+        syslog(LOG_ERR, "Couldn't setgid to GID %d: %s\n",
+               new_gid, strerror(errno));
+        return false;
+    }
+
+    if (setuid(new_uid) == -1) {
         syslog(LOG_ERR, "Couldn't setuid to UID %d: %s\n",
-               ruid, strerror(errno));
+               new_uid, strerror(errno));
         return false;
     }
 
@@ -224,10 +270,12 @@ static void print_usage(const char* progname, const long fd_timeout_ms)
 {
     printf("Usage:\n"
            "%s\n"
-           "-r <root_dir>\n"
-           "-s <server_name>\n"
-           "-n <maxfiles>\n"
-           "[-p (sync with parent process)]\n"
+           "-r <root_dir> (chroot to this directory)\n"
+           "-s <server_name> (user-friendly name to identify server instance)\n"
+           "-n <maxfiles> (maximum number of concurrent file transfers)\n"
+           "[-u <user_name>] (run as different user)\n"
+           "[-g <group_name>] (run as different group)\n"
+           "[-p (sync with parent process (via a pipe))]\n"
            "[-t <open_fd_timeout_ms> (default: %ld)]\n",
            progname, fd_timeout_ms);
 }
