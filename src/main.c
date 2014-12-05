@@ -160,6 +160,11 @@ int main(const int argc, char** argv)
         return EXIT_FAILURE;;
     }
 
+    openlog(FIOD_PROGNAME, LOG_NDELAY | LOG_CONS | LOG_PID, LOG_DAEMON);
+
+    if (!chroot_and_drop_privs(root_dir, new_uid, new_gid))
+        return EXIT_FAILURE;
+
     const int requestfd = us_serve(sockdir, srvname, new_uid, new_gid);
     if (requestfd == -1) {
         if (do_sync && !sync_parent(errno))
@@ -170,20 +175,13 @@ int main(const int argc, char** argv)
     if (do_sync) {
         if (!sync_parent(0)) {
             LOGERRNO("Failed to sync with parent");
-            goto fail1;
+            return EXIT_FAILURE;
         }
         close(PROC_SYNCFD);
     }
 
     if (daemonise && !proc_daemonise(&requestfd, 1))
         goto fail1;
-
-    openlog(FIOD_PROGNAME, LOG_NDELAY | LOG_CONS | LOG_PID, LOG_DAEMON);
-
-    if (!chroot_and_drop_privs(root_dir, new_uid, new_gid)) {
-        us_stop_serving(sockdir, srvname, requestfd);
-        goto fail1;
-    }
 
     syslog(LOG_INFO,
            "Starting; name: %s; root_dir: \"%s\";"
