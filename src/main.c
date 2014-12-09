@@ -58,6 +58,43 @@ static bool chroot_and_drop_privs(const char* root_dir,
                                   uid_t new_uid,
                                   gid_t new_gid);
 
+/* Whether or not to sync with the parent process. This would be the case if
+   being spawned by fiod_spawn(), for example. */
+static bool do_sync = false;
+
+#define LOG_(msg)                                                       \
+    {                                                                   \
+        if (do_sync) {                                                  \
+            syslog(LOG_INFO, "%s: %s\n", __func__, msg);                \
+        } else {                                                        \
+            const int tmp__ = errno;                                    \
+            printf("%s: %s\n", __func__, msg);                          \
+            errno = tmp__;                                              \
+        }                                                               \
+    }                                                                   \
+
+#define LOGERRNO_(msg)                                                  \
+    {                                                                   \
+        if (do_sync) {                                                  \
+            syslog(LOG_ERR,                                             \
+                   "%s [errno: %d %s] %s\n",                            \
+                   __func__, errno, strerror(errno), msg);              \
+        } else {                                                        \
+            LOGERRNO(msg);                                              \
+        }                                                               \
+    }                                                                   \
+
+#define LOGERRNOV_(fmt, ...)                                            \
+    {                                                                   \
+        if (do_sync) {                                                  \
+            syslog(LOG_ERR,                                             \
+                   "%s [errno %d %s] "fmt"\n",                          \
+                   __func__, errno, strerror(errno), __VA_ARGS__);      \
+        } else {                                                        \
+            LOGERRNOV(fmt"\n", __VA_ARGS__);                            \
+        }                                                               \
+    }                                                                   \
+
 int main(const int argc, char** argv)
 {
     const char* srvname = NULL;
@@ -66,7 +103,6 @@ int main(const int argc, char** argv)
     const char* uname = NULL;
     const char* gname = NULL;
     long maxfiles = 0;
-    bool do_sync = false;
     long fd_timeout_ms = 30000;
     bool daemonise = false;
 
@@ -76,36 +112,29 @@ int main(const int argc, char** argv)
         case 'r':
             root_dir = optarg;
             break;
+
         case 'u':
             uname = optarg;
             break;
+
         case 'g':
             gname = optarg;
             break;
+
         case 's':
             srvname = optarg;
             break;
+
         case 'S':
             sockdir = optarg;
             break;
-        case 'n': {
-            maxfiles = opt_strtol(optarg);
 
-            if (maxfiles == -1) {
-                LOGERRNOV("Invalid value '%s' for max files\n", optarg);
-                return EXIT_FAILURE;
-            }
-        } break;
+        case 'n':
+            maxfiles = opt_strtol(optarg);
+            break;
 
         case 't':
             fd_timeout_ms = opt_strtol(optarg);
-
-            if (fd_timeout_ms == -1 || fd_timeout_ms > OPEN_FD_TIMEOUT_MS_MAX) {
-                LOGERRNOV("Invalid value '%s' for open"
-                          " file descriptor timeout\n",
-                          optarg);
-                return EXIT_FAILURE;
-            }
             break;
 
         case 'p':
@@ -125,9 +154,29 @@ int main(const int argc, char** argv)
         }
     }
 
-    if (!root_dir || !srvname || (maxfiles == 0)) {
-        print_usage(fd_timeout_ms);
-        return EXIT_FAILURE;
+    openlog(FIOD_PROGNAME, LOG_NDELAY | LOG_CONS | LOG_PID, LOG_DAEMON);
+
+    if (!root_dir || !srvname || maxfiles == 0) {
+        if (!do_sync)
+            print_usage(fd_timeout_ms);
+        LOG_("Missing command-line argument");
+        errno = EINVAL;
+        goto fail1;
+    }
+
+    if (maxfiles == -1) {
+        LOGERRNO_("Invalid value for max files");
+        goto fail1;
+    }
+
+    if (fd_timeout_ms == -1) {
+        LOGERRNO_("Invalid value for file descriptor timeout");
+        goto fail1;
+    }
+
+    if (fd_timeout_ms > OPEN_FD_TIMEOUT_MS_MAX) {
+        LOG_("Invalid value for file timeout");
+        goto fail1;
     }
 
     uid_t new_uid = getuid();
@@ -136,8 +185,8 @@ int main(const int argc, char** argv)
     if (uname) {
         struct passwd* pwd = getpwnam(uname);
         if (!pwd) {
-            syslog(LOG_ERR, "Couldn't find user %s\n", uname);
-            return EXIT_FAILURE;
+            LOGERRNOV_("Couldn't find user %s", uname);
+            goto fail1;
         }
         new_uid = pwd->pw_uid;
     }
@@ -145,8 +194,8 @@ int main(const int argc, char** argv)
     if (gname) {
         struct group* grp = getgrnam(gname);
         if (!grp) {
-            syslog(LOG_ERR, "Couldn't find group %s\n", gname);
-            return EXIT_FAILURE;
+            LOGERRNOV_("Couldn't find group %s", gname);
+            goto fail1;
         }
         new_gid = grp->gr_gid;
     }
@@ -156,32 +205,31 @@ int main(const int argc, char** argv)
     if (sigemptyset(&sigmask) == -1 ||
         sigaddset(&sigmask, SIGPIPE) == -1 ||
         sigprocmask(SIG_BLOCK, &sigmask, NULL) == -1) {
-        LOGERRNO("Couldn't ignore SIGPIPE");
-        return EXIT_FAILURE;;
+        LOGERRNO_("Couldn't ignore SIGPIPE");
+        goto fail1;
     }
 
-    openlog(FIOD_PROGNAME, LOG_NDELAY | LOG_CONS | LOG_PID, LOG_DAEMON);
-
     if (!chroot_and_drop_privs(root_dir, new_uid, new_gid))
-        return EXIT_FAILURE;
+        goto fail1;
 
     const int requestfd = us_serve(sockdir, srvname, new_uid, new_gid);
     if (requestfd == -1) {
-        if (do_sync && !sync_parent(errno))
-            LOGERRNO("Failed to write errno to sync fd");
-        return EXIT_FAILURE;
+        LOGERRNO_("Failed to write errno to sync fd");
+        goto fail1;
     }
 
     if (do_sync) {
         if (!sync_parent(0)) {
-            LOGERRNO("Failed to sync with parent");
-            return EXIT_FAILURE;
+            LOGERRNO_("Failed to sync with parent");
+            goto fail2;
         }
         close(PROC_SYNCFD);
     }
 
-    if (daemonise && !proc_daemonise(&requestfd, 1))
-        goto fail1;
+    if (daemonise && !proc_daemonise(&requestfd, 1)) {
+        LOGERRNO_("Couldn't enter daemon mode");
+        goto fail2;
+    }
 
     syslog(LOG_INFO,
            "Starting; name: %s; root_dir: \"%s\";"
@@ -204,8 +252,13 @@ int main(const int argc, char** argv)
 
     return (success ? EXIT_SUCCESS : EXIT_FAILURE);
 
- fail1:
+ fail2:
     us_stop_serving(sockdir, srvname, requestfd);
+ fail1:
+    if (do_sync && !sync_parent(errno)) {
+        syslog(LOG_ERR, "Couldn't sync with parent process; errno: %s\n",
+               strerror(errno));
+    }
 
     return EXIT_FAILURE;
 }
@@ -218,28 +271,31 @@ static bool chroot_and_drop_privs(const char* root_dir,
     const gid_t gid = getgid();
 
     if (new_uid == 0) {
-        syslog(LOG_ERR, "Refusing to run as root user\n");
+        errno = EPERM;
+        LOG_("Refusing to run as root user");
         return false;
     }
 
     if (new_gid == 0) {
-        syslog(LOG_ERR, "Refusing to switch to 'root' group\n");
+        errno = EPERM;
+        LOG_("Refusing to switch to 'root' group");
         return false;
     }
 
     if (strncmp(root_dir, "/", 2) != 0) {
         if (euid != 0) {
-            syslog(LOG_ERR, "Executable doesn't appear to be setuid\n");
+            errno = EACCES;
+            LOG_("Executable doesn't appear to be setuid");
             return false;
         }
 
         if (chroot(root_dir) == -1) {
-            syslog(LOG_ERR, "Couldn't chroot to %s\n", root_dir);
+            LOGERRNOV_("Couldn't chroot to %s", root_dir);
             return false;
         }
 
         if (chdir("/") == -1) {
-            syslog(LOG_ERR, "Couldn't chdir to '/'\n");
+            LOGERRNO_("Couldn't chdir to '/'");
             return false;
         }
     } else {
@@ -248,14 +304,12 @@ static bool chroot_and_drop_privs(const char* root_dir,
     }
 
     if (new_gid != gid && setgid(new_gid) == -1) {
-        syslog(LOG_ERR, "Couldn't setgid to GID %d: %s\n",
-               new_gid, strerror(errno));
+        LOGERRNOV_("Couldn't setgid to GID %d", new_gid);
         return false;
     }
 
     if (setuid(new_uid) == -1) {
-        syslog(LOG_ERR, "Couldn't setuid to UID %d: %s\n",
-               new_uid, strerror(errno));
+        LOGERRNOV_("Couldn't setuid to UID %d", new_uid);
         return false;
     }
 
@@ -269,7 +323,7 @@ static long opt_strtol(const char* s)
 
     if (errno != 0 || l == 0 || l == LONG_MIN || l == LONG_MAX) {
         if (errno != 0)
-            LOGERRNO("strtol");
+            LOGERRNO_("strtol");
         return -1;
     } else {
         return l;
