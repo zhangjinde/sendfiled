@@ -71,8 +71,6 @@ int us_serve(const char* sockdir,
 
     const size_t sockpath_len = strlen(sockpath);
 
-    unlink(sockpath);
-
     struct sockaddr_un un = {
         .sun_family = AF_UNIX
     };

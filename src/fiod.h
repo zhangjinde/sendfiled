@@ -61,14 +61,17 @@ extern "C" {
     /**
        Spawns a server process.
 
-       @param sockdir The directory in which to place the server's UNIX socket
-       file.
-
        @param server_name The server instance name. (The name of the server's
        'listening' UNIX socket will be based on this value.)
 
-       @param bindir The directory in which to look for the 'fiod' binary (the
-       name of the server binary).
+       @param sockdir The directory in which to place the server's UNIX socket
+       file.
+
+       @param root_dir The server's root directory. The process will @a
+       chroot(2) to it if it's anything but "/".
+
+       @param bindir The directory in which to look for the server application
+       binary.
 
        @param maxfiles The maximum number of concurrent file transfers
 
@@ -83,8 +86,9 @@ extern "C" {
        server process, @a errno will contain the @e server process's @a errno
        value.
      */
-    pid_t fiod_spawn(const char* sockdir,
-                     const char* server_name,
+    pid_t fiod_spawn(const char* server_name,
+                     const char* root_dir,
+                     const char* sockdir,
                      const char* bindir,
                      int maxfiles,
                      int open_fd_timeout_ms) FIOD_API;
