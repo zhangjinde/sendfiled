@@ -12,9 +12,9 @@ The server accepts requests on a UDP [UNIX domain][unix] socket.
 
 <h2 id="unix_sockets">Why UNIX domain sockets?</h2>
 
-The entire architecture is [predicated][status_channel] on the ability to
+The entire architecture is [predicated][status_channel] upon the ability to
 transfer open file descriptors between processes, and UNIX domain sockets are
-the only way of achieving that.
+the only way of achieving this.
 
 <h2 id="udp_vs_tcp">UDP vs. TCP</h2>
 
@@ -163,7 +163,7 @@ decided against for the following reasons:
   (e.g., HTTP), a significantly more complicated fiod client/server protocol.
 
 Another option that was considered was *POSIX shared memory*. Considering that a
-*fiod* client may be a server, each client may be processing multiple
+*fiod* client may itself be a server, each client may be processing multiple
 file-serving requests at a given time, these are the ways in which shared memory
 can be used to share headers with the fiod server:
 

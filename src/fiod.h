@@ -64,11 +64,11 @@ extern "C" {
        @param server_name The server instance name. (The name of the server's
        'listening' UNIX socket will be based on this value.)
 
+       @param root_dir The server's root directory. The process will @a
+       chroot(2) to it unless it's "/".
+
        @param sockdir The directory in which to place the server's UNIX socket
        file.
-
-       @param root_dir The server's root directory. The process will @a
-       chroot(2) to it if it's anything but "/".
 
        @param bindir The directory in which to look for the server application
        binary.
@@ -205,11 +205,12 @@ extern "C" {
                   bool stat_fd_nonblock) FIOD_API;
 
     /**
-       Requests the server to open and return information about a file.
+       Requests the server to open and return information about a file (leaving
+       it open).
 
        This operation is useful in cases where the client needs access to the
-       file metadata before the transfer begins. E.g., many protocols require
-       the file size to precede the file contents.
+       file metadata before the transfer begins, e.g. for inclusion in one or
+       more headers.
 
        The server will confirm the request on the status channel with a message
        of type struct fiod_open_file_info. Besides the file size and file system

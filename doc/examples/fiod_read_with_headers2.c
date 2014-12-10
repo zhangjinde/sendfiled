@@ -1,4 +1,4 @@
-if (ctx->state == AWAITING_ACK) {
+if (state == AWAITING_ACK) {
     struct fiod_open_file_info file_info;
 
     ssize_t nread = read(data_fd, buf, sizeof(file_info));
@@ -13,42 +13,34 @@ if (ctx->state == AWAITING_ACK) {
         goto fail;
 
     /* Store file size, to be sent with headers */
-    ctx->file_size = file_info.size;
-    ctx->nsent = 0;
+    file_size = file_info.size;
+    file_nsent = 0;
 
-    ctx->state = SENDING_HEADERS;
+    state = SENDING_HEADERS;
  }
 
-if (ctx->state == SENDING_HEADERS) {
+if (state == SENDING_HEADERS) {
     /* Compose headers and write them to the ultimate destination file
        descriptor */
 
-    int header_size = snprintf(buf,
-                               "Content-Length: %d\r\n\r\n",
-                               ctx->file_size);
+    int header_size = snprintf(buf, "Content-Length: %d\r\n\r\n", file_size);
 
-    if (write(sockfd, buf, header_size) != header_size)
-        goto fail;
+    write(sockfd, buf, header_size);
 
-    /* Headers have been written */
-
-    ctx->state = TRANSFERRING;
+    state = TRANSFERRING;
  }
 
-if (ctx->state == TRANSFERRING) {
+if (state == TRANSFERRING) {
     /* Splice file content from the data channel pipe to destination socket */
 
-    ssize_t nspliced = splice(data_fd, NULL, sockfd, NULL, ctx->blksize);
+    ssize_t nspliced = splice(data_fd, NULL, sockfd, NULL, file_blksize);
 
-    if (nspliced <= 0)
-        goto fail;
+    file_nsent += nspliced;
 
-    ctx->nsent += nspliced;
-
-    if (ctx->nsent == ctx->file_size) {
+    if (file_nsent == file_size) {
         log(INFO, "Transfer complete\n");
     } else {
         log(INFO, "Transfer progress: %ld/%ld bytes\n",
-            ctx->nsent, ctx->file_size);
+            file_nsent, file_size);
     }
  }
