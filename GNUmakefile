@@ -3,10 +3,22 @@ target := $(projectname)
 target_so := lib$(projectname).so
 test_target := tests
 
+prefix ?= /usr/local
+exec_prefix ?= $(prefix)
+bindir ?= $(exec_prefix)/bin
+libdir ?= $(exec_prefix)/lib
+includedir ?= $(prefix)/include
+datarootdir ?= $(prefix)/share
+datadir ?= $(datarootdir)
+docdir ?= $(datarootdir)/doc/$(projectname)
+htmldir ?= $(docdir)
+
 builddir := build
 srcdir := src
 docdir := doc
 htmldir := $(docdir)/html
+
+install := install
 
 # The directory in which the server's UNIX socket will be located (default value)
 default_server_sockdir := /tmp
@@ -180,6 +192,15 @@ $(builddir)/$(target_so): $(obj_c_client)
 $(builddir)/$(test_target): $(obj_c_server) $(obj_test) $(builddir)/$(target_so)
 	$(CXX) $(CXXFLAGS) $(lib_search_dirs_cxx) -o $@ $^ \
 	$(linkflags) -ldl -lgtest -lgtest_main
+
+.PHONY: install
+install: $(builddir)/$(target) $(builddir)/$(target_so)
+	$(install) -d $(bindir)
+	$(install) -d $(libdir)
+	$(install) $(builddir)/$(target) $(bindir)
+	$(install) $(builddir)/$(target_so) $(libdir)
+	$(install) -d $(includedir)/$(projectname)
+	$(install) -m 444 $(srcdir)/*.h $(includedir)/$(projectname)
 
 .PHONY: clean
 clean:
