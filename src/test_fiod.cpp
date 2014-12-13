@@ -64,7 +64,6 @@ struct FiodProcFix : public ::testing::Test {
         srv_pid = fiod_spawn(srvname.c_str(),
                              "/",
                              FIOD_SRV_SOCKDIR,
-                             "build",
                              1000, 1000);
         if (srv_pid == -1)
             throw std::runtime_error("Couldn't start daemon");

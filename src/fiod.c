@@ -50,30 +50,18 @@
 
 static int wait_child(pid_t pid);
 
-static bool exec_server(const char* filename,
-                        const char* srvname,
+static bool exec_server(const char* srvname,
                         const char* root_dir,
                         const char* srv_sockdir,
                         int maxfiles,
                         int open_fd_timeout_ms);
 
-static const char* make_exec_path(const char* bindir, size_t bindir_len);
-
 pid_t fiod_spawn(const char* srvname,
                  const char* root_dir,
                  const char* sockdir,
-                 const char* bindir,
                  const int maxfiles,
                  const int open_fd_timeout_ms)
 {
-    static const size_t dirpath_maxlen = 256;
-
-    const size_t bindir_len = strnlen(bindir, dirpath_maxlen);
-    if (bindir_len == dirpath_maxlen) {
-        errno = ENAMETOOLONG;
-        return -1;
-    }
-
     /* Pipe used to sync with child */
     int pfd[2];
 
@@ -147,11 +135,7 @@ pid_t fiod_spawn(const char* srvname,
     if (!proc_init_child(&PROC_SYNCFD, 1))
         goto fail;
 
-    const char* path = make_exec_path(bindir, bindir_len);
-    if (!path)
-        goto fail;
-
-    exec_server(path, srvname, root_dir, sockdir, maxfiles, open_fd_timeout_ms);
+    exec_server(srvname, root_dir, sockdir, maxfiles, open_fd_timeout_ms);
 
     /* exec_server() only returns on failure, so something has gone wrong */
 
@@ -173,30 +157,7 @@ pid_t fiod_spawn(const char* srvname,
     }
 }
 
-static const char* make_exec_path(const char* bindir, const size_t bindir_len)
-{
-    char* path = malloc(bindir_len + strlen("/") + strlen(FIOD_PROGNAME) + 1);
-    if (!path)
-        return NULL;
-
-    char* p = path;
-
-    memcpy(p, bindir, bindir_len);
-    p += bindir_len;
-
-    if (bindir[bindir_len - 1] != '/')
-        *p++ = '/';
-
-    memcpy(p, FIOD_PROGNAME, strlen(FIOD_PROGNAME));
-    p += strlen(FIOD_PROGNAME);
-
-    *p = '\0';
-
-    return path;
-}
-
-static bool exec_server(const char* path,
-                        const char* srvname,
+static bool exec_server(const char* srvname,
                         const char* root_dir,
                         const char* srv_sockdir,
                         const int maxfiles,
@@ -242,7 +203,7 @@ static bool exec_server(const char* path,
         NULL
     };
 
-    execve(path, (char**)args, (char**){NULL});
+    execvp(FIOD_PROGNAME, (char**)args);
 
     /* execve does not return on success */
     return false;

@@ -70,9 +70,6 @@ extern "C" {
        @param sockdir The directory in which to place the server's UNIX socket
        file.
 
-       @param bindir The directory in which to look for the server application
-       binary.
-
        @param maxfiles The maximum number of concurrent file transfers
 
        @param open_fd_timeout_ms The number of milliseconds after which open
@@ -89,7 +86,6 @@ extern "C" {
     pid_t fiod_spawn(const char* server_name,
                      const char* root_dir,
                      const char* sockdir,
-                     const char* bindir,
                      int maxfiles,
                      int open_fd_timeout_ms) FIOD_API;
 
