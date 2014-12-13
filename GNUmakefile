@@ -197,8 +197,8 @@ $(builddir)/$(test_target): $(obj_c_server) $(obj_test) $(builddir)/$(target_so)
 install: $(builddir)/$(target) $(builddir)/$(target_so)
 	$(install) -d $(bindir)
 	$(install) -d $(libdir)
-	$(install) $(builddir)/$(target) $(bindir)
-	$(install) $(builddir)/$(target_so) $(libdir)
+	$(install) -o root -g root -m 4555 $(builddir)/$(target) $(bindir)
+	$(install) -m 555 $(builddir)/$(target_so) $(libdir)
 	$(install) -d $(includedir)/$(projectname)
 	$(install) -m 444 $(srcdir)/*.h $(includedir)/$(projectname)
 
@@ -215,11 +215,13 @@ test: $(builddir)/$(test_target) $(builddir)/$(target)
 	$(info --------------)
 	$(info T E S T S)
 	$(info --------------)
-	@$< $(GTEST_FLAGS) --gtest_filter=$(GTEST_FILTER)
+# Set PATH to the builddir (only) in order to ensure the just-built application
+# binary is found instead of an installed version.
+	@env PATH=$(builddir) $< $(GTEST_FLAGS) --gtest_filter=$(GTEST_FILTER)
 
 archive_name := $(projectname)_`date +%Y-%m-%d_%H%M%S`
-.PHONY: bu
-bu:
+.PHONY: buol
+buol:
 	git gc --quiet
 	tarsnap --exclude $(builddir) --exclude $(htmldir) -cf $(archive_name) .
 
