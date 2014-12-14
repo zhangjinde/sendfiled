@@ -243,6 +243,35 @@ TEST_F(FiodProcSmallFileFix, file_not_found)
     EXPECT_FALSE(fiod_unmarshal_xfer_stat(&ack, buf));
 }
 
+// This test should fail for any file which is not a regular file.
+TEST_F(FiodProcFix, open_directory_fails)
+{
+    int data_pipe[2];
+
+    if (pipe(data_pipe) == -1)
+        FAIL() << "Couldn't create a pipe; errno: " << strerror(errno);
+
+    const test::unique_fd data_fd {data_pipe[0]};
+
+    const test::unique_fd stat_fd {fiod_send(srv_fd,
+                                             "/",
+                                             data_pipe[1],
+                                             0, 0, false)};
+    close(data_pipe[1]);
+
+    ASSERT_TRUE(stat_fd);
+
+    uint8_t buf [PROT_REQ_MAXSIZE];
+    struct fiod_xfer_stat ack;
+
+    // Request ACK
+    const ssize_t nread {read(stat_fd, buf, sizeof(ack))};
+    ASSERT_EQ(sizeof(struct prot_hdr), nread);
+
+    EXPECT_EQ(FIOD_FILE_INFO, fiod_get_cmd(buf));
+    EXPECT_EQ(EINVAL, fiod_get_stat(buf));
+}
+
 TEST_F(FiodProcSmallFileFix, send)
 {
     // Pipe to which file will be written

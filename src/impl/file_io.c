@@ -41,7 +41,10 @@
  */
 static bool lock_file(int fd, off_t offset, off_t len);
 
-static bool set_fstat(int fd, struct file_info*);
+/**
+   Sets @a errno to EINVAL if the descriptor does not refer to a regular file.
+ */
+static int stat_file(int fd, struct file_info*);
 
 int file_open_read(const char* name,
                    const off_t offset, const size_t len,
@@ -52,8 +55,8 @@ int file_open_read(const char* name,
     if (fd == -1)
         return -1;
 
-    if (!lock_file(fd, offset, (off_t)len) ||
-        !set_fstat(fd, info)) {
+    if (stat_file(fd, info) == -1 ||
+        !lock_file(fd, offset, (off_t)len)) {
         goto fail;
     }
 
@@ -87,12 +90,17 @@ static bool lock_file(const int fd, const off_t offset, const off_t len)
     return (fcntl(fd, F_SETLK, &lock) != -1);
 }
 
-static bool set_fstat(const int fd, struct file_info* info)
+static int stat_file(const int fd, struct file_info* info)
 {
     struct stat st;
 
     if (fstat(fd, &st) == -1)
-        return false;
+        return -1;
+
+    if (!S_ISREG(st.st_mode)) {
+        errno = EINVAL;
+        return -1;
+    }
 
     *info = (struct file_info) {
         .size = (size_t)st.st_size,
@@ -102,5 +110,5 @@ static bool set_fstat(const int fd, struct file_info* info)
         .blksize = (unsigned)st.st_blksize
     };
 
-    return true;
+    return 0;
 }
