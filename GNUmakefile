@@ -83,7 +83,8 @@ else
 	dbgflags := -g -O0
 endif
 
-soflags := -fPIC -fvisibility=hidden
+binflags := -fpie
+soflags := -fpic -fvisibility=hidden
 
 CFLAGS += $(dbgflags) $(warnflags) $(header_search_dirs)
 CXXFLAGS += -std=c++11 -stdlib=libc++\
@@ -172,7 +173,7 @@ $(builddir)/%.c.tst.d: %.c $(builddir)/$(projectname)_config.h
 	$(CC) $(CFLAGS) -MM -MT "$(builddir)/$*.c.tst.o $(builddir)/$*.c.tst.d" $< > $@
 
 $(builddir)/%.c.srv.o: %.c
-	$(CC) $(CFLAGS) -c -o $@ $<
+	$(CC) $(CFLAGS) $(binflags) -c -o $@ $<
 
 $(builddir)/%.c.cli.o: %.c
 	$(CC) $(CFLAGS) $(soflags) -c -o $@ $<
