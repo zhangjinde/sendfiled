@@ -48,7 +48,6 @@ struct syspoll
 {
     int epollfd;
     int sigfd;
-    sigset_t orig_sigmask;
     struct epoll_event* events;
     int nevents;
 };
@@ -82,7 +81,7 @@ struct syspoll* syspoll_new(const int maxevents)
     sigaddset(&sigmask, SIGTERM);
     sigaddset(&sigmask, SIGINT);
 
-    if (sigprocmask(SIG_BLOCK, &sigmask, &this->orig_sigmask) == -1)
+    if (sigprocmask(SIG_BLOCK, &sigmask, NULL) == -1)
         goto fail;
 
     this->sigfd = signalfd(-1, &sigmask, SFD_NONBLOCK | SFD_CLOEXEC);
@@ -105,7 +104,6 @@ void syspoll_delete(struct syspoll* this)
     if (this) {
         close(this->epollfd);
         close(this->sigfd);
-        sigprocmask(SIG_SETMASK, &this->orig_sigmask, NULL);
 
         free(this->events);
         free(this);
