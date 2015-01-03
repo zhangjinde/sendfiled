@@ -95,8 +95,12 @@ static bool do_sync = false;
         }                                                               \
     }                                                                   \
 
+extern char** environ;
+
 int main(const int argc, char** argv)
 {
+    environ = NULL;
+
     const char* srvname = NULL;
     const char* root_dir = NULL;
     const char* sockdir = FIOD_SRV_SOCKDIR;
