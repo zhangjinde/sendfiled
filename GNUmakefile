@@ -1,4 +1,4 @@
-projectname := fiod
+projectname := sendfiled
 target := $(projectname)
 target_so := lib$(projectname).so
 test_target := tests
@@ -109,9 +109,9 @@ unix_sockets_linux.c\
 util.c\
 
 src_client := $(src_common)\
-fiod.c\
-fiod_linux.c\
 protocol_client.c\
+sendfiled.c\
+sendfiled_linux.c\
 unix_socket_client.c\
 unix_socket_client_linux.c\
 
@@ -128,9 +128,9 @@ unix_socket_server_linux.c\
 
 src_test:=\
 protocol_client.c\
-test_fiod.cpp\
 test_interpose_linux.c \
 test_protocol.cpp\
+test_sendfiled.cpp\
 test_server_xfer_table.cpp\
 test_utils.cpp\
 
@@ -144,14 +144,14 @@ $(builddir)/test_%.cpp.tst.o: CXXFLAGS += -Wno-error
 all: config $(builddir)/$(target) $(builddir)/$(target_so) build_tests
 
 .PHONY: config
-config: $(builddir)/fiod_config.h
+config: $(builddir)/sfd_config.h
 
-$(builddir)/fiod_config.h: $(lastword $(MAKEFILE_LIST))
-	@echo "#define FIOD_PROGNAME \"$(projectname)\"" > $@
-	@echo "#define FIOD_SRV_SOCKDIR \"$(default_server_sockdir)\"" >> $@
+$(builddir)/sfd_config.h: $(lastword $(MAKEFILE_LIST))
+	@echo "#define SFD_PROGNAME \"$(projectname)\"" > $@
+	@echo "#define SFD_SRV_SOCKDIR \"$(default_server_sockdir)\"" >> $@
 
 .PHONY: build_tests
-build_tests: $(builddir)/$(test_target)
+build_tests: config $(builddir)/$(test_target)
 
 ifneq ($(MAKECMDGOALS), clean)
 -include $(builddir)/main.c.srv.d
@@ -212,13 +212,14 @@ else
 endif
 
 .PHONY: test
-test: $(builddir)/$(test_target) $(builddir)/$(target)
+test: config $(builddir)/$(test_target) $(builddir)/$(target)
 	$(info --------------)
 	$(info T E S T S)
 	$(info --------------)
 # Set PATH to the builddir (only) in order to ensure the just-built application
 # binary is found instead of an installed version.
-	@env PATH=$(builddir) $< $(GTEST_FLAGS) --gtest_filter=$(GTEST_FILTER)
+	@env PATH=$(builddir) $(builddir)/$(test_target) \
+$(GTEST_FLAGS) --gtest_filter=$(GTEST_FILTER)
 
 archive_name := $(projectname)_`date +%Y-%m-%d_%H%M%S`
 .PHONY: buol

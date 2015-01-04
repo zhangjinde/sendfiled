@@ -58,7 +58,7 @@ static bool marshal_req(struct prot_request* pdu,
     memset(pdu, 0, sizeof(*pdu));
 
     pdu->cmd = cmd;
-    pdu->stat = FIOD_STAT_OK;
+    pdu->stat = SFD_STAT_OK;
     pdu->offset = offset;
     pdu->len = len;
     pdu->filename = filename;
@@ -107,6 +107,6 @@ void prot_marshal_send_open(struct prot_send_open* pdu, const size_t txnid)
     memset(pdu, 0, sizeof(*pdu));
 
     pdu->cmd = PROT_CMD_SEND_OPEN;
-    pdu->stat = FIOD_STAT_OK;
+    pdu->stat = SFD_STAT_OK;
     pdu->txnid = txnid;
 }

@@ -42,24 +42,24 @@
 
   Most of this code is based on 'Advanced Programming in the UNIX Environment'
   by Stevens and Rago, section 13.3.
- */
+*/
 bool proc_daemonise(const int* noclose_fds, const size_t nfds)
 {
     /*
       Clear file creation mask.
-     */
+    */
     umask(0);
 
     /*
       Get maximum number of file descriptors.
-     */
+    */
     struct rlimit rl;
     if (getrlimit(RLIMIT_NOFILE, &rl) < 0)
         return false;
 
     /*
       Become a session leader to lose controlling TTY.
-     */
+    */
     pid_t pid = fork();
     if (pid < 0)
         return false;
@@ -71,7 +71,7 @@ bool proc_daemonise(const int* noclose_fds, const size_t nfds)
       Ensure future opens won’t allocate controlling TTYs.
 
       (Not sure what this does, to be honest.)
-     */
+    */
     struct sigaction sa = {
 #ifdef __clang__
 #pragma GCC diagnostic push
@@ -94,7 +94,7 @@ bool proc_daemonise(const int* noclose_fds, const size_t nfds)
     /*
       Change the current working directory to the root so we won’t prevent file
       systems from being unmounted.
-     */
+    */
     if (chdir("/") == -1)
         return false;
 

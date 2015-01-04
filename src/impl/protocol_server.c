@@ -41,7 +41,7 @@ bool prot_unmarshal_request(struct prot_request* pdu,
     if (size < PROT_REQ_MINSIZE)
         return false;
 
-    const int cmd = fiod_get_cmd(buf);
+    const int cmd = sfd_get_cmd(buf);
 
     if (cmd != PROT_CMD_SEND &&
         cmd != PROT_CMD_READ &&
@@ -49,7 +49,7 @@ bool prot_unmarshal_request(struct prot_request* pdu,
         return false;
     }
 
-    if (fiod_get_stat(buf) != FIOD_STAT_OK)
+    if (sfd_get_stat(buf) != SFD_STAT_OK)
         return false;
 
     /* Check that filename is NUL-terminated */
@@ -75,8 +75,8 @@ bool prot_unmarshal_request(struct prot_request* pdu,
 
 bool prot_unmarshal_send_open(struct prot_send_open* pdu, const void* buf)
 {
-    if (fiod_get_cmd(buf) != PROT_CMD_SEND_OPEN ||
-        fiod_get_stat(buf) != FIOD_STAT_OK) {
+    if (sfd_get_cmd(buf) != PROT_CMD_SEND_OPEN ||
+        sfd_get_stat(buf) != SFD_STAT_OK) {
         return false;
     }
 
@@ -94,7 +94,7 @@ bool prot_unmarshal_send_open(struct prot_send_open* pdu, const void* buf)
   field-at-a-time intialisation undoes the zeroing memset.
 */
 
-void prot_marshal_file_info(struct fiod_file_info* pdu,
+void prot_marshal_file_info(struct sfd_file_info* pdu,
                             const size_t file_size,
                             const time_t atime,
                             const time_t mtime,
@@ -102,15 +102,15 @@ void prot_marshal_file_info(struct fiod_file_info* pdu,
 {
     memset(pdu, 0, sizeof(*pdu));
 
-    pdu->cmd = FIOD_FILE_INFO;
-    pdu->stat = FIOD_STAT_OK;
+    pdu->cmd = SFD_FILE_INFO;
+    pdu->stat = SFD_STAT_OK;
     pdu->size = file_size;
     pdu->atime = atime;
     pdu->mtime = mtime;
     pdu->ctime = ctime;
 }
 
-void prot_marshal_open_file_info(struct fiod_open_file_info* pdu,
+void prot_marshal_open_file_info(struct sfd_open_file_info* pdu,
                                  const size_t file_size,
                                  const time_t atime,
                                  const time_t mtime,
@@ -119,8 +119,8 @@ void prot_marshal_open_file_info(struct fiod_open_file_info* pdu,
 {
     memset(pdu, 0, sizeof(*pdu));
 
-    pdu->cmd = FIOD_OPEN_FILE_INFO;
-    pdu->stat = FIOD_STAT_OK;
+    pdu->cmd = SFD_OPEN_FILE_INFO;
+    pdu->stat = SFD_STAT_OK;
     pdu->size = file_size;
     pdu->atime = atime;
     pdu->mtime = mtime;
@@ -128,11 +128,11 @@ void prot_marshal_open_file_info(struct fiod_open_file_info* pdu,
     pdu->txnid = txnid;
 }
 
-void prot_marshal_xfer_stat(struct fiod_xfer_stat* pdu, const size_t file_size)
+void prot_marshal_xfer_stat(struct sfd_xfer_stat* pdu, const size_t file_size)
 {
     memset(pdu, 0, sizeof(*pdu));
 
-    pdu->cmd = FIOD_XFER_STAT;
-    pdu->stat = FIOD_STAT_OK;
+    pdu->cmd = SFD_XFER_STAT;
+    pdu->stat = SFD_STAT_OK;
     pdu->size = file_size;
 }

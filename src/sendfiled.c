@@ -36,17 +36,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <fiod_config.h>
+#include <sfd_config.h>
 
 #include "impl/errors.h"
-#include "impl/fiod.h"
+#include "impl/sendfiled.h"
 #include "impl/process.h"
 #include "impl/protocol_client.h"
 #include "impl/server.h"
 #include "impl/unix_socket_client.h"
 #include "impl/util.h"
 
-#include "fiod.h"
+#include "sendfiled.h"
 
 static int wait_child(pid_t pid);
 
@@ -56,17 +56,17 @@ static bool exec_server(const char* srvname,
                         int maxfiles,
                         int open_fd_timeout_ms);
 
-pid_t fiod_spawn(const char* srvname,
-                 const char* root_dir,
-                 const char* sockdir,
-                 const int maxfiles,
-                 const int open_fd_timeout_ms)
+pid_t sfd_spawn(const char* srvname,
+                const char* root_dir,
+                const char* sockdir,
+                const int maxfiles,
+                const int open_fd_timeout_ms)
 {
     /* Pipe used to sync with child */
     int pfd[2];
 
-    if (fiod_pipe(pfd, O_CLOEXEC) == -1) {
-        LOGERRNO("fiod_pipe()");
+    if (sfd_pipe(pfd, O_CLOEXEC) == -1) {
+        LOGERRNO("sfd_pipe()");
         return -1;
     }
 
@@ -193,7 +193,7 @@ static bool exec_server(const char* srvname,
         return false;
 
     const char* args[] = {
-        FIOD_PROGNAME,
+        SFD_PROGNAME,
         "-S", srv_sockdir,
         "-s", srvname,
         "-r", root_dir,
@@ -203,13 +203,13 @@ static bool exec_server(const char* srvname,
         NULL
     };
 
-    execvp(FIOD_PROGNAME, (char**)args);
+    execvp(SFD_PROGNAME, (char**)args);
 
     /* execve does not return on success */
     return false;
 }
 
-int fiod_connect(const char* sockdir, const char* name)
+int sfd_connect(const char* sockdir, const char* name)
 {
     const int fd = us_connect(sockdir, name);
     if (fd != -1)
@@ -217,7 +217,7 @@ int fiod_connect(const char* sockdir, const char* name)
     return fd;
 }
 
-int fiod_shutdown(const pid_t pid)
+int sfd_shutdown(const pid_t pid)
 {
     if (kill(pid, SIGTERM) == -1) {
         LOGERRNOV("kill(%d, SIGTERM) failed\n", pid);
@@ -234,15 +234,15 @@ int fiod_shutdown(const pid_t pid)
                     .iov_len = req.filename_len + 1 }         \
     }
 
-int fiod_read(const int sockfd,
-              const char* filename,
-              const loff_t offset,
-              const size_t len,
-              const bool dest_fd_nonblock)
+int sfd_read(const int sockfd,
+             const char* filename,
+             const loff_t offset,
+             const size_t len,
+             const bool dest_fd_nonblock)
 {
     int fds[2];
 
-    if (fiod_pipe(fds, O_NONBLOCK | O_CLOEXEC) == -1)
+    if (sfd_pipe(fds, O_NONBLOCK | O_CLOEXEC) == -1)
         return -1;
 
     if (!dest_fd_nonblock && !set_nonblock(fds[0], false))
@@ -270,14 +270,14 @@ int fiod_read(const int sockfd,
     return -1;
 }
 
-int fiod_open(int srv_sockfd,
-              const char* filename,
-              loff_t offset, size_t len,
-              bool stat_fd_nonblock)
+int sfd_open(int srv_sockfd,
+             const char* filename,
+             loff_t offset, size_t len,
+             bool stat_fd_nonblock)
 {
     int fds[2];
 
-    if (fiod_pipe(fds, O_NONBLOCK | O_CLOEXEC) == -1)
+    if (sfd_pipe(fds, O_NONBLOCK | O_CLOEXEC) == -1)
         return -1;
 
     if (!stat_fd_nonblock && !set_nonblock(fds[0], false))
@@ -303,16 +303,16 @@ int fiod_open(int srv_sockfd,
     return -1;
 }
 
-int fiod_send(const int srv_sockfd,
-              const char* filename,
-              const int dest_fd,
-              const loff_t offset,
-              const size_t len,
-              const bool stat_fd_nonblock)
+int sfd_send(const int srv_sockfd,
+             const char* filename,
+             const int dest_fd,
+             const loff_t offset,
+             const size_t len,
+             const bool stat_fd_nonblock)
 {
     int fds[3];
 
-    if (fiod_pipe(fds, O_NONBLOCK | O_CLOEXEC) == -1)
+    if (sfd_pipe(fds, O_NONBLOCK | O_CLOEXEC) == -1)
         return -1;
 
     if (!stat_fd_nonblock && !set_nonblock(fds[0], false))
@@ -341,9 +341,9 @@ int fiod_send(const int srv_sockfd,
     return -1;
 }
 
-bool fiod_send_open(const int srv_sockfd,
-                    const size_t txnid,
-                    const int dest_fd)
+bool sfd_send_open(const int srv_sockfd,
+                   const size_t txnid,
+                   const int dest_fd)
 {
     struct prot_send_open pdu;
     prot_marshal_send_open(&pdu, txnid);

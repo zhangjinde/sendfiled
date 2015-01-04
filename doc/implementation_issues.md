@@ -103,12 +103,12 @@ There is a lot of information on the Web about the [shortcomings] [4] of [this]
     block, and an operation which *doesn't* block on one implementation *may*
     block on another.
 
-  * The *AIO* API is more complicated. *Fiod*'s client API has the luxury of not
+  * The *AIO* API is more complicated. *Sendfiled*'s client API has the luxury of not
     having to support many different types of I/O, allowing its interface to be
     simple and to-the-point.
 
   * Inconsistent and non-portable integration with event-notification
-    systems. *Fiod* was written with event-based clients in mind, hence its file
+    systems. *Sendfiled* was written with event-based clients in mind, hence its file
     descriptor-based interface. *AIO*, on the other hand, has two notification
     mechanisms: callbacks and signals, the former of which cannot be integrated.
 
@@ -141,7 +141,7 @@ Some of the convenient side-effects include:
    manager, block device interface, disk driver, etc.) and the physical disk
    itself. Applications that have a dedicated file I/O thread are less of a
    problem, but may still contend for the file I/O stack with *other
-   applications*. Because *fiod* is implemented in processes instead of threads,
+   applications*. Because *sendfiled* is implemented in processes instead of threads,
    it is possible to run one server instance per disk or disk controller, for
    example, without having to be concerned with the effect this may have on
    contention for other resources.
@@ -160,12 +160,12 @@ decided against for the following reasons:
 * The server would need to be able to detect the file metadata insertion
   point(s) within the headers, something which would require the examination of
   header data and, in the absence of knowledge of the application-layer protocol
-  (e.g., HTTP), a significantly more complicated fiod client/server protocol.
+  (e.g., HTTP), a significantly more complicated sendfiled client/server protocol.
 
 Another option that was considered was *POSIX shared memory*. Considering that a
-*fiod* client may itself be a server, each client may be processing multiple
+*sendfiled* client may itself be a server, each client may be processing multiple
 file-serving requests at a given time, these are the ways in which shared memory
-can be used to share headers with the fiod server:
+can be used to share headers with the sendfiled server:
 
 1. Each client has a single, application-wide shared memory segment to which the
   headers of multiple requests are written, requiring the synchronisation of
@@ -182,7 +182,7 @@ can be used to share headers with the fiod server:
   <tr><td>Linux</td><td>4,096</td></tr>
   </table>
 
-2. Each fiod client's client has its own shared memory segment. Besides the fact
+2. Each sendfiled client's client has its own shared memory segment. Besides the fact
   that access to each segment will still need to be synchronised with the
   server, having one for each request means that the total system-wide number of
   shared memory segments is very likely to hit implementation limits:

@@ -33,11 +33,11 @@
 
 #include <gtest/gtest.h>
 
-#include <fiod_config.h>
+#include <sfd_config.h>
 
 #include "impl/test_utils.hpp"
 
-#include "fiod.h"
+#include "sendfiled.h"
 #include "impl/protocol_client.h"
 #include "impl/server.h"
 #include "impl/test_interpose.h"
@@ -56,14 +56,14 @@ bool wouldblock(const ssize_t err) noexcept
 }
 
 /// Base fixture which runs the server in a separate process
-struct FiodProcFix : public ::testing::Test {
+struct SfdProcFix : public ::testing::Test {
     static const std::string srvname;
     static pid_t srv_pid;
 
     static void SetUpTestCase() {
-        srv_pid = fiod_spawn(srvname.c_str(),
+        srv_pid = sfd_spawn(srvname.c_str(),
                              "/",
-                             FIOD_SRV_SOCKDIR,
+                             SFD_SRV_SOCKDIR,
                              1000, 1000);
         if (srv_pid == -1)
             throw std::runtime_error("Couldn't start daemon");
@@ -71,7 +71,7 @@ struct FiodProcFix : public ::testing::Test {
 
     static void TearDownTestCase() {
         if (srv_pid > 0) {
-            const int status {fiod_shutdown(srv_pid)};
+            const int status {sfd_shutdown(srv_pid)};
             if (!WIFEXITED(status))
                 std::fprintf(stderr, "Daemon has not exited\n");
             if (WEXITSTATUS(status) != EXIT_SUCCESS)
@@ -79,7 +79,7 @@ struct FiodProcFix : public ::testing::Test {
         }
     }
 
-    FiodProcFix() : srv_fd(fiod_connect(FIOD_SRV_SOCKDIR, srvname.c_str())) {
+    SfdProcFix() : srv_fd(sfd_connect(SFD_SRV_SOCKDIR, srvname.c_str())) {
         if (!srv_fd)
             throw std::runtime_error("Couldn't connect to daemon");
     }
@@ -87,8 +87,8 @@ struct FiodProcFix : public ::testing::Test {
     test::unique_fd srv_fd;
 };
 
-const std::string FiodProcFix::srvname {"testing123"};
-pid_t FiodProcFix::srv_pid;
+const std::string SfdProcFix::srvname {"testing123"};
+pid_t SfdProcFix::srv_pid;
 
 /**
  * Base fixture which runs the server in a thread instead of a process.
@@ -97,25 +97,25 @@ pid_t FiodProcFix::srv_pid;
  * system calls such as sendfile(2) and splice(2).
  */
 template<long OpenFileTimeoutMs>
-struct FiodThreadFix : public ::testing::Test {
+struct SfdThreadFix : public ::testing::Test {
     static constexpr long open_file_timeout_ms {OpenFileTimeoutMs};
     static constexpr int maxfiles {1000};
     static const std::string srvname;
 
-    FiodThreadFix() : srv_barr(2),
+    SfdThreadFix() : srv_barr(2),
                 thr([this] { run_server(); }) {
 
         srv_barr.wait();
 
-        srv_fd = fiod_connect(FIOD_SRV_SOCKDIR, srvname.c_str());
+        srv_fd = sfd_connect(SFD_SRV_SOCKDIR, srvname.c_str());
         if (!srv_fd) {
-            perror("fiod_connect()");
+            perror("sfd_connect()");
             stop_thread();
             throw std::runtime_error("Couldn't connect to daemon");
         }
     }
 
-    ~FiodThreadFix() {
+    ~SfdThreadFix() {
         stop_thread();
         mock_write_reset();
         mock_sendfile_reset();
@@ -123,7 +123,7 @@ struct FiodThreadFix : public ::testing::Test {
     }
 
     void run_server() {
-        const int listenfd {us_serve(FIOD_SRV_SOCKDIR,
+        const int listenfd {us_serve(SFD_SRV_SOCKDIR,
                                      srvname.c_str(),
                                      getuid(), getgid())};
         if (listenfd == -1) {
@@ -135,7 +135,7 @@ struct FiodThreadFix : public ::testing::Test {
 
         srv_run(listenfd, maxfiles, OpenFileTimeoutMs);
 
-        us_stop_serving(FIOD_SRV_SOCKDIR, srvname.c_str(), listenfd);
+        us_stop_serving(SFD_SRV_SOCKDIR, srvname.c_str(), listenfd);
     }
 
     void stop_thread() {
@@ -149,13 +149,13 @@ struct FiodThreadFix : public ::testing::Test {
 };
 
 template<long OpenFileTimeoutMs>
-constexpr long FiodThreadFix<OpenFileTimeoutMs>::open_file_timeout_ms;
+constexpr long SfdThreadFix<OpenFileTimeoutMs>::open_file_timeout_ms;
 
 template<long OpenFileTimeoutMs>
-constexpr int FiodThreadFix<OpenFileTimeoutMs>::maxfiles;
+constexpr int SfdThreadFix<OpenFileTimeoutMs>::maxfiles;
 
 template<long OpenFileTimeoutMs>
-const std::string FiodThreadFix<OpenFileTimeoutMs>::srvname {"testing123_thread"};
+const std::string SfdThreadFix<OpenFileTimeoutMs>::srvname {"testing123_thread"};
 
 struct SmallFile {
     static const std::string file_contents;
@@ -192,21 +192,21 @@ constexpr int LargeFile::NCHUNKS;
 constexpr int LargeFile::CHUNK_SIZE;
 std::vector<std::uint8_t> LargeFile::file_chunk(LargeFile::CHUNK_SIZE);
 
-struct FiodProcSmallFileFix : public FiodProcFix, public SmallFile {};
+struct SfdProcSmallFileFix : public SfdProcFix, public SmallFile {};
 
-struct FiodThreadSmallFileFix : public FiodThreadFix<1000>, public SmallFile {};
+struct SfdThreadSmallFileFix : public SfdThreadFix<1000>, public SmallFile {};
 
-struct FiodThreadSmallFileShortOpenFileTimeoutFix :
-        public FiodThreadFix<100>, public SmallFile {};
+struct SfdThreadSmallFileShortOpenFileTimeoutFix :
+        public SfdThreadFix<100>, public SmallFile {};
 
-struct FiodProcLargeFileFix : public FiodProcFix, public LargeFile {
+struct SfdProcLargeFileFix : public SfdProcFix, public LargeFile {
     static void SetUpTestCase() {
         LargeFile::SetUpTestCase();
-        FiodProcFix::SetUpTestCase();
+        SfdProcFix::SetUpTestCase();
     }
 };
 
-struct FiodThreadLargeFileFix : public FiodThreadFix<1000>, public LargeFile {
+struct SfdThreadLargeFileFix : public SfdThreadFix<1000>, public LargeFile {
     static void SetUpTestCase() {
         LargeFile::SetUpTestCase();
     }
@@ -216,7 +216,7 @@ struct FiodThreadLargeFileFix : public FiodThreadFix<1000>, public LargeFile {
 
 // Non-existent file should respond to request with status message containing
 // ENOENT.
-TEST_F(FiodProcSmallFileFix, file_not_found)
+TEST_F(SfdProcSmallFileFix, file_not_found)
 {
     int data_pipe[2];
 
@@ -224,7 +224,7 @@ TEST_F(FiodProcSmallFileFix, file_not_found)
 
     const test::unique_fd data_fd {data_pipe[0]};
 
-    const test::unique_fd stat_fd {fiod_send(srv_fd,
+    const test::unique_fd stat_fd {sfd_send(srv_fd,
                                              (file.name() + "XXXXXXXXX").c_str(),
                                              data_pipe[1],
                                              0, 0, false)};
@@ -233,18 +233,18 @@ TEST_F(FiodProcSmallFileFix, file_not_found)
     ASSERT_TRUE(stat_fd);
 
     uint8_t buf [PROT_REQ_MAXSIZE];
-    struct fiod_xfer_stat ack;
+    struct sfd_xfer_stat ack;
 
     // Request ACK
     const ssize_t nread {read(stat_fd, buf, sizeof(ack))};
     ASSERT_EQ(sizeof(struct prot_hdr), nread);
-    EXPECT_EQ(FIOD_FILE_INFO, fiod_get_cmd(buf));
-    EXPECT_EQ(ENOENT, fiod_get_stat(buf));
-    EXPECT_FALSE(fiod_unmarshal_xfer_stat(&ack, buf));
+    EXPECT_EQ(SFD_FILE_INFO, sfd_get_cmd(buf));
+    EXPECT_EQ(ENOENT, sfd_get_stat(buf));
+    EXPECT_FALSE(sfd_unmarshal_xfer_stat(&ack, buf));
 }
 
 // This test should fail for any file which is not a regular file.
-TEST_F(FiodProcFix, open_directory_fails)
+TEST_F(SfdProcFix, open_directory_fails)
 {
     int data_pipe[2];
 
@@ -253,7 +253,7 @@ TEST_F(FiodProcFix, open_directory_fails)
 
     const test::unique_fd data_fd {data_pipe[0]};
 
-    const test::unique_fd stat_fd {fiod_send(srv_fd,
+    const test::unique_fd stat_fd {sfd_send(srv_fd,
                                              "/",
                                              data_pipe[1],
                                              0, 0, false)};
@@ -262,24 +262,24 @@ TEST_F(FiodProcFix, open_directory_fails)
     ASSERT_TRUE(stat_fd);
 
     uint8_t buf [PROT_REQ_MAXSIZE];
-    struct fiod_xfer_stat ack;
+    struct sfd_xfer_stat ack;
 
     // Request ACK
     const ssize_t nread {read(stat_fd, buf, sizeof(ack))};
     ASSERT_EQ(sizeof(struct prot_hdr), nread);
 
-    EXPECT_EQ(FIOD_FILE_INFO, fiod_get_cmd(buf));
-    EXPECT_EQ(EINVAL, fiod_get_stat(buf));
+    EXPECT_EQ(SFD_FILE_INFO, sfd_get_cmd(buf));
+    EXPECT_EQ(EINVAL, sfd_get_stat(buf));
 }
 
-TEST_F(FiodProcSmallFileFix, send)
+TEST_F(SfdProcSmallFileFix, send)
 {
     // Pipe to which file will be written
     int data_pipe[2];
 
     ASSERT_NE(-1, pipe(data_pipe));
 
-    const test::unique_fd stat_fd {fiod_send(srv_fd,
+    const test::unique_fd stat_fd {sfd_send(srv_fd,
                                              file.name().c_str(),
                                              data_pipe[1],
                                              0, 0, false)};
@@ -291,23 +291,23 @@ TEST_F(FiodProcSmallFileFix, send)
 
     uint8_t buf [PROT_REQ_MAXSIZE];
     ssize_t nread;
-    struct fiod_file_info ack;
-    struct fiod_xfer_stat xfer_stat;
+    struct sfd_file_info ack;
+    struct sfd_xfer_stat xfer_stat;
 
     // Request ACK
     nread = read(stat_fd, buf, sizeof(ack));
     ASSERT_EQ(sizeof(ack), nread);
-    ASSERT_TRUE(fiod_unmarshal_file_info(&ack, buf));
-    EXPECT_EQ(FIOD_FILE_INFO, ack.cmd);
-    EXPECT_EQ(FIOD_STAT_OK, ack.stat);
+    ASSERT_TRUE(sfd_unmarshal_file_info(&ack, buf));
+    EXPECT_EQ(SFD_FILE_INFO, ack.cmd);
+    EXPECT_EQ(SFD_STAT_OK, ack.stat);
     EXPECT_EQ(file_contents.size(), ack.size);
 
     // Transfer status update
     nread = read(stat_fd, buf, sizeof(xfer_stat));
     ASSERT_EQ(sizeof(xfer_stat), nread);
-    ASSERT_TRUE(fiod_unmarshal_xfer_stat(&xfer_stat, buf));
-    EXPECT_EQ(FIOD_XFER_STAT, xfer_stat.cmd);
-    EXPECT_EQ(FIOD_STAT_OK, xfer_stat.stat);
+    ASSERT_TRUE(sfd_unmarshal_xfer_stat(&xfer_stat, buf));
+    EXPECT_EQ(SFD_XFER_STAT, xfer_stat.cmd);
+    EXPECT_EQ(SFD_STAT_OK, xfer_stat.stat);
     EXPECT_EQ(PROT_XFER_COMPLETE, xfer_stat.size);
 
     // File content
@@ -321,7 +321,7 @@ TEST_F(FiodProcSmallFileFix, send)
 /// Causes the final (and only, in this case) transfer status send to fail
 /// temporarily. The server should keep trying until it is able to send the
 /// final status.
-TEST_F(FiodThreadSmallFileFix, send_final_xfer_status_fails)
+TEST_F(SfdThreadSmallFileFix, send_final_xfer_status_fails)
 {
     // Pipe to which file will be written
     int data_pipe[2];
@@ -335,7 +335,7 @@ TEST_F(FiodThreadSmallFileFix, send_final_xfer_status_fails)
     const std::vector<ssize_t> retvals {MOCK_REALRV, -EWOULDBLOCK};
     mock_write_set_retval_n(retvals.data(), (int)retvals.size());
 
-    const test::unique_fd stat_fd {fiod_send(srv_fd,
+    const test::unique_fd stat_fd {sfd_send(srv_fd,
                                              file.name().c_str(),
                                              data_pipe[1],
                                              0, 0, false)};
@@ -347,23 +347,23 @@ TEST_F(FiodThreadSmallFileFix, send_final_xfer_status_fails)
 
     uint8_t buf [PROT_REQ_MAXSIZE];
     ssize_t nread;
-    struct fiod_file_info ack;
-    struct fiod_xfer_stat xfer_stat;
+    struct sfd_file_info ack;
+    struct sfd_xfer_stat xfer_stat;
 
     // Request ACK
     nread = read(stat_fd, buf, sizeof(ack));
     ASSERT_EQ(sizeof(ack), nread);
-    ASSERT_TRUE(fiod_unmarshal_file_info(&ack, buf));
-    EXPECT_EQ(FIOD_FILE_INFO, ack.cmd);
-    EXPECT_EQ(FIOD_STAT_OK, ack.stat);
+    ASSERT_TRUE(sfd_unmarshal_file_info(&ack, buf));
+    EXPECT_EQ(SFD_FILE_INFO, ack.cmd);
+    EXPECT_EQ(SFD_STAT_OK, ack.stat);
     EXPECT_EQ(file_contents.size(), ack.size);
 
     // Transfer status update
     nread = read(stat_fd, buf, sizeof(xfer_stat));
     ASSERT_EQ(sizeof(xfer_stat), nread);
-    ASSERT_TRUE(fiod_unmarshal_xfer_stat(&xfer_stat, buf));
-    EXPECT_EQ(FIOD_XFER_STAT, xfer_stat.cmd);
-    EXPECT_EQ(FIOD_STAT_OK, xfer_stat.stat);
+    ASSERT_TRUE(sfd_unmarshal_xfer_stat(&xfer_stat, buf));
+    EXPECT_EQ(SFD_XFER_STAT, xfer_stat.cmd);
+    EXPECT_EQ(SFD_STAT_OK, xfer_stat.stat);
     EXPECT_EQ(PROT_XFER_COMPLETE, xfer_stat.size);
 
     // File content
@@ -374,7 +374,7 @@ TEST_F(FiodThreadSmallFileFix, send_final_xfer_status_fails)
     EXPECT_EQ(file_contents, recvd_file);
 }
 
-TEST_F(FiodThreadSmallFileFix, send_error_send_fails)
+TEST_F(SfdThreadSmallFileFix, send_error_send_fails)
 {
     // Pipe to which file will be written
     int data_pipe[2];
@@ -388,7 +388,7 @@ TEST_F(FiodThreadSmallFileFix, send_error_send_fails)
     const std::vector<ssize_t> write_retvals {MOCK_REALRV, -EWOULDBLOCK};
     mock_write_set_retval_n(write_retvals.data(), (int)write_retvals.size());
 
-    const test::unique_fd stat_fd {fiod_send(srv_fd,
+    const test::unique_fd stat_fd {sfd_send(srv_fd,
                                              file.name().c_str(),
                                              data_pipe[1],
                                              0, 0, false)};
@@ -402,22 +402,22 @@ TEST_F(FiodThreadSmallFileFix, send_error_send_fails)
 
     uint8_t buf [PROT_REQ_MAXSIZE];
     ssize_t nread;
-    struct fiod_file_info ack;
+    struct sfd_file_info ack;
     struct prot_hdr err;
 
     // Request ACK
     nread = read(stat_fd, buf, sizeof(ack));
     ASSERT_EQ(sizeof(ack), nread);
-    ASSERT_TRUE(fiod_unmarshal_file_info(&ack, buf));
-    EXPECT_EQ(FIOD_FILE_INFO, ack.cmd);
-    EXPECT_EQ(FIOD_STAT_OK, ack.stat);
+    ASSERT_TRUE(sfd_unmarshal_file_info(&ack, buf));
+    EXPECT_EQ(SFD_FILE_INFO, ack.cmd);
+    EXPECT_EQ(SFD_STAT_OK, ack.stat);
     EXPECT_EQ(file_contents.size(), ack.size);
 
     // Error code
     nread = read(stat_fd, buf, sizeof(err));
     ASSERT_EQ(sizeof(err), nread);
     memcpy(&err, buf, sizeof(err));
-    EXPECT_EQ(FIOD_XFER_STAT, err.cmd);
+    EXPECT_EQ(SFD_XFER_STAT, err.cmd);
     EXPECT_EQ(EIO, err.stat);
 
     // Not checking data channel because server is under the impression that
@@ -425,23 +425,23 @@ TEST_F(FiodThreadSmallFileFix, send_error_send_fails)
     // data fd.
 }
 
-TEST_F(FiodProcSmallFileFix, read)
+TEST_F(SfdProcSmallFileFix, read)
 {
-    const test::unique_fd data_fd {fiod_read(srv_fd,
+    const test::unique_fd data_fd {sfd_read(srv_fd,
                                              file.name().c_str(),
                                              0, 0, false)};
     ASSERT_TRUE(data_fd);
 
     uint8_t buf [PROT_REQ_MAXSIZE];
     ssize_t nread;
-    struct fiod_file_info ack;
+    struct sfd_file_info ack;
 
     // Request ACK
     nread = read(data_fd, buf, sizeof(ack));
     ASSERT_EQ(sizeof(ack), nread);
-    ASSERT_TRUE(fiod_unmarshal_file_info(&ack, buf));
-    EXPECT_EQ(FIOD_FILE_INFO, ack.cmd);
-    EXPECT_EQ(FIOD_STAT_OK, ack.stat);
+    ASSERT_TRUE(sfd_unmarshal_file_info(&ack, buf));
+    EXPECT_EQ(SFD_FILE_INFO, ack.cmd);
+    EXPECT_EQ(SFD_STAT_OK, ack.stat);
     EXPECT_EQ(file_contents.size(), ack.size);
 
     // File content
@@ -452,7 +452,7 @@ TEST_F(FiodProcSmallFileFix, read)
     EXPECT_EQ(file_contents, recvd_file);
 }
 
-TEST_F(FiodProcSmallFileFix, send_open_file)
+TEST_F(SfdProcSmallFileFix, send_open_file)
 {
     // Create pipe to which file will ultimately be written
     int pfd [2];
@@ -461,26 +461,26 @@ TEST_F(FiodProcSmallFileFix, send_open_file)
     test::unique_fd pipe_write {pfd[1]};
 
     // Open the file
-    const test::unique_fd stat_fd {fiod_open(srv_fd,
+    const test::unique_fd stat_fd {sfd_open(srv_fd,
                                              file.name().c_str(),
                                              0, 0, false)};
     ASSERT_TRUE(stat_fd);
 
     ssize_t nread;
-    struct fiod_open_file_info ack;
+    struct sfd_open_file_info ack;
     uint8_t buf [sizeof(ack)];
 
     // Receive 'ACK' with file stats
     nread = read(stat_fd, buf, sizeof(ack));
     ASSERT_EQ(sizeof(ack), nread);
-    ASSERT_TRUE(fiod_unmarshal_open_file_info(&ack, buf));
-    EXPECT_EQ(FIOD_OPEN_FILE_INFO, ack.cmd);
-    EXPECT_EQ(FIOD_STAT_OK, ack.stat);
+    ASSERT_TRUE(sfd_unmarshal_open_file_info(&ack, buf));
+    EXPECT_EQ(SFD_OPEN_FILE_INFO, ack.cmd);
+    EXPECT_EQ(SFD_STAT_OK, ack.stat);
     EXPECT_EQ(file_contents.size(), ack.size);
     EXPECT_GT(ack.txnid, 0);
 
     // Send 'open file'
-    ASSERT_TRUE(fiod_send_open(srv_fd, ack.txnid, pipe_write));
+    ASSERT_TRUE(sfd_send_open(srv_fd, ack.txnid, pipe_write));
     ::close(pipe_write);
 
     // Read file data
@@ -491,10 +491,10 @@ TEST_F(FiodProcSmallFileFix, send_open_file)
     EXPECT_EQ(file_contents, recvd_file);
 
     // Read transfer status
-    struct fiod_xfer_stat xstat;
+    struct sfd_xfer_stat xstat;
     nread = read(stat_fd, buf, sizeof(buf));
     ASSERT_EQ(sizeof(xstat), nread);
-    ASSERT_TRUE(fiod_unmarshal_xfer_stat(&xstat, buf));
+    ASSERT_TRUE(sfd_unmarshal_xfer_stat(&xstat, buf));
     EXPECT_EQ(PROT_XFER_COMPLETE, xstat.size);
 }
 
@@ -503,7 +503,7 @@ TEST_F(FiodProcSmallFileFix, send_open_file)
  * file. By this time the timer should've expired and the open file closed,
  * resulting in an error message from the server.
  */
-TEST_F(FiodThreadSmallFileShortOpenFileTimeoutFix, open_file_timeout)
+TEST_F(SfdThreadSmallFileShortOpenFileTimeoutFix, open_file_timeout)
 {
     // Create pipe to which file will ultimately be written
     int pfd [2];
@@ -512,21 +512,21 @@ TEST_F(FiodThreadSmallFileShortOpenFileTimeoutFix, open_file_timeout)
     test::unique_fd pipe_write {pfd[1]};
 
     // Open the file
-    const test::unique_fd stat_fd {fiod_open(srv_fd,
+    const test::unique_fd stat_fd {sfd_open(srv_fd,
                                              file.name().c_str(),
                                              0, 0, false)};
     ASSERT_TRUE(stat_fd);
 
-    struct fiod_open_file_info ack;
+    struct sfd_open_file_info ack;
     uint8_t buf [sizeof(ack)];
     ssize_t nread;
 
     // Confirm that the file was opened
     nread = read(stat_fd, buf, sizeof(ack));
     ASSERT_EQ(sizeof(ack), nread);
-    ASSERT_EQ(FIOD_OPEN_FILE_INFO, fiod_get_cmd(buf));
-    ASSERT_EQ(FIOD_STAT_OK, fiod_get_stat(buf));
-    ASSERT_TRUE(fiod_unmarshal_open_file_info(&ack, buf));
+    ASSERT_EQ(SFD_OPEN_FILE_INFO, sfd_get_cmd(buf));
+    ASSERT_EQ(SFD_STAT_OK, sfd_get_stat(buf));
+    ASSERT_TRUE(sfd_unmarshal_open_file_info(&ack, buf));
     ASSERT_EQ(file_contents.size(), ack.size);
     ASSERT_GT(ack.txnid, 0);
 
@@ -534,15 +534,15 @@ TEST_F(FiodThreadSmallFileShortOpenFileTimeoutFix, open_file_timeout)
     std::this_thread::sleep_for(std::chrono::milliseconds{open_file_timeout_ms});
 
     // Send 'open file'
-    ASSERT_TRUE(fiod_send_open(srv_fd, ack.txnid, pipe_write));
+    ASSERT_TRUE(sfd_send_open(srv_fd, ack.txnid, pipe_write));
     ::close(pipe_write);
 
     // Server should've written the timeout error message to the status
     // channel...
     nread = read(stat_fd, buf, sizeof(buf));
     EXPECT_EQ(sizeof(struct prot_hdr), nread);
-    EXPECT_EQ(FIOD_XFER_STAT, fiod_get_cmd(buf));
-    EXPECT_EQ(ETIME, fiod_get_stat(buf));
+    EXPECT_EQ(SFD_XFER_STAT, sfd_get_cmd(buf));
+    EXPECT_EQ(ETIME, sfd_get_stat(buf));
     // ... and then should've closed the status channel.
     EXPECT_EQ(0, read(stat_fd, buf, sizeof(buf)));
 
@@ -552,26 +552,26 @@ TEST_F(FiodThreadSmallFileShortOpenFileTimeoutFix, open_file_timeout)
     EXPECT_EQ(0, nread);
 }
 
-TEST_F(FiodProcSmallFileFix, read_range)
+TEST_F(SfdProcSmallFileFix, read_range)
 {
     constexpr loff_t offset {3};
     constexpr size_t len {5};
 
-    const test::unique_fd data_fd {fiod_read(srv_fd,
+    const test::unique_fd data_fd {sfd_read(srv_fd,
                                              file.name().c_str(),
                                              offset, len, false)};
     ASSERT_TRUE(data_fd);
 
     uint8_t buf [PROT_REQ_MAXSIZE];
     ssize_t nread;
-    struct fiod_file_info ack;
+    struct sfd_file_info ack;
 
     // Request ACK
     nread = read(data_fd, buf, sizeof(ack));
     ASSERT_EQ(sizeof(ack), nread);
-    ASSERT_TRUE(fiod_unmarshal_file_info(&ack, buf));
-    EXPECT_EQ(FIOD_FILE_INFO, ack.cmd);
-    EXPECT_EQ(FIOD_STAT_OK, ack.stat);
+    ASSERT_TRUE(sfd_unmarshal_file_info(&ack, buf));
+    EXPECT_EQ(SFD_FILE_INFO, ack.cmd);
+    EXPECT_EQ(SFD_STAT_OK, ack.stat);
     EXPECT_EQ(len, ack.size);
 
     // File content
@@ -582,7 +582,7 @@ TEST_F(FiodProcSmallFileFix, read_range)
     EXPECT_EQ(0, memcmp(buf, file_contents.c_str() + offset, len));
 }
 
-TEST_F(FiodProcLargeFileFix, multiple_reading_clients)
+TEST_F(SfdProcLargeFileFix, multiple_reading_clients)
 {
     constexpr int nclients {10};
 
@@ -596,19 +596,19 @@ TEST_F(FiodProcLargeFileFix, multiple_reading_clients)
 
     for (int i = 0; i < nclients; i++) {
         client& cli {clients[i]};
-        cli.data_fd = fiod_read(srv_fd, file.name().c_str(), 0, 0, false);
+        cli.data_fd = sfd_read(srv_fd, file.name().c_str(), 0, 0, false);
         ASSERT_TRUE(cli.data_fd);
 
         uint8_t buf [PROT_REQ_MAXSIZE];
         ssize_t nread;
-        struct fiod_file_info ack;
+        struct sfd_file_info ack;
 
         // Request ACK
         nread = read(cli.data_fd, buf, sizeof(ack));
         ASSERT_EQ(sizeof(ack), nread);
-        ASSERT_TRUE(fiod_unmarshal_file_info(&ack, buf));
-        EXPECT_EQ(FIOD_FILE_INFO, ack.cmd);
-        EXPECT_EQ(FIOD_STAT_OK, ack.stat);
+        ASSERT_TRUE(sfd_unmarshal_file_info(&ack, buf));
+        EXPECT_EQ(SFD_FILE_INFO, ack.cmd);
+        EXPECT_EQ(SFD_STAT_OK, ack.stat);
         EXPECT_EQ(CHUNK_SIZE * NCHUNKS, ack.size);
     }
 
@@ -648,7 +648,7 @@ TEST_F(FiodProcLargeFileFix, multiple_reading_clients)
         EXPECT_EQ(NCHUNKS, clients[i].nchunks);
 }
 
-TEST_F(FiodProcFix, multiple_clients_reading_different_large_files)
+TEST_F(SfdProcFix, multiple_clients_reading_different_large_files)
 {
     constexpr int NCLIENTS {10};
     constexpr int NCHUNKS {1024};
@@ -678,19 +678,19 @@ TEST_F(FiodProcFix, multiple_clients_reading_different_large_files)
     for (int i = 0; i < NCLIENTS; i++) {
         client& cli {clients[i]};
 
-        cli.data_fd = fiod_read(srv_fd, cli.file.name().c_str(), 0, 0, false);
+        cli.data_fd = sfd_read(srv_fd, cli.file.name().c_str(), 0, 0, false);
         ASSERT_TRUE(cli.data_fd);
 
         uint8_t buf [PROT_REQ_MAXSIZE];
         ssize_t nread;
-        struct fiod_file_info ack;
+        struct sfd_file_info ack;
 
         // Request ACK
         nread = read(cli.data_fd, buf, sizeof(ack));
         ASSERT_EQ(sizeof(ack), nread);
-        ASSERT_TRUE(fiod_unmarshal_file_info(&ack, buf));
-        EXPECT_EQ(FIOD_FILE_INFO, ack.cmd);
-        EXPECT_EQ(FIOD_STAT_OK, ack.stat);
+        ASSERT_TRUE(sfd_unmarshal_file_info(&ack, buf));
+        EXPECT_EQ(SFD_FILE_INFO, ack.cmd);
+        EXPECT_EQ(SFD_STAT_OK, ack.stat);
         EXPECT_EQ(CHUNK_SIZE * NCHUNKS, ack.size);
     }
 
@@ -730,22 +730,22 @@ TEST_F(FiodProcFix, multiple_clients_reading_different_large_files)
         EXPECT_EQ(NCHUNKS, clients[i].nchunks);
 }
 
-TEST_F(FiodThreadLargeFileFix, read_io_error)
+TEST_F(SfdThreadLargeFileFix, read_io_error)
 {
     const test::unique_fd data_fd {
-        fiod_read(srv_fd, file.name().c_str(), 0, 0, false)};
+        sfd_read(srv_fd, file.name().c_str(), 0, 0, false)};
     ASSERT_TRUE(data_fd);
 
     uint8_t buf [PROT_REQ_MAXSIZE];
     ssize_t nread;
-    struct fiod_file_info ack;
+    struct sfd_file_info ack;
 
     // Request ACK
     nread = read(data_fd, buf, sizeof(ack));
     ASSERT_EQ(sizeof(ack), nread);
-    ASSERT_TRUE(fiod_unmarshal_file_info(&ack, buf));
-    EXPECT_EQ(FIOD_FILE_INFO, ack.cmd);
-    EXPECT_EQ(FIOD_STAT_OK, ack.stat);
+    ASSERT_TRUE(sfd_unmarshal_file_info(&ack, buf));
+    EXPECT_EQ(SFD_FILE_INFO, ack.cmd);
+    EXPECT_EQ(SFD_STAT_OK, ack.stat);
     EXPECT_EQ(CHUNK_SIZE * NCHUNKS, ack.size);
 
     // File content
@@ -782,14 +782,14 @@ TEST_F(FiodThreadLargeFileFix, read_io_error)
     EXPECT_LT(nchunks, NCHUNKS);
 }
 
-TEST_F(FiodThreadLargeFileFix, send_io_error)
+TEST_F(SfdThreadLargeFileFix, send_io_error)
 {
     int data_pipe [2];
     ASSERT_NE(-1, pipe(data_pipe));
 
     const test::unique_fd data_fd {data_pipe[0]};
 
-    const test::unique_fd stat_fd {fiod_send(srv_fd,
+    const test::unique_fd stat_fd {sfd_send(srv_fd,
                                              file.name().c_str(),
                                              data_pipe[1],
                                              0, 0, true)};
@@ -798,18 +798,18 @@ TEST_F(FiodThreadLargeFileFix, send_io_error)
     ASSERT_TRUE(stat_fd);
 
     std::vector<uint8_t> data_buf(CHUNK_SIZE);
-    std::vector<uint8_t> stat_buf(sizeof(struct fiod_file_info));
+    std::vector<uint8_t> stat_buf(sizeof(struct sfd_file_info));
     ssize_t nread;
-    struct fiod_file_info ack;
-    struct fiod_xfer_stat xfer_stat;
+    struct sfd_file_info ack;
+    struct sfd_xfer_stat xfer_stat;
 
     // Request ACK
     while (wouldblock(nread = read(stat_fd, stat_buf.data(), sizeof(ack)))) {}
 
     ASSERT_EQ(sizeof(ack), nread);
-    ASSERT_TRUE(fiod_unmarshal_file_info(&ack, stat_buf.data()));
-    EXPECT_EQ(FIOD_FILE_INFO, ack.cmd);
-    EXPECT_EQ(FIOD_STAT_OK, ack.stat);
+    ASSERT_TRUE(sfd_unmarshal_file_info(&ack, stat_buf.data()));
+    EXPECT_EQ(SFD_FILE_INFO, ack.cmd);
+    EXPECT_EQ(SFD_STAT_OK, ack.stat);
     EXPECT_EQ(CHUNK_SIZE * NCHUNKS, ack.size);
 
     size_t nchunks {};
@@ -846,9 +846,9 @@ TEST_F(FiodThreadLargeFileFix, send_io_error)
         if (wouldblock(nread))
             continue;
         ASSERT_GE(sizeof(struct prot_hdr), nread);
-        ASSERT_EQ(FIOD_XFER_STAT, fiod_get_cmd(stat_buf.data()));
-        got_errno = (fiod_get_stat(stat_buf.data()) == EIO);
-        if (fiod_get_stat(stat_buf.data()) != FIOD_STAT_OK)
+        ASSERT_EQ(SFD_XFER_STAT, sfd_get_cmd(stat_buf.data()));
+        got_errno = (sfd_get_stat(stat_buf.data()) == EIO);
+        if (sfd_get_stat(stat_buf.data()) != SFD_STAT_OK)
             break;
     }
 
@@ -868,8 +868,8 @@ TEST_F(FiodThreadLargeFileFix, send_io_error)
         } else {
             ASSERT_GE(nread, sizeof(struct prot_hdr));
 
-            ASSERT_EQ(FIOD_XFER_STAT, fiod_get_cmd(stat_buf.data()));
-            got_errno = (fiod_get_stat(stat_buf.data()) == EIO);
+            ASSERT_EQ(SFD_XFER_STAT, sfd_get_cmd(stat_buf.data()));
+            got_errno = (sfd_get_stat(stat_buf.data()) == EIO);
         }
     }
 

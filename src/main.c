@@ -40,9 +40,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <fiod_config.h>
+#include <sfd_config.h>
 
-#include "fiod.h"
+#include "sendfiled.h"
 
 #include "impl/errors.h"
 #include "impl/process.h"
@@ -59,41 +59,41 @@ static bool chroot_and_drop_privs(const char* root_dir,
                                   gid_t new_gid);
 
 /* Whether or not to sync with the parent process. This would be the case if
-   being spawned by fiod_spawn(), for example. */
+   being spawned by sfd_spawn(), for example. */
 static bool do_sync = false;
 
-#define LOG_(msg)                                                       \
-    {                                                                   \
-        if (do_sync) {                                                  \
-            syslog(LOG_INFO, "%s: %s\n", __func__, msg);                \
-        } else {                                                        \
-            const int tmp__ = errno;                                    \
-            printf("%s: %s\n", __func__, msg);                          \
-            errno = tmp__;                                              \
-        }                                                               \
-    }                                                                   \
+#define LOG_(msg)                                         \
+    {                                                     \
+        if (do_sync) {                                    \
+            syslog(LOG_INFO, "%s: %s\n", __func__, msg);  \
+        } else {                                          \
+            const int tmp__ = errno;                      \
+            printf("%s: %s\n", __func__, msg);            \
+            errno = tmp__;                                \
+        }                                                 \
+    }                                                     \
 
-#define LOGERRNO_(msg)                                                  \
-    {                                                                   \
-        if (do_sync) {                                                  \
-            syslog(LOG_ERR,                                             \
-                   "%s [errno: %d %s] %s\n",                            \
-                   __func__, errno, strerror(errno), msg);              \
-        } else {                                                        \
-            LOGERRNO(msg);                                              \
-        }                                                               \
-    }                                                                   \
+#define LOGERRNO_(msg)                                      \
+    {                                                       \
+        if (do_sync) {                                      \
+            syslog(LOG_ERR,                                 \
+                   "%s [errno: %d %s] %s\n",                \
+                   __func__, errno, strerror(errno), msg);  \
+        } else {                                            \
+            LOGERRNO(msg);                                  \
+        }                                                   \
+    }                                                       \
 
-#define LOGERRNOV_(fmt, ...)                                            \
-    {                                                                   \
-        if (do_sync) {                                                  \
-            syslog(LOG_ERR,                                             \
-                   "%s [errno %d %s] "fmt"\n",                          \
-                   __func__, errno, strerror(errno), __VA_ARGS__);      \
-        } else {                                                        \
-            LOGERRNOV(fmt"\n", __VA_ARGS__);                            \
-        }                                                               \
-    }                                                                   \
+#define LOGERRNOV_(fmt, ...)                                        \
+    {                                                               \
+        if (do_sync) {                                              \
+            syslog(LOG_ERR,                                         \
+                   "%s [errno %d %s] "fmt"\n",                      \
+                   __func__, errno, strerror(errno), __VA_ARGS__);  \
+        } else {                                                    \
+            LOGERRNOV(fmt"\n", __VA_ARGS__);                        \
+        }                                                           \
+    }                                                               \
 
 extern char** environ;
 
@@ -103,7 +103,7 @@ int main(const int argc, char** argv)
 
     const char* srvname = NULL;
     const char* root_dir = NULL;
-    const char* sockdir = FIOD_SRV_SOCKDIR;
+    const char* sockdir = SFD_SRV_SOCKDIR;
     const char* uname = NULL;
     const char* gname = NULL;
     long maxfiles = 0;
@@ -158,7 +158,7 @@ int main(const int argc, char** argv)
         }
     }
 
-    openlog(FIOD_PROGNAME, LOG_NDELAY | LOG_CONS | LOG_PID, LOG_DAEMON);
+    openlog(SFD_PROGNAME, LOG_NDELAY | LOG_CONS | LOG_PID, LOG_DAEMON);
 
     if (!root_dir || !srvname || maxfiles == 0) {
         if (!do_sync)
@@ -337,13 +337,13 @@ static long opt_strtol(const char* s)
 static void print_usage(const long fd_timeout_ms)
 {
     printf("Usage: "
-           FIOD_PROGNAME" OPTION\n"
+           SFD_PROGNAME" OPTION\n"
            "\nOptions:\n"
            "-r <root_dir> (chroot to this directory)\n"
            "-s <server_name> (user-friendly name to identify server instance)\n"
            "-n <maxfiles> (maximum number of concurrent file transfers)\n"
            "[-d] (run as a daemon)\n"
-           "[-S <server_unix_socket_dir>] (default: \""FIOD_SRV_SOCKDIR"\")\n"
+           "[-S <server_unix_socket_dir>] (default: \""SFD_SRV_SOCKDIR"\")\n"
            "[-u <user_name>] (run as different user)\n"
            "[-g <group_name>] (run as different group)\n"
            "[-p (sync with parent process (via a pipe))]\n"

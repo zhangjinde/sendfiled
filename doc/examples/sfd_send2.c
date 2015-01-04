@@ -1,15 +1,15 @@
 if (state == AWAITING_FILE_INFO) {
-    struct fiod_file_info file_info;
+    struct sfd_file_info file_info;
 
     ssize_t nread = read(stat_fd, buf, sizeof(file_info));
 
     if (nread <= 0 ||
-        fiod_get_cmd(buf) != FIOD_FILE_INFO ||
-        fiod_get_stat(buf) != FIOD_STAT_OK) {
+        sfd_get_cmd(buf) != SFD_FILE_INFO ||
+        sfd_get_stat(buf) != SFD_STAT_OK) {
         goto fail;
     }
 
-    if (!fiod_unmarshal_file_info(&file_info, buf))
+    if (!sfd_unmarshal_file_info(&file_info, buf))
         goto fail;
 
     file_size = file_info.size;
@@ -17,20 +17,20 @@ if (state == AWAITING_FILE_INFO) {
  }
 
 if (state == TRANSFERRING) {
-    struct fiod_xfer_stat xfer;
+    struct sfd_xfer_stat xfer;
 
     ssize_t nread = read(stat_fd, buf, sizeof(xfer));
 
     if (nread <= 0 ||
-        fiod_get_cmd(buf) != FIOD_XFER_STAT ||
-        fiod_get_stat(buf) != FIOD_STAT_OK) {
+        sfd_get_cmd(buf) != SFD_XFER_STAT ||
+        sfd_get_stat(buf) != SFD_STAT_OK) {
         goto fail;
     }
 
-    if (!fiod_unmarshal_xfer_stat(&xfer, buf))
+    if (!sfd_unmarshal_xfer_stat(&xfer, buf))
         goto fail;
 
-    if (fiod_xfer_complete(&xfer)) {
+    if (sfd_5xfer_complete(&xfer)) {
         log(INFO, "Transfer of %lu bytes complete\n", ctx->size);
     } else {
         transfer_nsent += xfer.size;

@@ -24,8 +24,8 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef FIOD_UTIL_H
-#define FIOD_UTIL_H
+#ifndef SFD_UTIL_H
+#define SFD_UTIL_H
 
 #include <errno.h>
 #include <stdbool.h>

@@ -36,14 +36,14 @@
 
 #include "unix_sockets.h"
 
-#define FIOD_PREFIX "fiod."
+#define SFD_PREFIX "sendfiled."
 #define SOCKEXT ".socket"
 
 const char* us_make_sockpath(const char* dir, const char* srvname)
 {
     struct sockaddr_un un;
 
-    const size_t nonname_len = strlen(FIOD_PREFIX SOCKEXT);
+    const size_t nonname_len = strlen(SFD_PREFIX SOCKEXT);
     size_t pathlen_max = (sizeof(un.sun_path) - nonname_len);
 
     const size_t dirlen = strnlen(dir, pathlen_max);
@@ -77,8 +77,8 @@ const char* us_make_sockpath(const char* dir, const char* srvname)
     if (dir_needs_slash)
         *p++ = '/';
 
-    memcpy(p, FIOD_PREFIX, strlen(FIOD_PREFIX));
-    p += strlen(FIOD_PREFIX);
+    memcpy(p, SFD_PREFIX, strlen(SFD_PREFIX));
+    p += strlen(SFD_PREFIX);
 
     memcpy(p, srvname, namelen);
     p += namelen;

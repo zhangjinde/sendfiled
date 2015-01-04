@@ -24,8 +24,8 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef FIOD_SERVER_H
-#define FIOD_SERVER_H
+#ifndef SFD_SERVER_H
+#define SFD_SERVER_H
 
 #include <stdbool.h>
 

@@ -38,12 +38,12 @@
 
    @param len The number of bytes to lock; a value of zero will lock from the
    offset to the end of the file
- */
+*/
 static bool lock_file(int fd, off_t offset, off_t len);
 
 /**
    Sets @a errno to EINVAL if the descriptor does not refer to a regular file.
- */
+*/
 static int stat_file(int fd, struct file_info*);
 
 int file_open_read(const char* name,

@@ -24,8 +24,8 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef FIOD_PROTOCOL_SERVER_H
-#define FIOD_PROTOCOL_SERVER_H
+#ifndef SFD_PROTOCOL_SERVER_H
+#define SFD_PROTOCOL_SERVER_H
 
 #include <sys/types.h>
 
@@ -33,9 +33,9 @@
 
 #include "protocol.h"
 
-struct fiod_file_info;
-struct fiod_open_file_info;
-struct fiod_xfer_stat;
+struct sfd_file_info;
+struct sfd_open_file_info;
+struct sfd_xfer_stat;
 
 #ifdef __cplusplus
 extern "C" {
@@ -46,20 +46,20 @@ extern "C" {
 
     bool prot_unmarshal_send_open(struct prot_send_open*, const void* buf);
 
-    void prot_marshal_file_info(struct fiod_file_info* pdu,
+    void prot_marshal_file_info(struct sfd_file_info* pdu,
                                 size_t size,
                                 const time_t atime,
                                 const time_t mtime,
                                 const time_t ctime);
 
-    void prot_marshal_open_file_info(struct fiod_open_file_info* pdu,
+    void prot_marshal_open_file_info(struct sfd_open_file_info* pdu,
                                      size_t size,
                                      const time_t atime,
                                      const time_t mtime,
                                      const time_t ctime,
                                      size_t txnid);
 
-    void prot_marshal_xfer_stat(struct fiod_xfer_stat* pdu, size_t val);
+    void prot_marshal_xfer_stat(struct sfd_xfer_stat* pdu, size_t val);
 
 #ifdef __cplusplus
 }

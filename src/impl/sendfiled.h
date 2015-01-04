@@ -24,13 +24,9 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#define _GNU_SOURCE 1
+#ifndef SFD_IMPL_SFD_H
+#define SFD_IMPL_SFD_H
 
-#include <unistd.h>
+int sfd_pipe(int fds[2], int flags);
 
-#include "fiod.h"
-
-int fiod_pipe(int fds[2], const int flags)
-{
-    return pipe2(fds, flags);
-}
+#endif

@@ -1,4 +1,4 @@
-Fiod is a background server process which sends or reads files on behalf of
+Sendfiled is a background server process which sends or reads files on behalf of
 client applications.
 
 # Goals
@@ -11,7 +11,7 @@ To provide event-based applications with:
    block. For this reason the only way to achieve truly non-blocking file I/O is
    by doing it in a separate thread of execution.
 
-* **Reduced copying**. *Fiod* makes use of platform facilities such as
+* **Reduced copying**. *Sendfiled* makes use of platform facilities such as
    [sendfile] and [splice] to achieve file transfer with [minimal
    copying][data_copying].
 
@@ -20,7 +20,7 @@ To provide event-based applications with:
 
 # Architectural overview
 
-* The fiod server runs in a separate process and transfers files on behalf of
+* The sendfiled server runs in a separate process and transfers files on behalf of
   client processes.
 
 * File transfer requests are transported over a [UDP][impl_udp_vs_tcp] [UNIX

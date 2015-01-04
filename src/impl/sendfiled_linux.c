@@ -24,9 +24,13 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef FIOD_IMPL_FIOD_H
-#define FIOD_IMPL_FIOD_H
+#define _GNU_SOURCE 1
 
-int fiod_pipe(int fds[2], int flags);
+#include <unistd.h>
 
-#endif
+#include "sendfiled.h"
+
+int sfd_pipe(int fds[2], const int flags)
+{
+    return pipe2(fds, flags);
+}

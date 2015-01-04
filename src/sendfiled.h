@@ -28,16 +28,16 @@
    @defgroup mod_client Client API
 
    Constructs which facilitate interaction with the server.
- */
+*/
 
 /**
    @file
 
    @ingroup mod_client
- */
+*/
 
-#ifndef FIOD_FIOD_H
-#define FIOD_FIOD_H
+#ifndef SFD_SENDFILED_H
+#define SFD_SENDFILED_H
 
 #include <sys/types.h>
 
@@ -56,7 +56,7 @@ extern "C" {
 
        @name Server interaction
        @{
-     */
+    */
 
     /**
        Spawns a server process.
@@ -82,12 +82,12 @@ extern "C" {
        @retval -1 An error occurred (see @a errno). If the error occurred in the
        server process, @a errno will contain the @e server process's @a errno
        value.
-     */
-    pid_t fiod_spawn(const char* server_name,
-                     const char* root_dir,
-                     const char* sockdir,
-                     int maxfiles,
-                     int open_fd_timeout_ms) FIOD_API;
+    */
+    pid_t sfd_spawn(const char* server_name,
+                    const char* root_dir,
+                    const char* sockdir,
+                    int maxfiles,
+                    int open_fd_timeout_ms) SFD_API;
 
     /**
        Connects to a running server instance.
@@ -100,9 +100,9 @@ extern "C" {
        @retval >0 A socket connected to the server instance
 
        @retval -1 An error occurred
-     */
-    int fiod_connect(const char* server_sockdir,
-                     const char* server_name) FIOD_API;
+    */
+    int sfd_connect(const char* server_sockdir,
+                    const char* server_name) SFD_API;
 
     /**
        Shuts down a server instance.
@@ -114,8 +114,8 @@ extern "C" {
        @return -1 on error; otherwise the status value as per @a waitpid(2)
        which can be inspected using the associated macros such as @c WIFEXITED,
        @c WEXITSTATUS, etc.
-     */
-    int fiod_shutdown(pid_t pid) FIOD_API;
+    */
+    int sfd_shutdown(pid_t pid) SFD_API;
 
     /**
        @}
@@ -127,14 +127,14 @@ extern "C" {
        Requests the server to write the contents of a file to a pipe.
 
        The server will first respond with a message of type struct
-       fiod_file_info to confirm the transfer, after which it will write the
+       sfd_file_info to confirm the transfer, after which it will write the
        data read from the file into the returned pipe.
 
        @note This operation is much more efficient on Linux than on other
        systems due to the use of the splice system call, which minimises the
        amount of copying and does not cross the kernel/userspace boundary. On
        non-Linux systems this operation degrades to the usual read/write with a
-       userspace buffer inbetween, and therefore fiod_send() or fiod_send_open()
+       userspace buffer inbetween, and therefore sfd_send() or sfd_send_open()
        should be preferred.
 
        @param srv_sockfd A socket connected to the server
@@ -153,20 +153,20 @@ extern "C" {
        @retval >0 The read end of the pipe to which the file will be written
 
        @retval -1 An error occurred
-     */
-    int fiod_read(int srv_sockfd,
-                  const char* path,
-                  loff_t offset, size_t len,
-                  bool dest_fd_nonblock) FIOD_API;
+    */
+    int sfd_read(int srv_sockfd,
+                 const char* path,
+                 loff_t offset, size_t len,
+                 bool dest_fd_nonblock) SFD_API;
 
     /**
        Requests the server to write the contents of a file to an open file
        descriptor.
 
        The server will first respond with a message of type struct
-       fiod_file_info to confirm the transfer, after which it will write the
+       sfd_file_info to confirm the transfer, after which it will write the
        data read from the file to the destination file descriptor, reporting the
-       progress of the transfer in messages of type struct fiod_xfer_stat on the
+       progress of the transfer in messages of type struct sfd_xfer_stat on the
        status channel.
 
        @note This operation is implemented in terms of @a sendfile(2), which
@@ -193,12 +193,12 @@ extern "C" {
 
        @retval >0 The status channel descriptor
        @retval -1 An error occurred
-     */
-    int fiod_send(int srv_sockfd,
-                  const char* path,
-                  int destination_fd,
-                  loff_t offset, size_t len,
-                  bool stat_fd_nonblock) FIOD_API;
+    */
+    int sfd_send(int srv_sockfd,
+                 const char* path,
+                 int destination_fd,
+                 loff_t offset, size_t len,
+                 bool stat_fd_nonblock) SFD_API;
 
     /**
        Requests the server to open and return information about a file (leaving
@@ -209,9 +209,9 @@ extern "C" {
        more headers.
 
        The server will confirm the request on the status channel with a message
-       of type struct fiod_open_file_info. Besides the file size and file system
+       of type struct sfd_open_file_info. Besides the file size and file system
        timestamps, the message will also include a unique transfer identifier to
-       be passed to the subsequent call to fiod_send_open().
+       be passed to the subsequent call to sfd_send_open().
 
        A timer will be set on the open file, after the expiraton of which the
        file will be closed and its associated state purged.
@@ -224,25 +224,25 @@ extern "C" {
 
        @retval >0 The status channel file descriptor
        @retval -1 An error occurred
-     */
-    int fiod_open(int srv_sockfd,
-                  const char* path,
-                  loff_t offset, size_t len,
-                  bool stat_fd_nonblock) FIOD_API;
+    */
+    int sfd_open(int srv_sockfd,
+                 const char* path,
+                 loff_t offset, size_t len,
+                 bool stat_fd_nonblock) SFD_API;
 
     /**
-       Request that a file previously opened with fiod_open() be written to an
+       Request that a file previously opened with sfd_open() be written to an
        open file descriptor.
 
        The server will immediately commence the transfer, and write transfer
-       progress messages of type struct fiod_xfer_stat to the status channel, as
+       progress messages of type struct sfd_xfer_stat to the status channel, as
        usual.
 
        If the provided file identifier is invalid, the server will assume that
        it is due to the expiration of the timer associated with the open file
        and will silently ignore the request. (The client will, however, receive
        EOF when it tries to read from the status channel returned previously by
-       fiod_open().)
+       sfd_open().)
 
        @param srv_sockfd A socket connected to the server
 
@@ -250,10 +250,10 @@ extern "C" {
 
        @param destination_fd The file descriptor to which the file will be
        written
-     */
-    bool fiod_send_open(int srv_sockfd,
-                        size_t txnid,
-                        int destination_fd) FIOD_API;
+    */
+    bool sfd_send_open(int srv_sockfd,
+                       size_t txnid,
+                       int destination_fd) SFD_API;
 
     /**@}*/
 

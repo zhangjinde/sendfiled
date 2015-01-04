@@ -24,13 +24,13 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef FIOD_RESPONSES_H
-#define FIOD_RESPONSES_H
+#ifndef SFD_RESPONSES_H
+#define SFD_RESPONSES_H
 
 /**
    @file
    @ingroup mod_client
- */
+*/
 
 #include <sys/types.h>
 
@@ -42,23 +42,23 @@
 /**
    @addtogroup mod_client
    @{
- */
+*/
 
 /**
    Response Command IDs.
 */
 enum {
     /** File information */
-    FIOD_FILE_INFO = 0x81,
+    SFD_FILE_INFO = 0x81,
     /** Open file information */
-    FIOD_OPEN_FILE_INFO = 0x82,
+    SFD_OPEN_FILE_INFO = 0x82,
     /** File transfer request/operation status */
-    FIOD_XFER_STAT = 0x83
+    SFD_XFER_STAT = 0x83
 };
 
 enum {
     /** No error */
-    FIOD_STAT_OK = 0
+    SFD_STAT_OK = 0
 };
 
 #pragma GCC diagnostic push
@@ -66,8 +66,8 @@ enum {
 
 /**
    Information pertaining to a file being transferred.
- */
-struct fiod_file_info {
+*/
+struct sfd_file_info {
     uint8_t cmd;                /**< Command ID */
     uint8_t stat;               /**< Status Code */
 
@@ -81,9 +81,9 @@ struct fiod_file_info {
    The size, in bytes, of a PDU header.
 
    The header includes the command ID and status code.
- */
-#define FIOD_HDR_SIZE (offsetof(struct fiod_file_info, stat) +  \
-                       sizeof(((struct fiod_file_info*)NULL)->stat))
+*/
+#define SFD_HDR_SIZE (offsetof(struct sfd_file_info, stat) +        \
+                      sizeof(((struct sfd_file_info*)NULL)->stat))
 
 /**
    Information pertaining to an opened file.
@@ -91,9 +91,9 @@ struct fiod_file_info {
    These files have been opened and read-locked, but their transfers are only
    started when the client issues the <em>Send Open File</em> command.
 
-   @see fiod_open() and fiod_send_open().
- */
-struct fiod_open_file_info {
+   @see sfd_open() and sfd_send_open().
+*/
+struct sfd_open_file_info {
     uint8_t cmd;                /**< Command ID */
     uint8_t stat;               /**< Status Code */
 
@@ -108,8 +108,8 @@ struct fiod_open_file_info {
 
 /**
    A file transfer status PDU.
- */
-struct fiod_xfer_stat {
+*/
+struct sfd_xfer_stat {
     uint8_t cmd;                /**< Command ID */
     uint8_t stat;               /**< Status Code */
 
@@ -131,12 +131,12 @@ extern "C" {
     /**
        Returns the command ID field from a buffer.
     */
-    int fiod_get_cmd(const void*) FIOD_API;
+    int sfd_get_cmd(const void*) SFD_API;
 
     /**
        Returns the status code from a buffer.
     */
-    int fiod_get_stat(const void*) FIOD_API;
+    int sfd_get_stat(const void*) SFD_API;
 
     /**
        Unmarshals a File Information PDU.
@@ -144,9 +144,9 @@ extern "C" {
        @param[out] pdu The PDU
 
        @param[in] buf The source buffer
-     */
-    bool fiod_unmarshal_file_info(struct fiod_file_info* pdu,
-                                  const void* buf) FIOD_API;
+    */
+    bool sfd_unmarshal_file_info(struct sfd_file_info* pdu,
+                                 const void* buf) SFD_API;
 
     /**
        Unmarshals an Open File Information PDU.
@@ -154,9 +154,9 @@ extern "C" {
        @param[out] pdu The PDU
 
        @param[in] buf The source buffer
-     */
-    bool fiod_unmarshal_open_file_info(struct fiod_open_file_info* pdu,
-                                       const void* buf) FIOD_API;
+    */
+    bool sfd_unmarshal_open_file_info(struct sfd_open_file_info* pdu,
+                                      const void* buf) SFD_API;
 
     /**
        Unmarshals a Transfer Status PDU.
@@ -164,14 +164,14 @@ extern "C" {
        @param[out] pdu The PDU
 
        @param[in] buf The source buffer
-     */
-    bool fiod_unmarshal_xfer_stat(struct fiod_xfer_stat* pdu,
-                                  const void* buf) FIOD_API;
+    */
+    bool sfd_unmarshal_xfer_stat(struct sfd_xfer_stat* pdu,
+                                 const void* buf) SFD_API;
 
     /**
        Checks whether a Transfer Status PDU indicates transfer completion.
-     */
-    bool fiod_xfer_complete(const struct fiod_xfer_stat*) FIOD_API;
+    */
+    bool sfd_xfer_complete(const struct sfd_xfer_stat*) SFD_API;
 
     /**@}*/
 

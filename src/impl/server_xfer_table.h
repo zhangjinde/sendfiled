@@ -24,8 +24,8 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef FIOD_XFER_TABLE_H
-#define FIOD_XFER_TABLE_H
+#ifndef SFD_XFER_TABLE_H
+#define SFD_XFER_TABLE_H
 
 #include <sys/types.h>
 

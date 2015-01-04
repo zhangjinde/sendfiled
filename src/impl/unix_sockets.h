@@ -24,8 +24,8 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef FIOD_UNIX_SOCKETS_H
-#define FIOD_UNIX_SOCKETS_H
+#ifndef SFD_UNIX_SOCKETS_H
+#define SFD_UNIX_SOCKETS_H
 
 /**
    Constructs the full path to a UNIX socket file based on the provided server
@@ -37,7 +37,7 @@
    components)
 
    @retval Non-NULL The path (to be freed by the caller).
- */
+*/
 const char* us_make_sockpath(const char* dir,
                              const char* srvname);
 

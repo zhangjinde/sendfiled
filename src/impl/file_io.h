@@ -24,8 +24,8 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef FIOD_FILE_IO_H
-#define FIOD_FILE_IO_H
+#ifndef SFD_FILE_IO_H
+#define SFD_FILE_IO_H
 
 #include <sys/types.h>
 
@@ -57,7 +57,7 @@ bool fio_ctx_valid(const struct fio_ctx*);
 /**
    @retval >0 The file descriptor
    @retval <0 An error occurred
- */
+*/
 int file_open_read(const char* name,
                    off_t offset, size_t len,
                    struct file_info*);

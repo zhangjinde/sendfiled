@@ -7,7 +7,7 @@ clarity.
 # Starting a server instance from the shell
 
 ~~~{.sh}
-        $ /usr/bin/fiod -s disk0 -n 100 -t 10000
+        $ /usr/bin/sendfiled -s disk0 -n 100 -t 10000
 ~~~
 
 * Server instance name: 'disk0'
@@ -22,34 +22,34 @@ operating-system-provided facilities such as `chroot`, `jail`, *cgroups*, *LXC*,
 etc. As it stands, this form is only provided for the sake of convenience during
 testing.)
 
-@include fiod_spawn.c
+@include sfd_spawn.c
 
 # Shutting down a server instance programmatically
 
-@include fiod_shutdown.c
+@include sfd_shutdown.c
 
 # Connecting to a server instance
 
-@include fiod_connect.c
+@include sfd_connect.c
 
 # Disconnecting from a server
 
-@include fiod_disconnect.c
+@include sfd_disconnect.c
 
 # [Reading][read_file] a file
 
-@include fiod_read1.c
+@include sfd_read1.c
 
 `file_fd` is the [data channel][data_channel] (the read end of a pipe); when it
 becomes readable:
 
-@include fiod_read2.c
+@include sfd_read2.c
 
 # Sending a file
 
 ## Send the request
 
-@include fiod_send1.c
+@include sfd_send1.c
 
 * At this point the file is open and locked and the transfer may already be in
   progress;
@@ -60,31 +60,31 @@ becomes readable:
 
 When the [status channel][status_channel] becomes readable:
 
-@include fiod_send2.c
+@include sfd_send2.c
 
 # Sending a file with headers
 
-(See [sending headers] for more information.)
+(See [sending headers][sending_headers] for more information.)
 
 ## Using [send open file][send_open_file]
 
-@include fiod_send_with_headers1.c
+@include sfd_send_with_headers1.c
 
 At this point the file is open and locked, but no transfer has been scheduled;
 `stat_fd` is the [status channel][status_channel], the read end of a pipe; when
 it becomes readable:
 
-@include fiod_send_with_headers2.c
+@include sfd_send_with_headers2.c
 
 ## Using [read file][read_file]
 
-@include fiod_read_with_headers1.c
+@include sfd_read_with_headers1.c
 
 `data_fd` is the [data channel][data_channel]; at this point the server has
 opened and locked the file and has started the transfer; when it becomes
 readable:
 
-@include fiod_read_with_headers2.c
+@include sfd_read_with_headers2.c
 
   [status_channel]: messages.html#status_channel
   [data_channel]: messages.html#data_channel

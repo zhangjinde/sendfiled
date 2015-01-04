@@ -24,15 +24,15 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef FIOD_PROCESS_H
-#define FIOD_PROCESS_H
+#ifndef SFD_PROCESS_H
+#define SFD_PROCESS_H
 
 #include <sys/types.h>
 
 #include <stdbool.h>
 
 /**
-   Number of the file descriptor (opened in parent process by fiod_spawn()) to
+   Number of the file descriptor (opened in parent process by sfd_spawn()) to
    which the server process' startup success (0) or error code is to be written
    in order to sync with parent and to facilitate error reporting in the parent
    process.
@@ -45,9 +45,9 @@ static const int PROC_SYNCFD = 3;
    Redirects stdin, stdout, and stderr to /dev/null, and closes all other file
    descriptors, excluding those in @a excluded_fds.
 
-   'Child processes' in this context means ones forked by fiod_spawn() and ones
+   'Child processes' in this context means ones forked by sfd_spawn() and ones
    going into daemon mode.
- */
+*/
 bool proc_init_child(const int* excluded_fds, size_t nfds);
 
 /** @todo Will probably need to be platform-specific because the glibc and

@@ -1,15 +1,15 @@
 if (ctx->state == AWAITING_FILE_INFO) {
-    struct fiod_open_file_info file_info;
+    struct sfd_open_file_info file_info;
 
     ssize_t nread = read(stat_fd, buf, sizeof(file_info));
 
     if (nread <= 0 ||
-        fiod_get_cmd(buf) != FIOD_OPEN_FILE_INFO ||
-        fiod_get_stat(buf) != FIOD_STAT_OK) {
+        sfd_get_cmd(buf) != SFD_OPEN_FILE_INFO ||
+        sfd_get_stat(buf) != SFD_STAT_OK) {
         goto fail;
     }
 
-    if (!fiod_unmarshal_open_file_info(&file_info, buf))
+    if (!sfd_unmarshal_open_file_info(&file_info, buf))
         goto fail;
 
     /* Store file size, to be sent with headers */
@@ -35,9 +35,9 @@ if (ctx->state == SENDING_HEADERS) {
        file, identified by ctx->txnid, to the provided destination file
        descriptor. */
 
-    if (!fiod_send_open_file(srv_sockfd,
-                             ctx->txnid,
-                             destination_fd)) {
+    if (!sfd_send_open_file(srv_sockfd,
+                            ctx->txnid,
+                            destination_fd)) {
         goto fail;
     }
 
@@ -45,20 +45,20 @@ if (ctx->state == SENDING_HEADERS) {
  }
 
 if (ctx->state == TRANSFERRING) {
-    struct fiod_xfer_stat stat;
+    struct sfd_xfer_stat stat;
 
     ssize_t nread = read(stat_fd, buf, sizeof(stat));
 
     if (nread <= 0 ||
-        fiod_get_cmd(buf) != FIOD_FILE_INFO ||
-        fiod_get_stat(buf) != FIOD_STAT_OK) {
+        sfd_get_cmd(buf) != SFD_FILE_INFO ||
+        sfd_get_stat(buf) != SFD_STAT_OK) {
         goto fail;
     }
 
-    if (!fiod_unmarshal_xfer_stat(&stat, buf))
+    if (!sfd_unmarshal_xfer_stat(&stat, buf))
         goto fail;
 
-    if (fiod_xfer_complete(&stat)) {
+    if (sfd_xfer_complete(&stat)) {
         log(INFO, "Transfer of %lu bytes complete\n", ctx->size);
     } else {
         ctx->nsent += stat.size;

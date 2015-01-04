@@ -44,13 +44,13 @@ Step-by-step:
 
 Completion of the transfer is signified by a [transfer status][transfer_status]
 message containing a special value in the *size* field, an event that can be
-tested for using the fiod_xfer_complete() function.
+tested for using the sfd_xfer_complete() function.
 
 This operation is [usually][data_copying] implemented in terms of one or more
 calls to [sendfile] and should be the most commonly-used operation since it is
 most likely to be efficient on all supported platforms.
 
-Implemented by fiod_send().
+Implemented by sfd_send().
 
 <h2 id="read_file">Read file</h2>
 
@@ -87,7 +87,7 @@ This operation is [less efficient][data_copying] on non-Linux systems due to the
 absence of a [splice] equivalent, so the [send file][send_file] and [send open
 file][send_open_file] operations should be preferred on such systems.
 
-Implemented by fiod_read().
+Implemented by sfd_read().
 
 <h2 id="send_open_file">Send open file</h2>
 
@@ -96,11 +96,11 @@ This is effectively a two-stage/two-request version of [Send File][send_file]:
 1. In response to the first request ('*open file*'), the server
    [opens][opening_files] the file and responds with an [open file
    information][open_file_info] message, which includes a unique identifying
-   token, on the [status channel][status_channel] (implemented by fiod_open());
+   token, on the [status channel][status_channel] (implemented by sfd_open());
 
 2. In response to the second request ('*send open file*'), the server writes the
    file identified by the unique token to an arbitrary user-provided file
-   descriptor (implemented by fiod_send_open()).
+   descriptor (implemented by sfd_send_open()).
 
 The server will automatically close open files after a configurable amount of
 time if no *send open file* request has yet been received.
@@ -115,20 +115,20 @@ time if no *send open file* request has yet been received.
 Sent in response to a [Read File][read_file] or [Send File][send_file]
 request. These messages include information such as the size of the file and the
 various timestamps as reported by [stat] and are implemented in the form of
-struct fiod_file_info.
+struct sfd_file_info.
 
 <h2 id="open_file_info">Open file information</h2>
 
 Sent in response to a [Send Open File][send_open_file] request. In addition to
 the information contained in [file information][file_info] messages, they
 include a unique token which identifies the opened file. Implemented in the form
-of struct fiod_open_file_info.
+of struct sfd_open_file_info.
 
 <h2 id="transfer_status">Transfer progress notifications</h2>
 
 Sent while a transfer is in progress and contain the size, in bytes, of the most
 recent write (or group of writes), or an error code if the transfer has
-failed. Implemented in the form of struct fiod_xfer_stat.
+failed. Implemented in the form of struct sfd_xfer_stat.
 
 These notifications are never sent during [Read File][read_file] operations.
 
@@ -136,7 +136,7 @@ These notifications are never sent during [Read File][read_file] operations.
 
 Sent only once, when a transfer completes. Implemented in the form of a
 [transfer status][transfer_status] message containing a special value which can
-be tested for using the fiod_xfer_complete() function.
+be tested for using the sfd_xfer_complete() function.
 
 <h2 id="errors">Error notifications</h2>
 

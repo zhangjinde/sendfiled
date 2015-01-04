@@ -32,7 +32,7 @@
    they will all need to use this userspace, non-zero-copy implementation,
    e.g. when asked to read a file into a pipe or to send a file to a non-socket
    file descriptor.
- */
+*/
 
 #include <stdint.h>
 #include <stdlib.h>

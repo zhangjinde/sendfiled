@@ -24,8 +24,8 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef FIOD_SYSPOLL_H
-#define FIOD_SYSPOLL_H
+#ifndef SFD_SYSPOLL_H
+#define SFD_SYSPOLL_H
 
 #include <stdbool.h>
 
@@ -54,7 +54,7 @@ void syspoll_delete(struct syspoll*);
 /**
    @param data User data. The first item at this address must be the file
    descriptor (i.e., of type 'int').
- */
+*/
 bool syspoll_register(struct syspoll*, struct syspoll_resrc*, unsigned events);
 
 bool syspoll_timer(struct syspoll* this, struct syspoll_resrc*, unsigned millis);

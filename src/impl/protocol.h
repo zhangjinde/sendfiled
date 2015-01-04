@@ -24,8 +24,8 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef FIOD_PROTOCOL_H
-#define FIOD_PROTOCOL_H
+#ifndef SFD_PROTOCOL_H
+#define SFD_PROTOCOL_H
 
 #include <sys/types.h>
 
@@ -78,7 +78,7 @@ struct prot_hdr {
    CSOOOOOOOOLLLLLLLLFFFFF0, where C = cmd; D = stat; O = offset bytes; L =
    transfer length bytes; F = filename characters; 0 = filename-terminating
    NUL. NOTE that the filename_len field is not transmitted.
- */
+*/
 struct prot_request {
     PROT_HDR_FIELDS;
     /* Offset from the beginning of the file to start reading from */
@@ -109,7 +109,7 @@ struct prot_send_open {
     size_t txnid;
 };
 
-/** The value struct fiod_xfer_stat.size is set to in a terminal transfer status
+/** The value struct sfd_xfer_stat.size is set to in a terminal transfer status
     notification to indicate a complete transfer */
 #define PROT_XFER_COMPLETE (size_t)-1
 

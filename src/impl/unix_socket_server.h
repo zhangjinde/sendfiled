@@ -74,7 +74,7 @@ extern "C" {
        @li ERANGE The datagram was too large for the provided buffer and was
        truncated. This is a fatal programmer error and recovery would be
        pointless, so fail outright.
-     */
+    */
     ssize_t us_recv(int fd,
                     void* buf, size_t len,
                     int* recvd_fds, size_t* nfds,
