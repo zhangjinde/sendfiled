@@ -27,8 +27,6 @@
 #ifndef SFD_TEST_INTERPOSE_IMPL_H
 #define SFD_TEST_INTERPOSE_IMPL_H
 
-#include <sys/types.h>
-
 #include <errno.h>
 
 #include "test_interpose.h"

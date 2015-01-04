@@ -34,10 +34,8 @@
 #include <sys/stat.h>
 
 #include <assert.h>
-#include <errno.h>
 #include <stddef.h>
 #include <stdlib.h>
-#include <string.h>
 
 #include "errors.h"
 #include "unix_socket_server.h"

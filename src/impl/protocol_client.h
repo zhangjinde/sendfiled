@@ -27,8 +27,6 @@
 #ifndef SFD_PROTOCOL_CLIENT_H
 #define SFD_PROTOCOL_CLIENT_H
 
-#include <sys/types.h>
-
 #include <stdbool.h>
 
 #include "protocol.h"

@@ -29,15 +29,12 @@
 #include <fcntl.h>
 #include <grp.h>
 #include <pwd.h>
-#include <sys/types.h>
 #include <sys/stat.h>
 #include <syslog.h>
 #include <unistd.h>
 
 #include <limits.h>
 #include <signal.h>
-#include <stdbool.h>
-#include <stdio.h>
 #include <stdlib.h>
 
 #include <sfd_config.h>

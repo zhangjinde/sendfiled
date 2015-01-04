@@ -30,7 +30,6 @@
 #include <sys/uio.h>
 
 #include <assert.h>
-#include <errno.h>
 
 #include "protocol.h"
 #include "unix_socket_server.h"

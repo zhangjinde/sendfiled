@@ -39,11 +39,6 @@
 #ifndef SFD_SENDFILED_H
 #define SFD_SENDFILED_H
 
-#include <sys/types.h>
-
-#include <stdbool.h>
-
-#include "attr.h"
 #include "responses.h"
 
 #ifdef __cplusplus
