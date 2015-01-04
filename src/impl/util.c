@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2014, Francois Kritzinger
+  Copyright (c) 2015, Francois Kritzinger
   All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
