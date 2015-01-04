@@ -160,38 +160,56 @@ ifneq ($(MAKECMDGOALS), clean)
 -include $(src_test:%=$(builddir)/%.tst.d)
 endif
 
-$(builddir)/%.c.srv.d: %.c $(builddir)/$(projectname)_config.h
-	$(CC) $(CFLAGS) -MM -MT "$(builddir)/$*.c.srv.o $(builddir)/$*.c.srv.d" $< > $@
+define DEPEND_C
+@echo "DEP $<"
+@$(CC) $(header_search_dirs) -MM -MT "$(basename $@).o $@" $< > $@
+endef
 
-$(builddir)/%.c.cli.d: %.c $(builddir)/$(projectname)_config.h
-	$(CC) $(CFLAGS) -MM -MT "$(builddir)/$*.c.cli.o $(builddir)/$*.c.cli.d" $< > $@
+define DEPEND_CXX
+@echo "DEP $<"
+@$(CXX) -std=c++11 -stdlib=libc++ $(header_search_dirs_cxx) \
+-MM -MT "$(basename $@).o $@" $< > $@
+endef
 
-$(builddir)/%.cpp.tst.d: %.cpp $(builddir)/$(projectname)_config.h
-	$(CXX) $(CXXFLAGS) -MM -MT "$(builddir)/$*.cpp.tst.o $(builddir)/$*.cpp.tst.d" $< > $@
+$(builddir)/%.c.srv.d: %.c $(builddir)/sfd_config.h
+	$(DEPEND_C)
 
-$(builddir)/%.c.tst.d: %.c $(builddir)/$(projectname)_config.h
-	$(CC) $(CFLAGS) -MM -MT "$(builddir)/$*.c.tst.o $(builddir)/$*.c.tst.d" $< > $@
+$(builddir)/%.c.cli.d: %.c $(builddir)/sfd_config.h
+	$(DEPEND_C)
+
+$(builddir)/%.cpp.tst.d: %.cpp $(builddir)/sfd_config.h
+	$(DEPEND_CXX)
+
+$(builddir)/%.c.tst.d: %.c $(builddir)/sfd_config.h
+	$(DEPEND_C)
 
 $(builddir)/%.c.srv.o: %.c
-	$(CC) $(CFLAGS) $(binflags) -c -o $@ $<
+	@echo "CC  $<"
+	@$(CC) $(CFLAGS) $(binflags) -c -o $@ $<
 
 $(builddir)/%.c.cli.o: %.c
-	$(CC) $(CFLAGS) $(soflags) -c -o $@ $<
+	@echo "CC  $<"
+	@$(CC) $(CFLAGS) $(soflags) -c -o $@ $<
 
 $(builddir)/%.cpp.tst.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c -o $@ $<
+	@echo "CXX $<"
+	@$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 $(builddir)/%.c.tst.o: %.c
-	$(CC) $(CFLAGS) -c -o $@ $<
+	@echo "CC  $<"
+	@$(CC) $(CFLAGS) -c -o $@ $<
 
 $(builddir)/$(target): $(obj_c_server) $(builddir)/main.c.srv.o
-	$(CC) $(CFLAGS) $(lib_search_dirs) -o $@ $^ $(linkflags)
+	@echo "LNK $(notdir $@)"
+	@$(CC) $(CFLAGS) $(lib_search_dirs) -o $@ $^ $(linkflags)
 
 $(builddir)/$(target_so): $(obj_c_client)
-	$(CC) $(CFLAGS) $(soflags) $(lib_search_dirs) -shared -o $@ $^ $(linkflags)
+	@echo "LNK $(notdir $@)"
+	@$(CC) $(CFLAGS) $(soflags) $(lib_search_dirs) -shared -o $@ $^ $(linkflags)
 
 $(builddir)/$(test_target): $(obj_c_server) $(obj_test) $(builddir)/$(target_so)
-	$(CXX) $(CXXFLAGS) $(lib_search_dirs_cxx) -o $@ $^ \
+	@echo "LNK $(notdir $@)"
+	@$(CXX) $(CXXFLAGS) $(lib_search_dirs_cxx) -o $@ $^ \
 	$(linkflags) -ldl -lgtest -lgtest_main
 
 .PHONY: install
