@@ -55,8 +55,9 @@ bool wouldblock(const ssize_t err) noexcept
     return (err == -1 && (errno == EWOULDBLOCK || errno == EAGAIN));
 }
 
-/// Base fixture which runs the server in a separate process
-struct SfdProcFix : public ::testing::Test {
+template<std::size_t MaxFiles>
+struct SfdProcFixTemplate : public ::testing::Test {
+    static constexpr std::size_t maxfiles {MaxFiles};
     static const std::string srvname;
     static pid_t srv_pid;
 
@@ -64,7 +65,7 @@ struct SfdProcFix : public ::testing::Test {
         srv_pid = sfd_spawn(srvname.c_str(),
                              "/",
                              SFD_SRV_SOCKDIR,
-                             1000, 1000);
+                             MaxFiles, 1000);
         if (srv_pid == -1)
             throw std::runtime_error("Couldn't start daemon");
     }
@@ -79,7 +80,7 @@ struct SfdProcFix : public ::testing::Test {
         }
     }
 
-    SfdProcFix() : srv_fd(sfd_connect(SFD_SRV_SOCKDIR, srvname.c_str())) {
+    SfdProcFixTemplate() : srv_fd(sfd_connect(SFD_SRV_SOCKDIR, srvname.c_str())) {
         if (!srv_fd)
             throw std::runtime_error("Couldn't connect to daemon");
     }
@@ -87,8 +88,13 @@ struct SfdProcFix : public ::testing::Test {
     test::unique_fd srv_fd;
 };
 
-const std::string SfdProcFix::srvname {"testing123"};
-pid_t SfdProcFix::srv_pid;
+template<std::size_t MaxFiles>
+const std::string SfdProcFixTemplate<MaxFiles>::srvname {"testing123"};
+
+template<std::size_t MaxFiles>
+pid_t SfdProcFixTemplate<MaxFiles>::srv_pid;
+
+using SfdProcFix = SfdProcFixTemplate<1000>;
 
 /**
  * Base fixture which runs the server in a thread instead of a process.
@@ -270,6 +276,69 @@ TEST_F(SfdProcFix, open_directory_fails)
 
     EXPECT_EQ(SFD_FILE_INFO, sfd_get_cmd(buf));
     EXPECT_EQ(EINVAL, sfd_get_stat(buf));
+}
+
+using SfdProcFix2Xfers = SfdProcFixTemplate<2>;
+/**
+ * Checks that the client receives EMFILE if there are too many concurrent
+ * transfers on the server (-n command-line parameter sets the limit).
+ */
+TEST_F(SfdProcFix2Xfers, transfer_table_full)
+{
+    int data_pipes [maxfiles][2];
+    test::unique_fd stat_fds [maxfiles];
+    test::TmpFile file;
+
+    for (std::size_t i = 0; i < maxfiles; i++) {
+        if (pipe(data_pipes[i]) == -1)
+            FAIL() << "Couldn't create a pipe; errno: " << strerror(errno);
+
+        stat_fds[i] = sfd_send(srv_fd,
+                               file.name().c_str(),
+                               data_pipes[i][1],
+                               0, 0, false);
+
+        close(data_pipes[i][1]);
+
+        ASSERT_TRUE(stat_fds[i]);
+
+        uint8_t buf [PROT_REQ_MAXSIZE];
+        struct sfd_file_info finfo;
+
+        const ssize_t nread {read(stat_fds[i], buf, sizeof(finfo))};
+        EXPECT_EQ(sizeof(struct sfd_file_info), nread);
+
+        EXPECT_EQ(SFD_FILE_INFO, sfd_get_cmd(buf));
+        EXPECT_EQ(SFD_STAT_OK, sfd_get_stat(buf));
+    }
+
+    // One over the 'open file limit'
+
+    int pfds[2];
+    if (pipe(pfds) == -1)
+        FAIL() << "Couldn't create a pipe; errno: " << strerror(errno);
+
+    test::unique_fd data_fd {pfds[0]};
+
+    const test::unique_fd stat_fd {sfd_send(srv_fd,
+                                            file.name().c_str(),
+                                            pfds[1],
+                                            0, 0, false)};
+    close(pfds[1]);
+
+    ASSERT_TRUE(stat_fd);
+
+    uint8_t buf [PROT_REQ_MAXSIZE] {};
+    struct prot_hdr hdr {};
+
+    const ssize_t nread {read(stat_fd, buf, sizeof(hdr))};
+    EXPECT_EQ(sizeof(struct prot_hdr), nread);
+
+    EXPECT_EQ(SFD_FILE_INFO, sfd_get_cmd(buf));
+    EXPECT_EQ(EMFILE, sfd_get_stat(buf));
+
+    for (std::size_t i = 0; i < maxfiles; i++)
+        close(data_pipes[i][0]);
 }
 
 TEST_F(SfdProcSmallFileFix, send)

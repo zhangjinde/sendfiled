@@ -255,7 +255,7 @@ exports: $(builddir)/$(target_so)
 
 .PHONY: memcheck
 memcheck: $(builddir)/$(test_target) $(builddir)/$(target)
-	$(VALGRIND) \
+	env PATH=$(builddir) $(VALGRIND) \
 	--track-origins=yes \
 	--tool=memcheck \
 	--leak-check=full \

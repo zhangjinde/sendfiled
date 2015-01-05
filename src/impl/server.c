@@ -801,6 +801,7 @@ static struct resrc_xfer* add_xfer(struct server* ctx,
     if (ctx->xfers->size == ctx->xfers->capacity) {
         syslog(LOG_CRIT, "Transfer table is full (%lu/%lu items)\n",
                ctx->xfers->size, ctx->xfers->capacity);
+        errno = EMFILE;
         return NULL;
     }
 
@@ -993,6 +994,8 @@ static bool send_xfer_stat(const int fd, const size_t file_size)
 
 static bool send_req_err(const int fd, const int stat)
 {
+    assert (stat <= 0xFF);
+
     const struct prot_hdr pdu = {
         .cmd = SFD_FILE_INFO,
         .stat = (uint8_t)stat
