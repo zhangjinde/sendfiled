@@ -801,7 +801,7 @@ static struct resrc_xfer* add_xfer(struct server* ctx,
     if (ctx->xfers->size == ctx->xfers->capacity) {
         syslog(LOG_CRIT, "Transfer table is full (%lu/%lu items)\n",
                ctx->xfers->size, ctx->xfers->capacity);
-        return false;
+        return NULL;
     }
 
     const int fd = file_open_read(req->filename, req->offset, req->len, finfo);
@@ -895,7 +895,7 @@ static struct resrc_timer* add_open_file(struct server* ctx,
                                              stat_fd, -1,
                                              finfo);
     if (!xfer)
-        return false;
+        return NULL;
 
     struct resrc_timer* timer = malloc(sizeof(*timer));
     if (!timer)
