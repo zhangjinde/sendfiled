@@ -45,9 +45,9 @@
 */
 
 /**
-   Response Command IDs.
+   Response command IDs.
 */
-enum {
+enum sfd_cmd_id {
     /** File information */
     SFD_FILE_INFO = 0x81,
     /** Open file information */
@@ -56,7 +56,10 @@ enum {
     SFD_XFER_STAT = 0x83
 };
 
-enum {
+/**
+   Sendfiled-specific operation status codes.
+ */
+enum sfd_op_stat {
     /** No error */
     SFD_STAT_OK = 0
 };
