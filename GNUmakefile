@@ -96,6 +96,8 @@ VALGRIND ?= valgrind
 
 GTEST_FILTER ?= *
 
+-include .build_vars.mk
+
 vpath %.c $(srcdir) $(srcdir)/impl
 vpath %.cpp $(srcdir) $(srcdir)/impl
 vpath %.odg $(docdir)/img
@@ -142,6 +144,8 @@ $(builddir)/test_%.cpp.tst.o: CXXFLAGS += -Wno-error
 
 .PHONY: all
 all: config $(builddir)/$(target) $(builddir)/$(target_so) build_tests
+
+-include .build_rules.mk
 
 .PHONY: config
 config: $(builddir)/sfd_config.h
@@ -239,19 +243,9 @@ test: config $(builddir)/$(test_target) $(builddir)/$(target)
 	@env PATH=$(builddir) $(builddir)/$(test_target) \
 $(GTEST_FLAGS) --gtest_filter=$(GTEST_FILTER)
 
-archive_name := $(projectname)_`date +%Y-%m-%d_%H%M%S`
-.PHONY: buol
-buol:
-	git gc --quiet
-	tarsnap --exclude $(builddir) --exclude $(htmldir) -cf $(archive_name) .
-
 .PHONY: doc
 doc:
 	$(DOXYGEN) doxyfile
-
-.PHONY: exports
-exports: $(builddir)/$(target_so)
-	$(NM) -gC --defined-only $<
 
 .PHONY: memcheck
 memcheck: $(builddir)/$(test_target) $(builddir)/$(target)
