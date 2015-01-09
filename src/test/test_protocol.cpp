@@ -28,9 +28,9 @@
 
 #include <gtest/gtest.h>
 
-#include "sendfiled.h"
-#include "impl/protocol_client.h"
-#include "impl/protocol_server.h"
+#include "../sendfiled.h"
+#include "../impl/protocol_client.h"
+#include "../impl/protocol_server.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wglobal-constructors"

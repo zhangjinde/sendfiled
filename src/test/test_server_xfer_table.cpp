@@ -26,7 +26,7 @@
 
 #include <gtest/gtest.h>
 
-#include "impl/server_xfer_table.h"
+#include "../impl/server_xfer_table.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wglobal-constructors"

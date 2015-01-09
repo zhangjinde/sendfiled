@@ -35,14 +35,14 @@
 
 #include <sfd_config.h>
 
-#include "impl/test_utils.hpp"
+#include "../impl/test_utils.hpp"
 
-#include "sendfiled.h"
-#include "impl/protocol_client.h"
-#include "impl/server.h"
-#include "impl/test_interpose.h"
-#include "impl/unix_socket_server.h"
-#include "impl/util.h"
+#include "../sendfiled.h"
+#include "../impl/protocol_client.h"
+#include "../impl/server.h"
+#include "../impl/test_interpose.h"
+#include "../impl/unix_socket_server.h"
+#include "../impl/util.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wglobal-constructors"

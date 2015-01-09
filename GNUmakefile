@@ -99,7 +99,7 @@ GTEST_FILTER ?= *
 -include .build_vars.mk
 
 vpath %.c $(srcdir) $(srcdir)/impl
-vpath %.cpp $(srcdir) $(srcdir)/impl
+vpath %.cpp $(srcdir)/test $(srcdir)/impl
 vpath %.odg $(docdir)/img
 vpath %.png $(htmldir)/img
 
