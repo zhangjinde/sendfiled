@@ -3,30 +3,25 @@ target := $(projectname)
 target_so := lib$(projectname).so
 test_target := tests
 
+-include .site_vars.mk
+
 prefix ?= /usr/local
 exec_prefix ?= $(prefix)
 bindir ?= $(exec_prefix)/bin
 libdir ?= $(exec_prefix)/lib
 includedir ?= $(prefix)/include
-datarootdir ?= $(prefix)/share
-datadir ?= $(datarootdir)
-docdir ?= $(datarootdir)/doc/$(projectname)
-htmldir ?= $(docdir)
 
-builddir := build
-srcdir := src
-docdir := doc
-htmldir := $(docdir)/html
+builddir ?= build
+srcdir ?= src
 
-install := install
-
-# The directory in which the server's UNIX socket will be located (default value)
+# The directory in which the server's UNIX socket will be located (default
+# value)
 default_server_sockdir := /tmp
 
 # ----------------
 # CLANG
 # ----------------
-#CC := /usr/local/llvm342/bin/clang
+#CC := clang
 #warnflags :=\
 #-Werror\
 #-Wall\
@@ -34,11 +29,12 @@ default_server_sockdir := /tmp
 #-Weverything\
 #-Wno-documentation\
 
-# ----------------------
-# GCC/default C compiler
-# ----------------------
+# -------------------------
+# Default C compiler (gcc?)
+# -------------------------
 CC := c99
-warnflags :=\
+
+warnflags ?= \
 -Werror\
 -Wall\
 -Wextra\
@@ -57,8 +53,9 @@ warnflags :=\
 -Wdisabled-optimization\
 #-Wjump-misses-init\
 
-CXX := /usr/local/llvm342/bin/clang++
-warnflags_cxx := \
+CXX ?= c++
+
+warnflags_cxx ?= \
 -Wall\
 -Wextra\
 -Weverything\
@@ -66,16 +63,14 @@ warnflags_cxx := \
 -Wno-c++98-compat\
 -Wno-documentation\
 
-lib_search_dirs :=
-lib_search_dirs_cxx := -L/usr/local/llvm342/lib
+LIB_SEARCH_DIRS_CXX ?=
 
 header_search_dirs :=\
--I$(builddir)\
+	-I$(builddir)\
 
-header_search_dirs_cxx :=\
+HEADER_SEARCH_DIRS_CXX := \
 	$(header_search_dirs) \
--isystem/usr/local/llvm342/include\
--isystem/usr/local/llvm342/include/c++/v1\
+	$(HEADER_SEARCH_DIRS_CXX)
 
 ifdef NDEBUG
 	dbgflags := -O2
@@ -83,25 +78,23 @@ else
 	dbgflags := -g -O0
 endif
 
+CFLAGS += $(dbgflags) $(warnflags) $(header_search_dirs)
+
+CXXFLAGS += -std=c++11 \
+	$(dbgflags) $(warnflags_cxx) $(HEADER_SEARCH_DIRS_CXX)
+
 binflags := -fpie
 soflags := -fpic -fvisibility=hidden
 
-CFLAGS += $(dbgflags) $(warnflags) $(header_search_dirs)
-CXXFLAGS += -std=c++11 -stdlib=libc++\
-$(dbgflags) $(warnflags_cxx) $(header_search_dirs_cxx)
-
+INSTALL ?= install
 DOXYGEN ?= doxygen
 NM ?= nm
 VALGRIND ?= valgrind
 
 GTEST_FILTER ?= *
 
--include .build_vars.mk
-
 vpath %.c $(srcdir) $(srcdir)/impl
 vpath %.cpp $(srcdir)/test $(srcdir)/impl
-vpath %.odg $(docdir)/img
-vpath %.png $(htmldir)/img
 
 src_common :=\
 process.c \
@@ -145,17 +138,17 @@ $(builddir)/test_%.cpp.tst.o: CXXFLAGS += -Wno-error
 .PHONY: all
 all: config $(builddir)/$(target) $(builddir)/$(target_so) build_tests
 
--include .build_rules.mk
-
 .PHONY: config
 config: $(builddir)/sfd_config.h
+
+.PHONY: build_tests
+build_tests: config $(builddir)/$(test_target)
+
+-include .site_rules.mk
 
 $(builddir)/sfd_config.h: $(lastword $(MAKEFILE_LIST))
 	@echo "#define SFD_PROGNAME \"$(projectname)\"" > $@
 	@echo "#define SFD_SRV_SOCKDIR \"$(default_server_sockdir)\"" >> $@
-
-.PHONY: build_tests
-build_tests: config $(builddir)/$(test_target)
 
 ifneq ($(MAKECMDGOALS), clean)
 -include $(builddir)/main.c.srv.d
@@ -171,7 +164,7 @@ endef
 
 define DEPEND_CXX
 @echo "DEP $<"
-@$(CXX) -std=c++11 -stdlib=libc++ $(header_search_dirs_cxx) \
+@$(CXX) -std=c++11 -stdlib=libc++ $(HEADER_SEARCH_DIRS_CXX) \
 -MM -MT "$(basename $@).o $@" $< > $@
 endef
 
@@ -213,17 +206,17 @@ $(builddir)/$(target_so): $(obj_c_client)
 
 $(builddir)/$(test_target): $(obj_c_server) $(obj_test) $(builddir)/$(target_so)
 	@echo "LNK $(notdir $@)"
-	@$(CXX) $(CXXFLAGS) $(lib_search_dirs_cxx) -o $@ $^ \
+	@$(CXX) $(CXXFLAGS) $(LIB_SEARCH_DIRS_CXX) -o $@ $^ \
 	$(linkflags) -ldl -lgtest -lgtest_main
 
 .PHONY: install
 install: $(builddir)/$(target) $(builddir)/$(target_so)
-	$(install) -d $(bindir)
-	$(install) -d $(libdir)
-	$(install) -o root -g root -m 4555 $(builddir)/$(target) $(bindir)
-	$(install) -m 555 $(builddir)/$(target_so) $(libdir)
-	$(install) -d $(includedir)/$(projectname)
-	$(install) -m 444 $(srcdir)/*.h $(includedir)/$(projectname)
+	$(INSTALL) -d $(bindir)
+	$(INSTALL) -d $(libdir)
+	$(INSTALL) -o root -g root -m 4555 $(builddir)/$(target) $(bindir)
+	$(INSTALL) -m 555 $(builddir)/$(target_so) $(libdir)
+	$(INSTALL) -d $(includedir)/$(projectname)
+	$(INSTALL) -m 444 $(srcdir)/*.h $(includedir)/$(projectname)
 
 .PHONY: clean
 clean:
