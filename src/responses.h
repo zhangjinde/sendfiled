@@ -57,7 +57,7 @@ enum sfd_cmd_id {
 };
 
 /**
-   Sendfiled-specific operation status codes.
+   Sendfiled-specific response status codes.
  */
 enum sfd_op_stat {
     /** No error */
@@ -68,12 +68,16 @@ enum sfd_op_stat {
 #pragma GCC diagnostic ignored "-Wpadded"
 
 /**
-   Information pertaining to a file being transferred.
+   A response message containing file metadata.
+
+   Sent in response to sfd_read() and sfd_send().
 */
 struct sfd_file_info {
+    /* header */
     uint8_t cmd;                /**< Command ID */
     uint8_t stat;               /**< Status Code */
 
+    /* body */
     size_t size;                /**< File size on disk */
     time_t atime;               /**< Time of last access */
     time_t mtime;               /**< Time of last modification */
@@ -81,25 +85,17 @@ struct sfd_file_info {
 };
 
 /**
-   The size, in bytes, of a PDU header.
+   A response message containing file metadata and a unique open file
+   identifier.
 
-   The header includes the command ID and status code.
-*/
-#define SFD_HDR_SIZE (offsetof(struct sfd_file_info, stat) +        \
-                      sizeof(((struct sfd_file_info*)NULL)->stat))
-
-/**
-   Information pertaining to an opened file.
-
-   These files have been opened and read-locked, but their transfers are only
-   started when the client issues the <em>Send Open File</em> command.
-
-   @see sfd_open() and sfd_send_open().
+   Sent in response to sfd_open() and used as input to sfd_send_open().
 */
 struct sfd_open_file_info {
+    /* header */
     uint8_t cmd;                /**< Command ID */
     uint8_t stat;               /**< Status Code */
 
+    /* body */
     size_t size;                /**< File size on disk */
     time_t atime;               /**< Time of last access */
     time_t mtime;               /**< Time of last modification */
@@ -110,17 +106,30 @@ struct sfd_open_file_info {
 };
 
 /**
-   A file transfer status PDU.
+   A response message containing file transfer status.
+
+   Sent in response to sfd_send() and sfd_send_open().
+
+   @sa sfd_xfer_complete()
 */
 struct sfd_xfer_stat {
+    /* header */
     uint8_t cmd;                /**< Command ID */
     uint8_t stat;               /**< Status Code */
 
-    /** The size of the most recent write or group of writes. */
-    size_t size;
+    /* body */
+    size_t size;                /**< Size of the most recent group of writes */
 };
 
 #pragma GCC diagnostic pop
+
+/**
+   The size of a PDU header, in bytes.
+
+   The PDU header consists of the command ID and status code.
+*/
+#define SFD_HDR_SIZE (offsetof(struct sfd_file_info, stat) +        \
+                      sizeof(((struct sfd_file_info*)NULL)->stat))
 
 #ifdef __cplusplus
 extern "C" {
@@ -132,12 +141,12 @@ extern "C" {
     */
 
     /**
-       Returns the command ID field from a buffer.
+       Returns the command ID from a buffer.
     */
     int sfd_get_cmd(const void*) SFD_API;
 
     /**
-       Returns the status code from a buffer.
+       Returns the response status code from a buffer.
     */
     int sfd_get_stat(const void*) SFD_API;
 
@@ -147,6 +156,11 @@ extern "C" {
        @param[out] pdu The PDU
 
        @param[in] buf The source buffer
+
+       @retval true Success
+
+       @retval false The buffer contained an unexpected command ID or error
+       response code.
     */
     bool sfd_unmarshal_file_info(struct sfd_file_info* pdu,
                                  const void* buf) SFD_API;
@@ -157,6 +171,11 @@ extern "C" {
        @param[out] pdu The PDU
 
        @param[in] buf The source buffer
+
+       @retval true Success
+
+       @retval false The buffer contained an unexpected command ID or error
+       response code.
     */
     bool sfd_unmarshal_open_file_info(struct sfd_open_file_info* pdu,
                                       const void* buf) SFD_API;
@@ -167,12 +186,17 @@ extern "C" {
        @param[out] pdu The PDU
 
        @param[in] buf The source buffer
+
+       @retval true Success
+
+       @retval false The buffer contained an unexpected command ID or error
+       response code.
     */
     bool sfd_unmarshal_xfer_stat(struct sfd_xfer_stat* pdu,
                                  const void* buf) SFD_API;
 
     /**
-       Checks whether a Transfer Status PDU indicates transfer completion.
+       Checks whether a Transfer Status PDU signifies transfer completion.
     */
     bool sfd_xfer_complete(const struct sfd_xfer_stat*) SFD_API;
 

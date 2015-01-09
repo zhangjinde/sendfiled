@@ -56,27 +56,34 @@ extern "C" {
     /**
        Spawns a server process.
 
-       @param server_name The server instance name. (The name of the server's
-       'listening' UNIX socket will be based on this value.)
+       The process will @a chroot(2) to @a root_dir and will accept file
+       operation requests on a UNIX UDP socket located at @a /root_dir/sockdir,
+       with a name derived from @a root_dir and @a server_name.
 
-       @param root_dir The server's root directory. The process will @a
-       chroot(2) to it unless it's "/".
+       @param server_name The server instance name. Used to identify the server
+       instance to sfd_connect().
 
-       @param sockdir The directory in which to place the server's UNIX socket
-       file.
+       @param root_dir The server process' new root directory.
 
-       @param maxfiles The maximum number of concurrent file transfers
+       @param sockdir The directory, relative to @a root_dir, in which to place
+       the server's UNIX socket file. Must begin with a '/'.
 
-       @param open_fd_timeout_ms The number of milliseconds after which open
-       file descriptors should be closed
+       @param maxfiles The maximum number of concurrent file transfers. When
+       this limit is reached the fact will be logged and new requests will be
+       rejected with a status code of <em>EMFILE (too many open files)</em>.
 
-       @retval >0 The process id
+       @param open_fd_timeout_ms The number of milliseconds after which files
+       opened by sfd_open() and then abandoned will be closed.
+
+       @retval >0 The server's process id.
 
        @retval 0 Server instance of the same name was already running
 
-       @retval -1 An error occurred (see @a errno). If the error occurred in the
-       server process, @a errno will contain the @e server process's @a errno
-       value.
+       @retval -1 An error occurred--check @a errno. If the error occurred in
+       the server process, @a errno will contain the @e server process's @a
+       errno value.
+
+       @sa sfd_shutdown()
     */
     pid_t sfd_spawn(const char* server_name,
                     const char* root_dir,
@@ -85,30 +92,38 @@ extern "C" {
                     int open_fd_timeout_ms) SFD_API;
 
     /**
-       Connects to a running server instance.
+       Connects to a server process.
 
-       @param server_sockdir The directory in which the server's UNIX socket is
-       located
+       @param server_sockdir The full path to the directory in which the
+       server's UNIX socket is located. Must begin with a '/'.
+
+       @note The server socket directory is relative to the @e client's root
+       directory (cf. sfd_spawn()).
 
        @param server_name The server instance name
 
-       @retval >0 A socket connected to the server instance
+       @retval >=0 A socket connected to the server instance
 
-       @retval -1 An error occurred
+       @retval -1 An error occurred--check @a errno
+
+       @sa sfd_spawn()
     */
     int sfd_connect(const char* server_sockdir,
                     const char* server_name) SFD_API;
 
     /**
-       Shuts down a server instance.
+       Shuts down a server process.
 
-       Signals the process to shut down and waits for it to terminate.
+       Has the same semantics as @a waitpid(2). I.e., the caller will block
+       until the server process's state changes.
 
-       @param pid The server instance's process ID.
+       @param pid The server's process ID
 
        @return -1 on error; otherwise the status value as per @a waitpid(2)
        which can be inspected using the associated macros such as @c WIFEXITED,
        @c WEXITSTATUS, etc.
+
+       @sa sfd_spawn()
     */
     int sfd_shutdown(pid_t pid) SFD_API;
 
@@ -119,35 +134,32 @@ extern "C" {
     */
 
     /**
-       Requests the server to write the contents of a file to a pipe.
+       Requests the server to write the contents of a file to the returned file
+       descriptor.
 
-       The server will first respond with a message of type struct
-       sfd_file_info to confirm the transfer, after which it will write the
-       data read from the file into the returned pipe.
+       This operation is useful in cases where the file data or metadata needs
+       to be inspected or processed by the client.
 
-       @note This operation is much more efficient on Linux than on other
-       systems due to the use of the splice system call, which minimises the
-       amount of copying and does not cross the kernel/userspace boundary. On
-       non-Linux systems this operation degrades to the usual read/write with a
-       userspace buffer inbetween, and therefore sfd_send() or sfd_send_open()
-       should be preferred.
+       The server will respond with a message of type sfd_file_info.
 
        @param srv_sockfd A socket connected to the server
 
        @param path Path to the file
 
-       @param offset The starting file offset
+       @param offset The starting file offset. May be @a zero, in which case the
+       file will be read from the beginning.
 
-       @param len The number of bytes, starting from @a offset, to read from the
-       file. May be @a zero, in which case the read will be to the end of the
-       file.
+       @param len The number of bytes, starting from @a offset, to be read from
+       the file. May be @a zero, in which case the file will be read all the way
+       to its end.
 
-       @param dest_fd_nonblock Whether or not the destination pipe file
-       descriptor should be non-blocking
+       @param dest_fd_nonblock Whether or not the returned file descriptor (a
+       combined status and data channel) should be in non-blocking mode
 
-       @retval >0 The read end of the pipe to which the file will be written
+       @retval >0 A new file descriptor from which the file metadata and file
+       data is to be read
 
-       @retval -1 An error occurred
+       @retval -1 An error occurred--check @a errno
     */
     int sfd_read(int srv_sockfd,
                  const char* path,
@@ -158,36 +170,33 @@ extern "C" {
        Requests the server to write the contents of a file to an open file
        descriptor.
 
-       The server will first respond with a message of type struct
-       sfd_file_info to confirm the transfer, after which it will write the
-       data read from the file to the destination file descriptor, reporting the
-       progress of the transfer in messages of type struct sfd_xfer_stat on the
-       status channel.
+       This operation is appropriate if the file data should be written to the
+       destination without delay or further involvement of the client.
 
-       @note This operation is implemented in terms of @a sendfile(2), which
-       places certain constraints on @a destination_fd on some platforms. E.g.,
-       on OS X and FreeBSD, the destination descriptor must be a socket,
-       otherwise the operation degrades to the usual read/write with a userspace
-       buffer inbetween.
+       The server will respond with a message of type sfd_file_info and
+       one or more of type sfd_xfer_stat.
 
        @param srv_sockfd A socket connected to the server
 
        @param path Path to the file
 
-       @param destination_fd The descriptor to which the file will be written
-       (the data channel)
+       @param destination_fd The descriptor to which the file data is to be
+       written
 
-       @param offset The starting file offset
+       @param offset The starting file offset. May be @a zero, in which case the
+       file will be read from the beginning.
 
-       @param len The number of bytes, starting from @a offset, to read from the
-       file. May be @a zero, in which case the read will be to the end of the
-       file.
+       @param len The number of bytes, starting from @a offset, to be read from
+       the file. May be @a zero, in which case the file will be read all the way
+       to its end.
 
-       @param stat_fd_nonblock Whether or not the status channel file descriptor
-       should be non-blocking.
+       @param stat_fd_nonblock Whether or not the returned file descriptor (the
+       status channel) should be in non-blocking mode
 
-       @retval >0 The status channel descriptor
-       @retval -1 An error occurred
+       @retval >0 A new file descriptor from which the file metadata and
+       transfer status updates are to be read (the status channel)
+
+       @retval -1 An error occurred--check @a errno
     */
     int sfd_send(int srv_sockfd,
                  const char* path,
@@ -196,29 +205,36 @@ extern "C" {
                  bool stat_fd_nonblock) SFD_API;
 
     /**
-       Requests the server to open and return information about a file (leaving
-       it open).
+       Requests the server to open and return metadata about a file (leaving it
+       open for a configurable period).
 
-       This operation is useful in cases where the client needs access to the
-       file metadata before the transfer begins, e.g. for inclusion in one or
-       more headers.
+       This operation is useful in cases where the file data or metadata needs
+       to be inspected or processed by the client. This caters to the same use
+       case as sfd_read() but is more efficient on systems without a facility
+       equivalent to Linux's @a splice(2).
 
-       The server will confirm the request on the status channel with a message
-       of type struct sfd_open_file_info. Besides the file size and file system
-       timestamps, the message will also include a unique transfer identifier to
-       be passed to the subsequent call to sfd_send_open().
+       The server will respond with a message of type sfd_open_file_info.
 
-       A timer will be set on the open file, after the expiraton of which the
-       file will be closed and its associated state purged.
+       @param srv_sockfd A socket connected to the server
 
-       @param offset The starting file offset
+       @param path Path to the file
 
-       @param len The number of bytes, starting from @a offset, to read from the
-       file. May be @a zero, in which case the read will be to the end of the
-       file.
+       @param offset The starting file offset. May be @a zero, in which case the
+       file will be read from the beginning.
 
-       @retval >0 The status channel file descriptor
-       @retval -1 An error occurred
+       @param len The number of bytes, starting from @a offset, to be read from
+       the file. May be @a zero, in which case the file will be read all the way
+       to its end.
+
+       @param stat_fd_nonblock Whether or not the returned file descriptor (the
+       status channel) should be in non-blocking mode
+
+       @retval >0 A new file descriptor from which the file metadata and
+       transfer status updates are to be read (the status channel)
+
+       @retval -1 An error occurred--check @a errno
+
+       @sa sfd_send_open()
     */
     int sfd_open(int srv_sockfd,
                  const char* path,
@@ -226,25 +242,25 @@ extern "C" {
                  bool stat_fd_nonblock) SFD_API;
 
     /**
-       Request that a file previously opened with sfd_open() be written to an
-       open file descriptor.
-
-       The server will immediately commence the transfer, and write transfer
-       progress messages of type struct sfd_xfer_stat to the status channel, as
-       usual.
+       Request the server to send a previously-opened file to an open file
+       descriptor.
 
        If the provided file identifier is invalid, the server will assume that
        it is due to the expiration of the timer associated with the open file
-       and will silently ignore the request. (The client will, however, receive
-       EOF when it tries to read from the status channel returned previously by
-       sfd_open().)
+       and will silently ignore the request.
 
        @param srv_sockfd A socket connected to the server
 
-       @param txnid Open file identifier
+       @param txnid Open file identifier (read from the file descriptor returned
+       by sfd_open()).
 
-       @param destination_fd The file descriptor to which the file will be
+       @param destination_fd The descriptor to which the file data is to be
        written
+
+       @retval true The request was sent
+       @retval false An error occurred--check @a errno
+
+       @sa sfd_open()
     */
     bool sfd_send_open(int srv_sockfd,
                        size_t txnid,

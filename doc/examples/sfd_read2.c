@@ -1,29 +1,37 @@
-if (state == AWAITING_FILE_INFO) {
-    struct sfd_file_info file_info;
+struct xfer_context {
+    enum {
+        READING_METADATA,
+        TRANSFERRING,
+        COMPLETE
+    } state;
 
-    ssize_t nread = read(file_fd, buf, sizeof(file_info));
+    size_t file_size;           /* File size on disk */
+    size_t total_nread;         /* Total number of bytes read */
+};
 
-    if (nread <= 0 ||
-        sfd_get_cmd(buf) != SFD_FILE_INFO ||
-        sfd_get_stat(buf) != SFD_STAT_OK) {
-        goto fail;
+void handle_file_server(struct xfer_context* ctx)
+{
+    if (ctx->state == READING_METADATA) {
+        /* Read file metadata sent from server */
+        struct sfd_file_info file_info;
+
+        read(data_fd, buf, sizeof(file_info));
+        sfd_unmarshal_file_info(&file_info, buf);
+
+        /* Store file size in order to recognise transfer completion */
+        ctx->file_size = file_info.size;
+
+        ctx->state = TRANSFERRING;
     }
 
-    if (!sfd_unmarshal_file_info(&file_info, buf))
-        goto fail;
+    if (ctx->state == TRANSFERRING) {
+        /* Read file data from server (and then do something with it
+           off-stage) */
+        ctx->total_nread += read(data_fd, buf, buf_size);
 
-    file_size = file_info.size;
-    state = TRANSFERRING;
- }
-
-if (state == TRANSFERRING) {
-    ssize_t nread = read(file_fd, buf, buf_size);
-
-    file_nread += nread;
-
-    if (file_nread == file_size) {
-        log(INFO, "File read complete\n");
-    } else {
-        log(INFO, "Read %lu/%lu bytes from file\n", file_nread, file_size);
+        if (ctx->total_nread == ctx->file_size) {
+            ctx->state = COMPLETE;
+            close(data_fd);
+        }
     }
- }
+}

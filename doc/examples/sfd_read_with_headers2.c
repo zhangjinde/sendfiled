@@ -1,46 +1,71 @@
-if (state == AWAITING_ACK) {
-    struct sfd_open_file_info file_info;
+struct xfer_context {
+    enum {
+        READING_METADATA,
+        SENDING_HEADERS,
+        TRANSFERRING,
+        COMPLETE
+    } state;
 
-    ssize_t nread = read(data_fd, buf, sizeof(file_info));
+    size_t file_size;           /* File size on disk */
+    time_t file_mtime;          /* File's last modification time */
+    size_t total_nsent;         /* Total number of bytes transferred */
+};
 
-    if (nread <= 0 ||
-        sfd_get_cmd(buf) != SFD_FILE_INFO ||
-        sfd_get_stat(buf) != SFD_STAT_OK) {
-        goto fail;
+void handle_file_server(struct xfer_context* ctx)
+{
+    if (ctx->state == READING_METADATA) {
+        /* Read file metadata sent from the server */
+
+        struct sfd_file_info file_info;
+
+        read(data_fd, buf, sizeof(file_info));
+        sfd_unmarshal_file_info(&file_info, buf);
+
+        /* Store some metadata to be sent with the headers */
+        ctx->file_size = file_info.size;
+        ctx->file_mtime = file_info.mtime;
+
+        ctx->state = SENDING_HEADERS;
     }
 
-    if (!sfd_unmarshal_file_info(&file_info, buf))
-        goto fail;
+    if (ctx->state == SENDING_HEADERS) {
+        /* Compose headers and write them to the destination file descriptor */
 
-    /* Store file size, to be sent with headers */
-    file_size = file_info.size;
-    file_nsent = 0;
+        char last_modified[50];
+        format_mtime(last_modified, ctx->file_mtime);
 
-    state = SENDING_HEADERS;
- }
+        int header_size = snprintf(buf, sizeof(buf),
+                                   "HTTP/1.1 200 OK\r\n"
+                                   "Content-Length: %lu\r\n"
+                                   "Last-Modified: %s\r\n"
+                                   "\r\n",
+                                   ctx->file_size, last_modified);
 
-if (state == SENDING_HEADERS) {
-    /* Compose headers and write them to the ultimate destination file
-       descriptor */
+        write(destination_fd, buf, header_size);
 
-    int header_size = snprintf(buf, "Content-Length: %d\r\n\r\n", file_size);
-
-    write(sockfd, buf, header_size);
-
-    state = TRANSFERRING;
- }
-
-if (state == TRANSFERRING) {
-    /* Splice file content from the data channel pipe to destination socket */
-
-    ssize_t nspliced = splice(data_fd, NULL, sockfd, NULL, file_blksize);
-
-    file_nsent += nspliced;
-
-    if (file_nsent == file_size) {
-        log(INFO, "Transfer complete\n");
-    } else {
-        log(INFO, "Transfer progress: %ld/%ld bytes\n",
-            file_nsent, file_size);
+        ctx->state = TRANSFERRING;
     }
- }
+
+    if (ctx->state == TRANSFERRING) {
+        /* Splice file content from the data channel pipe to destination socket
+           in sensibly-sized chunks */
+
+        for (;;) {
+            ssize_t nspliced = splice(data_fd, NULL,
+                                      destination_fd, NULL,
+                                      file_blksize);
+
+            ctx->total_nsent += nspliced;
+
+            if (ctx->total_nsent == ctx->file_size) {
+                ctx->state = COMPLETE;
+                break;
+
+            } else if (nspliced < file_blksize) {
+                log(INFO, "Transfer progress: %ld/%ld bytes\n",
+                    ctx->total_nsent, ctx->file_size);
+                break;
+            }
+        }
+    }
+}

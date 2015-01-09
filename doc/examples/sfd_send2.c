@@ -1,41 +1,35 @@
-if (state == AWAITING_FILE_INFO) {
-    struct sfd_file_info file_info;
+struct xfer_context {
+    enum {
+        READING_METADATA,
+        TRANSFERRING,
+        COMPLETE
+    } state;
+};
 
-    ssize_t nread = read(stat_fd, buf, sizeof(file_info));
+void handle_file_server(struct xfer_context* ctx)
+{
+    if (ctx->state == READING_METADATA) {
+        /* Read file metadata sent from the server */
 
-    if (nread <= 0 ||
-        sfd_get_cmd(buf) != SFD_FILE_INFO ||
-        sfd_get_stat(buf) != SFD_STAT_OK) {
-        goto fail;
+        struct sfd_file_info file_info;
+
+        read(stat_fd, buf, sizeof(file_info));
+        sfd_unmarshal_file_info(&file_info, buf);
+
+        ctx->state = TRANSFERRING;
     }
 
-    if (!sfd_unmarshal_file_info(&file_info, buf))
-        goto fail;
+    if (ctx->state == TRANSFERRING) {
+        /* Read transfer status updates from the server */
 
-    file_size = file_info.size;
-    state = TRANSFERRING;
- }
+        struct sfd_xfer_stat xfer;
 
-if (state == TRANSFERRING) {
-    struct sfd_xfer_stat xfer;
+        read(stat_fd, buf, sizeof(xfer));
+        sfd_unmarshal_xfer_stat(&xfer, buf);
 
-    ssize_t nread = read(stat_fd, buf, sizeof(xfer));
-
-    if (nread <= 0 ||
-        sfd_get_cmd(buf) != SFD_XFER_STAT ||
-        sfd_get_stat(buf) != SFD_STAT_OK) {
-        goto fail;
+        if (sfd_xfer_complete(&xfer)) {
+            ctx->state = COMPLETE;
+            close(stat_fd);
+        }
     }
-
-    if (!sfd_unmarshal_xfer_stat(&xfer, buf))
-        goto fail;
-
-    if (sfd_5xfer_complete(&xfer)) {
-        log(INFO, "Transfer of %lu bytes complete\n", ctx->size);
-    } else {
-        transfer_nsent += xfer.size;
-
-        log(INFO, "Transfer xfer: %lu/%lu bytes\n",
-            transfer_nsent, file_size);
-    }
- }
+}

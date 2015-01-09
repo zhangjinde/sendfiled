@@ -1,93 +1,160 @@
 # Code Examples {#code_examples}
 
-**Note**: Throughout these examples, error handling and other complications such
-as partial reads and writes have mostly been ignored for the sake of brevity and
-clarity.
+@note Throughout these examples, error handling and other inconvenient realities
+such as partial reads and writes have been ignored for the sake of brevity.
 
-# Starting a server instance from the shell
+# Example 1: starting a server instance from the shell
 
 ~~~{.sh}
-        $ /usr/bin/sendfiled -s disk0 -n 100 -t 10000
+        $ sendfiled -s disk0 -r /mnt/disk0 -d
 ~~~
 
-* Server instance name: 'disk0'
-* Maximum number of concurrent transfers: 100
-* [Open files][send_open_file] are automatically closed after 10,000ms
+* `-s <string>`: Server instance name: 'disk0'
 
-# Starting a server instance programmatically
+* `-r <path>`: Server's new root directory: `/mnt/disk0`; the server will
+   `chroot(2)` and `chdir(2)` to this directory as soon as possible.
 
-(**Note** that this form is far from ideal since no attempt is made at limiting
-the privileges of the server process; instead, this task is left to
-operating-system-provided facilities such as `chroot`, `jail`, *cgroups*, *LXC*,
-etc. As it stands, this form is only provided for the sake of convenience during
-testing.)
+* `-d`: become a daemon
+
+The server binary will need root privileges in order to invoke `chroot(2)`
+unless the new root directory is `/`, in which case no `chroot(2)` is done. The
+server process will drop its root privileges as soon as possible (see the `-u`
+and `-g` options below).
+
+## Other options:
+
+* `-u <string>`: The new username; defaults to the real UID; mandatory if the
+  real UID is root (0)
+
+* `-g <string>`: The new group name; defaults to the real GID; mandatory if the
+  real GID is root (0)
+
+* `-S <path>`: The directory in which to create the UNIX socket file; relative
+  to the new root directory
+
+* `-n <integer>`: The maximum number of concurrent file transfers
+
+* `-t <integer>`: The number of milliseconds after which files opened with
+  sfd_open() but not yet transferred with sfd_send_open() are assumed to have
+  been abandoned and therefore closed
+
+  @todo Add a sfd_close() function in order to abort a transfer initiated with
+  sfd_open().
+
+# Example 2: starting a server instance programmatically
 
 @include sfd_spawn.c
 
-# Shutting down a server instance programmatically
+# Example 3: shutting down a server instance programmatically
 
 @include sfd_shutdown.c
 
-# Connecting to a server instance
+# Example 4: connecting to a server instance
 
 @include sfd_connect.c
 
-# Disconnecting from a server
+@note The socket directory is relative to the @e client's root directory, hence
+the inclusion of the `/mnt/disk0` prefix this time.
+
+# Example 5: disconnecting from a server
 
 @include sfd_disconnect.c
 
-# [Reading][read_file] a file
+# Example 6: [reading a file][read_file]
+
+## Send the request
 
 @include sfd_read1.c
 
-`file_fd` is the [data channel][data_channel] (the read end of a pipe); when it
-becomes readable:
+@note The file path is relative to the directory specified as the server's new
+root when it was spawned, so `/www/abc.html` resolves to
+`/mnt/disk0/www/abc.html` in the running example.
+
+* `data_fd` is the [data channel][data_channel];
+
+* The server has [opened][opening_files] the file and has started writing its
+  metadata and contents to the [data channel][data_channel]; when it becomes
+  readable:
+
+## Receive file metadata and file data
 
 @include sfd_read2.c
 
-# Sending a file
+# Example 7: [sending a file][send_file]
 
 ## Send the request
 
 @include sfd_send1.c
 
-* At this point the file is open and locked and the transfer may already be in
-  progress;
+@note The file path is relative to the directory specified as the server's new
+root when it was spawned, so `/www/abc.html` resolves to
+`/mnt/disk0/www/abc.html` in the running example.
 
-* `stat_fd` is the [status channel][status_channel], the read end of a pipe.
+* At this point the file is [open][opening_files] and the transfer between the
+  server and the reader of the destination file descriptor *may already be in
+  progress*;
 
-## Receive transfer updates
+* `stat_fd` is the [status channel][status_channel]; when it becomes readable:
 
-When the [status channel][status_channel] becomes readable:
+## Receive file metadata and transfer updates
 
 @include sfd_send2.c
 
-# Sending a file with headers
+# Example 8: sending headers
 
-(See [sending headers][sending_headers] for more information.)
+@note See [sending headers][sending_headers] for context.
 
-## Using [send open file][send_open_file]
+## Method 1: using [Send Open File][send_open_file]
+
+This method has more complicated semantics but is more efficient on systems
+without an equivalent to Linux's `splice(2)` facility.
+
+### Send the request
 
 @include sfd_send_with_headers1.c
 
-At this point the file is open and locked, but no transfer has been scheduled;
-`stat_fd` is the [status channel][status_channel], the read end of a pipe; when
-it becomes readable:
+@note The file path is relative to the directory specified as the server's new
+root when it was spawned, so `/www/abc.html` resolves to
+`/mnt/disk0/www/abc.html` in the running example.
+
+At this point:
+
+* the file has been [opened][opening_files] but no transfer has been scheduled;
+
+* `stat_fd` is the [status channel][status_channel] and when it becomes
+  readable:
+
+### Receive file metadata, send headers, receive transfer updates
 
 @include sfd_send_with_headers2.c
 
-## Using [read file][read_file]
+## Method 2: using [Read File][read_file]
+
+This method has simpler semantics that method 1 but is only efficient on systems
+with a facility equivalent to Linux's `splice(2)`.
+
+### Send the request
 
 @include sfd_read_with_headers1.c
 
-`data_fd` is the [data channel][data_channel]; at this point the server has
-opened and locked the file and has started the transfer; when it becomes
-readable:
+@note The file path is relative to the directory specified as the server's new
+root when it was spawned, so `/www/abc.html` resolves to
+`/mnt/disk0/www/abc.html` in the running example.
+
+At this point:
+
+* the server has [opened][opening_files] the file and *has started the
+transfer*;
+
+* `data_fd` is the [data channel][data_channel]; when it becomes readable:
+
+### Receive file metadata and read file data
 
 @include sfd_read_with_headers2.c
 
   [status_channel]: messages.html#status_channel
   [data_channel]: messages.html#data_channel
+  [opening_files]: implementation.html#opening_files
   [sending_headers]: messages.html#sending_headers
   [read_file]: messages.html#read_file
   [send_file]: messages.html#send_file

@@ -2,146 +2,180 @@
 
 # Communication channels
 
-<h2 id="status_channel">Status channel</h2>
+<h2 id="status_channel">Status Channel</h2>
 
 This channel consists of an automatically-created pipe connecting the client and
-server processes. Each request is acknowledged on this channel before the
-commencement of the transfer. The server will also write [transfer
-progress][transfer_status] and [error][errors] notifications to this channel.
+server processes. Each request is acknowledged on this channel with a response
+code and file metadata before the commencement of the transfer. The server will
+also write [transfer progress][transfer_status] and [error
+notifications][errors] to this channel.
 
-This channel is not present in the case of the [Read File][read_file] operation.
+@note This channel is not created in the case of the [Read File][read_file]
+operation.
 
-<h2 id="data_channel">Data channel</h2>
+<h2 id="data_channel">Data Channel</h2>
 
-This is the channel to which the file data is written. Its type depends on the
-operation: for [Read File][read_file] operations, the data channel will always
-be an automatically-created pipe; for [Send File][send_file] and [Send Open
-File][send_open_file] operations the data channel is an arbitrary file
-descriptor opened by the client process (and passed to the server process as
-part of the request), so its type varies.
+This is the file descriptor to which the server writes the file data.
 
-# Operations (requests)
+Its type depends on the operation: for [Read File][read_file] operations, the
+Data Channel is an automatically-created pipe; for [Send File][send_file] and
+[Send Open File][send_open_file] operations the Data Channel is an arbitrary
+file descriptor opened by the client process (and passed to the server process
+along with the request).
 
-<h2 id="send_file">Send file</h2>
+# File operations/request types
 
-The server writes the contents of a file to an arbitrary, client-provided file
-descriptor.
+<h2 id="send_file">Send File</h2>
+
+The server process writes the contents of a file to an arbitrary,
+client-provided file descriptor.
 
 Step-by-step:
 
-* The server [opens][opening_files] the file and writes a [File
-  Information][file_info] message to the [status channel][status_channel];
+1. The server [opens the file][opening_files] and writes a [File
+   Information][file_info] message to the [Status Channel][status_channel];
 
-* The server [reads from the file and writes to the data
-  channel][transfer_concurrency] as it is able, and it will periodically write
-  [transfer status][transfer_status] messages to the [status
-  channel][status_channel] as the transfer progresses;
+2. The server [reads from the file and writes to the data
+   channel][transfer_concurrency] as it is able, and it will periodically write
+   [transfer status][transfer_status] messages to the [Status
+   Channel][status_channel];
 
-* When the transfer completes or an error occurs, the server writes a special
-  [transfer completion][transfer_completion] message (see below) or an [error
-  message][errors], respectively, to the [status channel][status_channel], and
-  closes the file.
+3. When the transfer completes or an error occurs, the server writes a special
+   [transfer completion][transfer_completion] message (see below) or an [error
+   message][errors], respectively, to the [Status Channel][status_channel], and
+   closes the file.
 
 Completion of the transfer is signified by a [transfer status][transfer_status]
-message containing a special value in the *size* field, an event that can be
-tested for using the sfd_xfer_complete() function.
+message containing a special value, an event that can be tested for using the
+sfd_xfer_complete() function.
 
-This operation is [usually][data_copying] implemented in terms of one or more
-calls to [sendfile] and should be the most commonly-used operation since it is
-most likely to be efficient on all supported platforms.
+@note This operation is [usually][data_copying] implemented in terms of one or
+more calls to [sendfile] and should be the most commonly-used operation since it
+is most likely to be efficient on all supported platforms.
 
-Implemented by sfd_send().
+@sa sfd_send()
 
-<h2 id="read_file">Read file</h2>
+<h2 id="read_file">Read File</h2>
 
-The server writes the contents of a file to a pipe connected to the client.
-
-The primary difference between this operation and [Send File][send_file] is that
-there is no status channel ([status channel][status_channel] and [data
-channel][data_channel] are one and the same).
+The server process writes the contents of a file to an automatically-created
+pipe connected to the client process (the [Data Channel][data_channel]). There
+is no distinct [Status Channel][status_channel].
 
 Step-by-step:
 
-* The server [opens][opening_files] the file and writes a [file information][file_info] message
-  to the [data channel][data_channel]
+1. The server [opens the file][opening_files] and writes a [File
+   Information][file_info] message to the [Data Channel][data_channel];
 
-* When the destination descriptor becomes writable, the server reads, in chunks
-  sized according to the block size returned by [stat], from the file and writes
-  this data to the [data channel][data_channel] until this descriptor has been
-  filled to capacity;
+2. The server [reads from the file and writes to the data
+   channel][transfer_concurrency] as it is able;
 
-* When the transfer completes or an [error][errors] occurs, the server closes
-  the [data channel][data_channel] and closes the file.
+3. When the transfer completes or an [error][errors] occurs, the server closes
+   the [Data Channel][data_channel] and closes the file.
 
-After the initial [File Information][file_info] message which precedes the file
-data, the server does not send any [transfer status][transfer_status] or [error
-messages][errors] because, due to the fact that there is no separate status and
-data channels, they would be interleaved with file content and thus the client
-wouldn't be able to distinguish between the two types of data.
+@note @li The server does not send any [transfer status][transfer_status] or
+[error messages][errors] because there is no [Status
+Channel][status_channel]. Clients are able to determine the outcome of the
+transfer by comparing the total number of bytes received to the file size
+received in the inital [file information][file_info] message.
 
-Clients are able to determine the outcome of the transfer by comparing the total
-number of bytes received to the file size received in the inital [file
-information][file_info] message.
+@note @li This operation is [less efficient][data_copying] on systems without an
+equivalent of Linux's [splice] facility, so the [send file][send_file] and [send
+open file][send_open_file] operations should be preferred on such systems.
 
-This operation is [less efficient][data_copying] on non-Linux systems due to the
-absence of a [splice] equivalent, so the [send file][send_file] and [send open
-file][send_open_file] operations should be preferred on such systems.
+@sa sfd_read().
 
-Implemented by sfd_read().
+<h2 id="send_open_file">Send Open File</h2>
 
-<h2 id="send_open_file">Send open file</h2>
+This is essentially a two-stage/request version of [Send File][send_file] which
+gives the client an opportunity to inspect the file metadata before the
+commencement of the transfer of the file data.
 
-This is effectively a two-stage/two-request version of [Send File][send_file]:
+1. In response to the first request (*Open File*), the server
+   [opens][opening_files] the file and responds with the file metadata and a
+   unique identifying token in message of type sfd_open_file_info on the [Status
+   Channel][status_channel]. *It does not start transferring the file data.*
 
-1. In response to the first request ('*open file*'), the server
-   [opens][opening_files] the file and responds with an [open file
-   information][open_file_info] message, which includes a unique identifying
-   token, on the [status channel][status_channel] (implemented by sfd_open());
+2. Once the server receives the second request (*Send Open File*), the server
+   writes the open file identified by the unique token to an arbitrary
+   user-provided file descriptor.
 
-2. In response to the second request ('*send open file*'), the server writes the
-   file identified by the unique token to an arbitrary user-provided file
-   descriptor (implemented by sfd_send_open()).
+3. The server will close the [Status Channel][status_channel] and the file if
+   the *Send Open File* request is not received within a configurable period,
+   the transfer completes, or an error occurs.
 
-The server will automatically close open files after a configurable amount of
-time if no *send open file* request has yet been received.
+@note The same semantics are achievable using the conceptually simpler [Read
+File][read_file], but this operation is [inefficient][data_copying] on systems
+lacking an equivalent to Linux's `splice(2)` facility.
 
-(This operation exists solely in order to support the [sending of headers]
-[sending_headers] on non-Linux systems.)
+@sa [Sending Headers] [sending_headers]
+@sa sfd_open()
+@sa sfd_send_open()
 
 # Responses
 
-<h2 id="file_info">File information</h2>
+<h2 id="headers">Headers</h2>
 
-Sent in response to a [Read File][read_file] or [Send File][send_file]
-request. These messages include information such as the size of the file and the
-various timestamps as reported by [stat] and are implemented in the form of
-struct sfd_file_info.
+All response message types start with a two-byte header which consist of the
+following:
 
-<h2 id="open_file_info">Open file information</h2>
+* *Command ID*: identifies the command
 
-Sent in response to a [Send Open File][send_open_file] request. In addition to
-the information contained in [file information][file_info] messages, they
-include a unique token which identifies the opened file. Implemented in the form
-of struct sfd_open_file_info.
+* *Response/status code*: indicates the result of the request. `SFD_STAT_OK`
+  signifies success, while a non-negative, non-zero positive integer signifies
+  an error condition to be interpreted as a standard `errno(3)` value.
 
-<h2 id="transfer_status">Transfer progress notifications</h2>
+@sa sfd_get_cmd()
+@sa sfd_get_stat()
 
-Sent while a transfer is in progress and contain the size, in bytes, of the most
-recent write (or group of writes), or an error code if the transfer has
-failed. Implemented in the form of struct sfd_xfer_stat.
+<h2 id="file_info">File Information</h2>
+
+Sent in response to a [Read File][read_file] or [Send File][send_file] request
+in order to indicate whether or not the request was accepted.
+
+@sa struct sfd_file_info
+@sa sfd_unmarshal_file_info()
+
+<h2 id="open_file_info">Open File Information</h2>
+
+Sent in response to a [Send Open File][send_open_file] request in order to
+indicate whether or not the request was accepted.
+
+@sa sfd_open_file_info
+@sa sfd_unmarshal_open_file_info()
+
+<h2 id="transfer_status">Transfer status notifications</h2>
+
+Sent to notify the client that a chunk of the file has been sent. Specifies the
+size, in bytes, of the most recent write (or group of writes).
+
+@sa sfd_xfer_stat
 
 These notifications are never sent during [Read File][read_file] operations.
 
 <h2 id="transfer_completion">Transfer completion notifications</h2>
 
-Sent only once, when a transfer completes. Implemented in the form of a
-[transfer status][transfer_status] message containing a special value which can
-be tested for using the sfd_xfer_complete() function.
+Sent to notify the client of the completion of a transfer initiated with a [Send
+File][send_file] or a [Send Open File][send_open_file] request. These are
+special instances of the [Transfer Status][transfer_status] message for which
+the sfd_xfer_complete() function returns `true`.
+
+@sa sfd_unmarshal_xfer_stat()
+@sa sfd_xfer_complete()
+@sa sfd_xfer_stat
 
 <h2 id="errors">Error notifications</h2>
 
 Sent when a fatal error has occured, either in the reading of the file or in the
 writing to the destination file descriptor.
+
+These messages consist only of a [header](#headers) and therefore does not have
+a corresponding data structure. Instead the receive buffer can be inspected
+directly using sfd_get_cmd() and sfd_get_stat() and indirectly via the
+response-unmarshaling functions such as sfd_unmarshal_xfer_stat() which return
+`false` in the case of an unexpected command ID or an error response code.
+
+@sa sfd_get_cmd()
+@sa sfd_get_stat()
 
 # Reliability of response delivery
 
@@ -150,30 +184,34 @@ notifications][errors] are critical and will be retried until they have been
 successfully written.
 
 [File Information][file_info] and [Transfer Progress][transfer_status] messages
-will not be retried because the former are sent when the pipe has just been
-created and therefore should have more than enough capacity to accept the PDU,
-and the latter are only sent to provide the client with an idea of the
-transfer's progress. Also, due to these notifications being non-terminal,
-retrying them would require suspending the transfer and probably a response
-queue for each request context.
+will not be retried because the former are sent right after the creation of the
+[Status][status_channel] or [data][data_channel] channel pipes and therefore
+should have more than enough capacity to accept the PDU, and the latter are
+merely intermediate, informational notification messages, the terminal [transfer
+completion][transfer_completion] message being the funcionally significant one.
 
 <h1 id="sending_headers">Sending headers</h1>
 
-Clients may need to precede file content with headers containing file metadata
-such as its size. Due to the fact that file metadata only becomes available
-after the server has opened the file, the client and server need to synchronise
+A client may need to precede file content with headers containing file metadata
+such as file size. Due to the fact that file metadata only becomes available
+after the server has opened the file the client and server need to synchronise
 at the point between the client's receipt of the metadata and the server's
 commencement of the transfer, something for which [Send File][send_file] does
-not have the right semantics.
+not have the right semantics (file data is transferred out-of-band).
 
-On Linux [Read File][read_file] is the recommended solution because it is
-efficient due to the presence of [splice] and has the right semantics in that
-the file metadata precedes the file content in the [data
-channel][data_channel]'s buffer.
+Recommendations:
 
-The recommended solution on non-Linux systems is the [Send Open
-File][send_open_file] operation because, although [Read File][read_file] has the
-right semantics, it is inefficient due to the lack of [splice].
+* **Systems *with* a `splice(2)` facility** should use the [Read
+  File][read_file] operation because `splice(2)` minimises copying, is
+  conceptually simpler, and requires less signaling from the server.
+
+* **Systems *lacking* a `splice(2)` facility** should use the [Send Open
+  File][send_open_file] operation because [Read File][read_file] is implemented
+  as a kernel-to-userspace-to-kernel copy on these systems while [Send Open
+  File][send_open_file] is implemented in terms of `sendfile(2)`.
+
+* **In case of doubt** use [Send Open File][send_open_file] because `sendfile(2)`
+    is supported on all systems.
 
   [status_channel]: messages.html#status_channel
   [data_channel]: messages.html#data_channel
@@ -189,23 +227,5 @@ right semantics, it is inefficient due to the lack of [splice].
   [transfer_status]: messages.html#transfer_status "Transfer Status Message"
   [errors]: messages.html#errors "Error Notifications"
   [transfer_completion]: messages.html#transfer_completion "Transfer completion message"
-  [1]: http://adrianchadd.blogspot.com/2013/12/experimenting-with-zero-copy-network-io.html
-  [2]: https://git.kernel.org/cgit/linux/kernel/git/stable/linux-stable.git/commit/?id=485ddb4b9741bafb70b22e5c1f9b4f37dc3e85bd
-  [3]: https://svnweb.freebsd.org/base?view=revision&revision=255608
-  [4]: http://neugierig.org/software/blog/2011/12/nonblocking-disk-io.html
-  [5]: http://bert-hubert.blogspot.com/2012/05/on-linux-asynchronous-file-io.html
-  [6]: http://blog.libtorrent.org/2012/10/asynchronous-disk-io/
-  [unix]: http://linux.die.net/man/7/unix "unix(7)"
-  [open]: http://linux.die.net/man/2/open "open(2)"
-  [close]: http://linux.die.net/man/2/close "close(2)"
-  [stat]: http://linux.die.net/man/2/stat "stat(2)"
-  [fstat]: http://linux.die.net/man/2/fstat "fstat(2)"
-  [signalfd]: http://linux.die.net/man/2/signalfd "signalfd(2)"
   [splice]: http://linux.die.net/man/2/splice "splice(2)"
   [sendfile]: https://www.freebsd.org/cgi/man.cgi?query=sendfile "sendfile(2)"
-  [select]: http://linux.die.net/man/2/select "select(2)"
-  [poll]: http://linux.die.net/man/2/poll "poll(2)"
-  [epoll]: http://linux.die.net/man/7/epoll "epoll(7)"
-  [kqueue]: https://www.freebsd.org/cgi/man.cgi?query=kqueue "kqueue(2)"
-  [kqueue_freebsd]: https://www.freebsd.org/cgi/man.cgi?query=kqueue "kqueue(2)"
-  [kqueue_osx]: https://developer.apple.com/library/Mac/documentation/Darwin/Reference/ManPages/man2/kqueue.2.html "kqueue(2)"

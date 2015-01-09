@@ -1,4 +1,4 @@
-int file_fd = sfd_read(srv_fd,
-                       "/mnt/disk0/abc.tar.gz",
+int data_fd = sfd_read(srv_fd,
+                       "/www/abc.html",
                        offset, nbytes,
                        file_fd_nonblock);
