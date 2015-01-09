@@ -12,8 +12,7 @@ To provide applications with:
    doing it in a separate thread of execution.
 
 * **Reduced copying**. Sendfiled makes use of platform facilities such as
-   [sendfile] and [splice] to achieve file transfer with [minimal
-   copying][data_copying].
+   [sendfile] and [splice] to achieve file transfer with minimal copying.
 
 * **Reduced contention**.
 
