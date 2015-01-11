@@ -70,10 +70,10 @@ the inclusion of the `/mnt/disk0` prefix this time.
 root when it was spawned, so `/www/abc.html` resolves to
 `/mnt/disk0/www/abc.html` in the running example.
 
-* `data_fd` is the [data channel][data_channel];
+* `data_fd` is the [Data Channel][data_channel];
 
 * The server has [opened][opening_files] the file and has started writing its
-  metadata and contents to the [data channel][data_channel]; when it becomes
+  metadata and contents to the [Data Channel][data_channel]; when it becomes
   readable:
 
 ## Receive file metadata and file data
@@ -94,7 +94,7 @@ root when it was spawned, so `/www/abc.html` resolves to
   server and the reader of the destination file descriptor *may already be in
   progress*;
 
-* `stat_fd` is the [status channel][status_channel]; when it becomes readable:
+* `stat_fd` is the [Status Channel][status_channel]; when it becomes readable:
 
 ## Receive file metadata and transfer updates
 
@@ -121,7 +121,7 @@ At this point:
 
 * the file has been [opened][opening_files] but no transfer has been scheduled;
 
-* `stat_fd` is the [status channel][status_channel] and when it becomes
+* `stat_fd` is the [Status Channel][status_channel] and when it becomes
   readable:
 
 ### Receive file metadata, send headers, receive transfer updates
@@ -146,7 +146,7 @@ At this point:
 * the server has [opened][opening_files] the file and *has started the
 transfer*;
 
-* `data_fd` is the [data channel][data_channel]; when it becomes readable:
+* `data_fd` is the [Data Channel][data_channel]; when it becomes readable:
 
 ### Receive file metadata and read file data
 

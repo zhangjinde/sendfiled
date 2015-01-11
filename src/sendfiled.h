@@ -79,8 +79,8 @@ extern "C" {
 
        @retval 0 Server instance of the same name was already running
 
-       @retval -1 An error occurred--check @a errno. If the error occurred in
-       the server process, @a errno will contain the @e server process's @a
+       @retval -1 An error occurred--check @c errno(3). If the error occurred in
+       the server process, @c errno(3) will contain the @e server process's @a
        errno value.
 
        @sa sfd_shutdown()
@@ -104,7 +104,7 @@ extern "C" {
 
        @retval >=0 A socket connected to the server instance
 
-       @retval -1 An error occurred--check @a errno
+       @retval -1 An error occurred--check @c errno(3)
 
        @sa sfd_spawn()
     */
@@ -159,7 +159,7 @@ extern "C" {
        @retval >0 A new file descriptor from which the file metadata and file
        data is to be read
 
-       @retval -1 An error occurred--check @a errno
+       @retval -1 An error occurred--check @c errno(3)
     */
     int sfd_read(int srv_sockfd,
                  const char* path,
@@ -196,7 +196,7 @@ extern "C" {
        @retval >0 A new file descriptor from which the file metadata and
        transfer status updates are to be read (the status channel)
 
-       @retval -1 An error occurred--check @a errno
+       @retval -1 An error occurred--check @c errno(3)
     */
     int sfd_send(int srv_sockfd,
                  const char* path,
@@ -232,7 +232,7 @@ extern "C" {
        @retval >0 A new file descriptor from which the file metadata and
        transfer status updates are to be read (the status channel)
 
-       @retval -1 An error occurred--check @a errno
+       @retval -1 An error occurred--check @c errno(3)
 
        @sa sfd_send_open()
     */
@@ -258,7 +258,7 @@ extern "C" {
        written
 
        @retval true The request was sent
-       @retval false An error occurred--check @a errno
+       @retval false An error occurred--check @c errno(3)
 
        @sa sfd_open()
     */

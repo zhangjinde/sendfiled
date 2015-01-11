@@ -43,10 +43,10 @@ To provide applications with:
   connected to the client.
 
 * [Send Open File:] [Send Open File] the server sends a previously-opened file
-  to an arbitrary, client-provided file descriptor. This allows the client and
-  server to synchronise on the point between the opening of the file (i.e., the
-  provision of file metadata to the client) and the commencement of the
-  transfer.
+  to a client-provided file descriptor. This operation allows the client and
+  server to synchronise at the point between the opening of the file and the
+  commencement of the transfer (useful for sending headers containing file
+  metadata).
 
 # Supported platforms
 
@@ -84,6 +84,8 @@ The build has the following dependencies:
 * Write more tests
 
 * Measure for performance
+
+* Support for more than one OS
 
   [status_channel]: messages.html#status_channel
   [data_channel]: messages.html#data_channel

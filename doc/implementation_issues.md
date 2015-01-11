@@ -137,15 +137,17 @@ outdated.
 
 <h1 id="processes">Processes vs. threads</h1>
 
-The primary reason Sendfiled is implemented as a processes instead of a thread
-is that it makes it possible to share a single server instance between multiple
-client applications, the convenient side-effects of which include:
+The primary reason Sendfiled is implemented as a process instead of a thread is
+that it makes it possible to share a single server instance between multiple
+client applications, with the following convenient consequences:
 
 1. Fewer system-wide threads of execution compared to a thread-per-application
    design, reducing contention on system resources such as CPU, disk, cache,
    etc.
 
-2. The degree of file I/O concurrency is decoupled from the degree of other
+2. Clients benefit from process environment isolation.
+
+3. The degree of file I/O concurrency is decoupled from the degree of other
    types of concurrency.
 
    Some very well-known and modern server software performs file I/O directly
@@ -163,8 +165,6 @@ client applications, the convenient side-effects of which include:
 
    Applications that have a dedicated file I/O thread do not have this problem,
    but may still contend for the file I/O stack with *other applications*.
-
-3. Clients benefit from process environment isolation.
 
   [status_channel]: messages.html#status_channel
   [data_channel]: messages.html#data_channel

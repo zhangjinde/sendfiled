@@ -1,3 +1,11 @@
+**Note:** A more recent version of the information in this file and the rest of
+  the project's documentation can be found
+  [here](http://francoisk.me/software/sendfiled/index.html).
+
+---
+
+# Synopsis
+
 Sendfiled is a local server process which sends or reads files on behalf of
 client applications.
 
@@ -12,9 +20,9 @@ To provide applications with:
    doing it in a separate thread of execution.
 
 * **Reduced copying**. Sendfiled makes use of platform facilities such as
-   [sendfile] and [splice] to achieve file transfer with minimal copying.
-
-* **Reduced contention**.
+   [sendfile](https://www.freebsd.org/cgi/man.cgi?query=sendfile "sendfile(2)")
+   and [splice](http://linux.die.net/man/2/splice "splice(2)") to achieve file
+   transfer with minimal copying.
 
 # Architectural overview
 
@@ -34,16 +42,17 @@ To provide applications with:
 
 # File transfer operations
 
-* Send File: the server writes the contents of a file to an arbitrary,
+* **Send File**: the server writes the contents of a file to an arbitrary,
   client-provided file descriptor.
 
-* Read File: the server writes the contents of a file to a pipe connected to the
-  client.
+* **Read File**: the server writes the contents of a file to a pipe connected to
+  the client.
 
-* Send Open File: the server sends a previously-opened file to an arbitrary,
-  client-provided file descriptor. This allows the client and server to
-  synchronise on the point between the opening of the file (i.e., the provision
-  of file metadata to the client) and the commencement of the transfer.
+* **Send Open File**: the server sends a previously-opened file to a
+  client-provided file descriptor. This operation allows the client and server
+  to synchronise at the point between the opening of the file and the
+  commencement of the transfer (useful for sending headers containing file
+  metadata).
 
 # Supported platforms
 
@@ -52,7 +61,9 @@ To provide applications with:
 That's it, alas. But at least the platform-specific code is restricted to a few
 source files.
 
-# Dependencies
+# Building
+
+## Dependencies
 
 There are no runtime dependencies.
 
@@ -65,12 +76,3 @@ The build has the following dependencies:
 * A C++14 compiler (tests only; tested with clang++ 3.4.2)
 
 * Google Test (tests only)
-
-# TODO
-
-* Write more tests
-
-* Measure for performance
-
-  [splice]: http://linux.die.net/man/2/splice "splice(2)"
-  [sendfile]: https://www.freebsd.org/cgi/man.cgi?query=sendfile "sendfile(2)"
