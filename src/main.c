@@ -155,8 +155,6 @@ int main(const int argc, char** argv)
         }
     }
 
-    openlog(SFD_PROGNAME, LOG_NDELAY | LOG_CONS | LOG_PID, LOG_DAEMON);
-
     if (!root_dir || !srvname || maxfiles == 0) {
         if (!do_sync)
             print_usage(fd_timeout_ms);
@@ -210,6 +208,13 @@ int main(const int argc, char** argv)
         goto fail1;
     }
 
+    if (daemonise && !proc_daemonise(NULL, 0)) {
+        LOGERRNO_("Couldn't enter daemon mode");
+        goto fail1;
+    }
+
+    openlog(SFD_PROGNAME, LOG_NDELAY | LOG_CONS | LOG_PID, LOG_DAEMON);
+
     if (!chroot_and_drop_privs(root_dir, new_uid, new_gid))
         goto fail1;
 
@@ -225,11 +230,6 @@ int main(const int argc, char** argv)
             goto fail2;
         }
         close(PROC_SYNCFD);
-    }
-
-    if (daemonise && !proc_daemonise(&requestfd, 1)) {
-        LOGERRNO_("Couldn't enter daemon mode");
-        goto fail2;
     }
 
     syslog(LOG_INFO,
