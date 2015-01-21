@@ -44,18 +44,14 @@ extern "C" {
 
     bool prot_unmarshal_send_open(struct prot_send_open*, const void* buf);
 
+    bool prot_unmarshal_cancel(struct prot_cancel*, const void* buf);
+
     void prot_marshal_file_info(struct sfd_file_info* pdu,
                                 size_t size,
                                 const time_t atime,
                                 const time_t mtime,
-                                const time_t ctime);
-
-    void prot_marshal_open_file_info(struct sfd_open_file_info* pdu,
-                                     size_t size,
-                                     const time_t atime,
-                                     const time_t mtime,
-                                     const time_t ctime,
-                                     size_t txnid);
+                                const time_t ctime,
+                                size_t txnid);
 
     void prot_marshal_xfer_stat(struct sfd_xfer_stat* pdu, size_t val);
 

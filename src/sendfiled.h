@@ -266,6 +266,18 @@ extern "C" {
                        size_t txnid,
                        int destination_fd) SFD_API;
 
+    /**
+       Causes the server to cancel a transfer.
+
+       @param srv_sockfd A socket connected to the server
+
+       @param txnid The transfer's unique identifier
+
+       @retval true The request was sent
+       @retval false false An error occurred--check @c errno(3)
+     */
+    bool sfd_cancel(int srv_sockfd, size_t txnid) SFD_API;
+
     /**@}*/
 
 #ifdef __cplusplus

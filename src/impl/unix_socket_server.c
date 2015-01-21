@@ -136,10 +136,8 @@ bool us_get_fds_and_creds(struct msghdr* msg,
 
         if (cmsg->cmsg_type == SCM_RIGHTS) {
             /* File descriptors */
-            /* There must be at least one fd */
-            assert (cmsg->cmsg_len >= CMSG_LEN(sizeof(int)));
 
-            got_fds = true;
+            assert (cmsg->cmsg_len >= CMSG_LEN(sizeof(int)));
 
             const size_t data_off = (size_t)((char*)CMSG_DATA(cmsg) -
                                              (char*)cmsg);
@@ -150,8 +148,11 @@ bool us_get_fds_and_creds(struct msghdr* msg,
 
             *nfds = (payload_size / sizeof(int));
 
+            got_fds = true;
+
         } else if (cmsg->cmsg_type == cred_cmsg_type) {
             /* Client process credentials */
+
             assert (cmsg->cmsg_len == CMSG_LEN(creds_size));
 
             got_creds = true;
@@ -160,5 +161,8 @@ bool us_get_fds_and_creds(struct msghdr* msg,
         }
     }
 
-    return (got_fds && got_creds);
+    if (!got_fds)
+        *nfds = 0;
+
+    return got_creds;
 }

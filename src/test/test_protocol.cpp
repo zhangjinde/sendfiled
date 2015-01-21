@@ -54,25 +54,10 @@ TEST(Protocol, marshal_file_open)
     EXPECT_EQ(fname.c_str(), pdu.filename);
 }
 
-TEST(Protocol, unmarshal_open_file_info)
-{
-    struct sfd_open_file_info pdu1;
-    prot_marshal_open_file_info(&pdu1, 111, 222, 333, 444, 777);
-
-    struct sfd_open_file_info pdu2;
-    ASSERT_TRUE(sfd_unmarshal_open_file_info(&pdu2, &pdu1));
-
-    EXPECT_EQ(111, pdu2.size);
-    EXPECT_EQ(222, pdu2.atime);
-    EXPECT_EQ(333, pdu2.mtime);
-    EXPECT_EQ(444, pdu2.ctime);
-    EXPECT_EQ(777, pdu2.txnid);
-}
-
 TEST(Protocol, unmarshal_file_info)
 {
     struct sfd_file_info pdu1;
-    prot_marshal_file_info(&pdu1, 111, 222, 333, 444);
+    prot_marshal_file_info(&pdu1, 111, 222, 333, 444, 777);
 
     struct sfd_file_info pdu2;
     ASSERT_TRUE(sfd_unmarshal_file_info(&pdu2, &pdu1));
@@ -81,6 +66,7 @@ TEST(Protocol, unmarshal_file_info)
     EXPECT_EQ(222, pdu2.atime);
     EXPECT_EQ(333, pdu2.mtime);
     EXPECT_EQ(444, pdu2.ctime);
+    EXPECT_EQ(777, pdu2.txnid);
 }
 
 TEST(Protocol, marshal_send)
@@ -105,6 +91,16 @@ TEST(Protocol, marshal_send_open)
     prot_marshal_send_open(&pdu, 0xDEADBEEF);
 
     EXPECT_EQ(PROT_CMD_SEND_OPEN, pdu.cmd);
+    EXPECT_EQ(SFD_STAT_OK, pdu.stat);
+    EXPECT_EQ(0xDEADBEEF, pdu.txnid);
+}
+
+TEST(Protocol, marshal_cancel)
+{
+    struct prot_cancel pdu;
+    prot_marshal_cancel(&pdu, 0xDEADBEEF);
+
+    EXPECT_EQ(PROT_CMD_CANCEL, pdu.cmd);
     EXPECT_EQ(SFD_STAT_OK, pdu.stat);
     EXPECT_EQ(0xDEADBEEF, pdu.txnid);
 }
@@ -142,10 +138,12 @@ TEST(Protocol, unmarshal_malformed_xfer_stat)
 
 TEST(Protocol, unmarshal_malformed_file_info)
 {
+    const std::size_t txnid {777};
+
     struct sfd_file_info pdu;
     std::uint8_t buf [sizeof(pdu)];
 
-    prot_marshal_file_info(&pdu, 0xDEAD, 111, 222, 333);
+    prot_marshal_file_info(&pdu, 0xDEAD, 111, 222, 333, txnid);
     memcpy(buf, &pdu, sizeof(pdu));
 
     const auto cmd = pdu.cmd;
@@ -241,32 +239,32 @@ TEST(Protocol, unmarshal_send_open_file)
     EXPECT_EQ(0xDEADBEEF, pdu.txnid);
 }
 
-TEST(Protocol, marshal_file_info)
+TEST(Protocol, unmarshal_cancel_file)
 {
-    struct sfd_file_info pdu;
-    prot_marshal_file_info(&pdu, 111, 222, 333, 444);
+    struct prot_cancel tmp;
+    prot_marshal_cancel(&tmp, 0xDEADBEEF);
 
-    EXPECT_EQ(SFD_FILE_INFO, pdu.cmd);
+    struct prot_cancel pdu;
+    ASSERT_TRUE(prot_unmarshal_cancel(&pdu, &tmp));
+    EXPECT_EQ(PROT_CMD_CANCEL, pdu.cmd);
     EXPECT_EQ(SFD_STAT_OK, pdu.stat);
-
-    EXPECT_EQ(111, pdu.size);
-    EXPECT_EQ(222, pdu.atime);
-    EXPECT_EQ(333, pdu.mtime);
-    EXPECT_EQ(444, pdu.ctime);
+    EXPECT_EQ(0xDEADBEEF, pdu.txnid);
 }
 
-TEST(Protocol, marshal_open_file_info)
+TEST(Protocol, marshal_file_info)
 {
-    struct sfd_open_file_info pdu;
+    const std::size_t txnid {777};
 
-    prot_marshal_open_file_info(&pdu,
-                                111,  // size
-                                222,  // atime
-                                333,  // mtime
-                                444,  // ctime
-                                777); // open file's descriptor
+    struct sfd_file_info pdu;
 
-    EXPECT_EQ(SFD_OPEN_FILE_INFO, sfd_get_cmd(&pdu));
+    prot_marshal_file_info(&pdu,
+                           111,  // size
+                           222,  // atime
+                           333,  // mtime
+                           444,  // ctime
+                           txnid);
+
+    EXPECT_EQ(SFD_FILE_INFO, sfd_get_cmd(&pdu));
     EXPECT_EQ(SFD_STAT_OK, sfd_get_stat(&pdu));
 
     EXPECT_EQ(111, pdu.size);

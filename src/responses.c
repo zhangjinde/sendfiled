@@ -53,17 +53,6 @@ bool sfd_unmarshal_file_info(struct sfd_file_info* pdu, const void* buf)
     return true;
 }
 
-bool sfd_unmarshal_open_file_info(struct sfd_open_file_info* pdu,
-                                  const void* buf)
-{
-    if (!HDR_OK(buf, SFD_OPEN_FILE_INFO))
-        return false;
-
-    memcpy(pdu, buf, sizeof(*pdu));
-
-    return true;
-}
-
 bool sfd_unmarshal_xfer_stat(struct sfd_xfer_stat* pdu, const void* buf)
 {
     if (!HDR_OK(buf, SFD_XFER_STAT))

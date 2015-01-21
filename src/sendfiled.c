@@ -358,6 +358,22 @@ bool sfd_send_open(const int srv_sockfd,
     return true;
 }
 
+bool sfd_cancel(int srv_sockfd, size_t txnid)
+{
+    struct prot_cancel pdu;
+    prot_marshal_cancel(&pdu, txnid);
+
+    struct iovec iov = {
+        .iov_base = &pdu,
+        .iov_len = sizeof(pdu)
+    };
+
+    if (us_sendv(srv_sockfd, &iov, 1, NULL, 0) == -1)
+        return false;
+
+    return true;
+}
+
 /* -------------- Internal implementations ------------ */
 
 static int wait_child(pid_t pid)

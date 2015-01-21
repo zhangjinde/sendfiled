@@ -176,6 +176,7 @@ const std::string SmallFile::file_contents {"1234567890"};
 struct LargeFile {
     static constexpr int NCHUNKS {1024};
     static constexpr int CHUNK_SIZE {1024};
+    static constexpr int FILE_SIZE {CHUNK_SIZE * NCHUNKS};
 
     static void SetUpTestCase() {
         std::iota(file_chunk.begin(), file_chunk.end(), 0);
@@ -196,6 +197,7 @@ private:
 
 constexpr int LargeFile::NCHUNKS;
 constexpr int LargeFile::CHUNK_SIZE;
+constexpr int LargeFile::FILE_SIZE;
 std::vector<std::uint8_t> LargeFile::file_chunk(LargeFile::CHUNK_SIZE);
 
 struct SfdProcSmallFileFix : public SfdProcFix, public SmallFile {};
@@ -536,14 +538,14 @@ TEST_F(SfdProcSmallFileFix, send_open_file)
     ASSERT_TRUE(stat_fd);
 
     ssize_t nread;
-    struct sfd_open_file_info ack;
+    struct sfd_file_info ack;
     uint8_t buf [sizeof(ack)];
 
     // Receive 'ACK' with file stats
     nread = read(stat_fd, buf, sizeof(ack));
     ASSERT_EQ(sizeof(ack), nread);
-    ASSERT_TRUE(sfd_unmarshal_open_file_info(&ack, buf));
-    EXPECT_EQ(SFD_OPEN_FILE_INFO, ack.cmd);
+    ASSERT_TRUE(sfd_unmarshal_file_info(&ack, buf));
+    EXPECT_EQ(SFD_FILE_INFO, ack.cmd);
     EXPECT_EQ(SFD_STAT_OK, ack.stat);
     EXPECT_EQ(file_contents.size(), ack.size);
     EXPECT_GT(ack.txnid, 0);
@@ -567,6 +569,142 @@ TEST_F(SfdProcSmallFileFix, send_open_file)
     EXPECT_EQ(PROT_XFER_COMPLETE, xstat.size);
 }
 
+TEST_F(SfdThreadSmallFileFix, cancel_open_file)
+{
+    // Open the file
+    const test::unique_fd stat_fd {sfd_open(srv_fd,
+                                             file.name().c_str(),
+                                             0, 0, false)};
+    ASSERT_TRUE(stat_fd);
+
+    ssize_t nread;
+    struct sfd_file_info ack;
+    uint8_t buf [sizeof(ack)];
+
+    // Receive 'ACK' with file stats
+    nread = read(stat_fd, buf, sizeof(ack));
+    ASSERT_EQ(sizeof(ack), nread);
+    ASSERT_TRUE(sfd_unmarshal_file_info(&ack, buf));
+    EXPECT_EQ(SFD_FILE_INFO, ack.cmd);
+    EXPECT_EQ(SFD_STAT_OK, ack.stat);
+    EXPECT_EQ(file_contents.size(), ack.size);
+    EXPECT_GT(ack.txnid, 0);
+
+    // Close the file
+    EXPECT_TRUE(sfd_cancel(srv_fd, ack.txnid));
+
+    EXPECT_EQ(0, read(stat_fd, buf, sizeof(buf)));
+}
+
+TEST_F(SfdThreadLargeFileFix, cancel_read)
+{
+    // Initiate the read
+    const test::unique_fd stat_fd {sfd_read(srv_fd,
+                                            file.name().c_str(),
+                                            0, 0, false)};
+    ASSERT_TRUE(stat_fd);
+
+    ssize_t nread;
+    struct sfd_file_info ack;
+    std::vector<char> buf(1024);
+
+    // Receive 'ACK' with file stats
+    nread = read(stat_fd, buf.data(), sizeof(ack));
+    ASSERT_EQ(sizeof(ack), nread);
+    ASSERT_TRUE(sfd_unmarshal_file_info(&ack, buf.data()));
+    EXPECT_EQ(SFD_FILE_INFO, ack.cmd);
+    EXPECT_EQ(SFD_STAT_OK, ack.stat);
+    EXPECT_EQ(FILE_SIZE, ack.size);
+    EXPECT_GT(ack.txnid, 0);
+
+    // Read a bit of the file in order to confirm that the server has started
+    // sending it.
+    int b;
+    ASSERT_EQ(1, read(stat_fd, &b, 1));
+
+    // Cancel the transfer
+    EXPECT_TRUE(sfd_cancel(srv_fd, ack.txnid));
+
+    // Server should only have been able to write the part of the file which
+    // could fit into a pipe.
+
+    nread = 0;
+    bool got_eof {false};
+    for (;;) {
+        const ssize_t n = read(stat_fd, buf.data(), buf.size());
+
+        if (n == 0) {
+            got_eof = true;
+            break;
+        }
+
+        ASSERT_GT(n, 0);
+        nread += n;
+    }
+
+    EXPECT_TRUE(got_eof);
+    EXPECT_LT(nread, FILE_SIZE);
+}
+
+TEST_F(SfdThreadLargeFileFix, cancel_send)
+{
+    int pfd [2];
+    if (pipe(pfd) == -1) {
+        FAIL() << "Couldn't create pipes";
+    }
+
+    // Initiate the read
+    const test::unique_fd stat_fd {sfd_send(srv_fd,
+                                            file.name().c_str(),
+                                            pfd[1],
+                                            0, 0, false)};
+    close(pfd[1]);
+    test::unique_fd dstfd {pfd[0]};
+
+    ASSERT_TRUE(stat_fd);
+
+    ssize_t nread;
+    struct sfd_file_info ack;
+    std::vector<char> buf(1024);
+
+    // Receive 'ACK' with file stats
+    nread = read(stat_fd, buf.data(), sizeof(ack));
+    ASSERT_EQ(sizeof(ack), nread);
+    ASSERT_TRUE(sfd_unmarshal_file_info(&ack, buf.data()));
+    EXPECT_EQ(SFD_FILE_INFO, ack.cmd);
+    EXPECT_EQ(SFD_STAT_OK, ack.stat);
+    EXPECT_EQ(FILE_SIZE, ack.size);
+    EXPECT_GT(ack.txnid, 0);
+
+    // Read a bit of the file in order to confirm that the server has started
+    // sending it.
+    int b;
+    ASSERT_EQ(1, read(dstfd, &b, 1));
+
+    // Cancel the transfer
+    EXPECT_TRUE(sfd_cancel(srv_fd, ack.txnid));
+
+    // Server should only have been able to write the part of the file which
+    // could fit into a pipe.
+
+    nread = 0;
+    bool got_eof {false};
+    for (;;) {
+        const ssize_t n = read(dstfd, buf.data(), buf.size());
+
+        if (n == 0) {
+            got_eof = true;
+            break;
+        }
+
+        ASSERT_GT(n, 0);
+        nread += n;
+    }
+
+    EXPECT_TRUE(got_eof);
+    EXPECT_LT(nread, FILE_SIZE);
+}
+
 /**
  * Opens a file, waits too long, then requests server to send the opened
  * file. By this time the timer should've expired and the open file closed,
@@ -586,16 +724,16 @@ TEST_F(SfdThreadSmallFileShortOpenFileTimeoutFix, open_file_timeout)
                                              0, 0, false)};
     ASSERT_TRUE(stat_fd);
 
-    struct sfd_open_file_info ack;
+    struct sfd_file_info ack;
     uint8_t buf [sizeof(ack)];
     ssize_t nread;
 
     // Confirm that the file was opened
     nread = read(stat_fd, buf, sizeof(ack));
     ASSERT_EQ(sizeof(ack), nread);
-    ASSERT_EQ(SFD_OPEN_FILE_INFO, sfd_get_cmd(buf));
+    ASSERT_EQ(SFD_FILE_INFO, sfd_get_cmd(buf));
     ASSERT_EQ(SFD_STAT_OK, sfd_get_stat(buf));
-    ASSERT_TRUE(sfd_unmarshal_open_file_info(&ack, buf));
+    ASSERT_TRUE(sfd_unmarshal_file_info(&ack, buf));
     ASSERT_EQ(file_contents.size(), ack.size);
     ASSERT_GT(ack.txnid, 0);
 

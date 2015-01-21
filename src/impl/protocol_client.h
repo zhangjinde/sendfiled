@@ -46,6 +46,9 @@ extern "C" {
     void prot_marshal_send_open(struct prot_send_open*,
                                 size_t txnid);
 
+    void prot_marshal_cancel(struct prot_cancel*,
+                                 size_t txnid);
+
     bool prot_marshal_read(struct prot_request* req,
                            const char* filename,
                            loff_t offset, size_t len);

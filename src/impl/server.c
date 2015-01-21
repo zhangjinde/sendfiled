@@ -109,7 +109,28 @@ struct resrc_xfer {
     size_t nbytes_left;
     /** The client process ID */
     pid_t client_pid;
+    /** Set if transfer has been cancelled during the current event-processing
+        loop. E.g., a 'cancel' request causes the request fd to become readable
+        before the transfer's destination file descriptor becomes writable.
+
+        (Cancelled transfers are only removed inbetween event-processing loops
+        in order to prevent use-after-frees.)
+    */
+    bool cancelled;
 };
+
+static void delete_xfer(void* p)
+{
+    if (p) {
+        struct resrc_xfer* const this = p;
+
+        assert (this->tag == XFER_RESRC_TAG);
+
+        close(this->file.fd);
+        fio_ctx_delete(this->fio_ctx);
+        free(this);
+    }
+}
 
 /**
    A response waiting to be delivered.
@@ -139,7 +160,21 @@ struct resrc_timer {
     int tag;
     /** The associated transfer ID */
     size_t txnid;
+    /** Address of the associated transfer, for detecting txnid collisions */
+    void* xfer_addr;
 };
+
+static void delete_timer(void* p)
+{
+    if (p) {
+        struct resrc_timer* const this = p;
+
+        assert (this->tag == TIMER_RESRC_TAG);
+
+        close(this->ident);
+        free(this);
+    }
+}
 
 /**
    Server context.
@@ -150,6 +185,14 @@ struct server
     struct syspoll* poller;
     /** The table of running file transfers */
     struct xfer_table* xfers;
+    /** Table of open file timers */
+    struct xfer_table* xfer_timers;
+    /** Transfers that have been cancelled during the current event-processing
+        loop */
+    struct resrc_xfer** cancelled_xfers;
+    /** Number of transfers cancelled during the current event-processing
+        loop */
+    size_t ncancelled_xfers;
     /** The next transfer ID to be assigned. Starts at 1 and is incremented by 1
         for each new transaction. */
     size_t next_txnid;
@@ -209,6 +252,10 @@ static bool process_events(struct server* ctx,
                            void* buf, size_t buf_size);
 static bool send_xfer_stat(int fd, size_t file_size);
 
+/** Removes a transfer from all data structures and releases its resources
+    (including data and status channel file descriptors) */
+static void purge_xfer(struct server* ctx, struct resrc_xfer* xfer);
+
 bool srv_run(const int reqfd,
              const int maxfds,
              const long open_file_timeout_ms)
@@ -239,6 +286,10 @@ bool srv_run(const int reqfd,
         } else if (!process_events(&ctx, nready, recvbuf, PROT_REQ_MAXSIZE)) {
             break;
         }
+
+        for (size_t i = 0; i < ctx.ncancelled_xfers; i++)
+            purge_xfer(&ctx, ctx.cancelled_xfers[i]);
+        ctx.ncancelled_xfers = 0;
     }
 
     free(recvbuf);
@@ -255,10 +306,6 @@ static bool handle_reqfd(struct server* ctx,
                          int events,
                          void* buf,
                          size_t buf_size);
-
-/** Removes a transfer from all data structures and releases its resources
-    (including data and status channel file descriptors) */
-static void purge_xfer(struct server* ctx, struct resrc_xfer* xfer);
 
 static bool process_file_op(struct server* ctx, struct resrc_xfer* xfer);
 
@@ -300,21 +347,25 @@ static bool process_events(struct server* ctx,
 
             if (is_timer(events.udata)) {
                 struct resrc_timer* const timer = events.udata;
+                struct resrc_xfer* const xfer = xfer_table_find(ctx->xfers,
+                                                                timer->txnid);
 
-                if (!error_event) {
-                    struct resrc_xfer* const xfer =
-                        xfer_table_find(ctx->xfers, timer->txnid);
-
-                    if (xfer &&
-                        xfer->cmd != PROT_CMD_SEND &&
-                        xfer->cmd != PROT_CMD_READ) {
+                if (xfer) {
+                    /* Timer has elapsed and a transfer with the same txnid
+                       exists */
+                    if (xfer == timer->xfer_addr) {
+                        /* Transfer has expired */
                         send_xfer_err(xfer->stat_fd, ETIME);
                         purge_xfer(ctx, xfer);
+                    } else {
+                        /* Transfer has same txnid but different address ->
+                           wrapped transaction ID (!) */
+                        syslog(LOG_EMERG, "Expired timer has invalid txnid\n");
                     }
                 }
 
-                close(timer->ident);
-                free(timer);
+                xfer_table_erase(ctx->xfer_timers, timer->txnid);
+                delete_timer(timer);
 
             } else if (is_response(events.udata)) {
                 struct resrc_resp* r = (struct resrc_resp*)events.udata;
@@ -328,6 +379,9 @@ static bool process_events(struct server* ctx,
                 struct resrc_xfer* const xfer = events.udata;
 
                 assert (is_xfer(events.udata));
+
+                if (xfer->cancelled)
+                    continue;
 
                 if (error_event || !process_file_op(ctx, xfer))
                     PRESERVE_ERRNO(purge_xfer(ctx, xfer));
@@ -396,8 +450,10 @@ static bool handle_reqfd(struct server* ctx,
 
         if (nread < 0) {
             return !errno_is_fatal(errno);
+
         } else {
-            if (nfds == 0 || nfds > PROT_MAXFDS) {
+            if (sfd_get_cmd(buf) != PROT_CMD_CANCEL &&
+                (nfds == 0 || nfds > PROT_MAXFDS)) {
                 syslog(LOG_ERR,
                        "Received unexpected number of"
                        " file descriptors (%d) from client; ignoring request\n",
@@ -426,13 +482,14 @@ static struct resrc_timer* add_open_file(struct server* ctx,
                                          pid_t client_pid, int stat_fd,
                                          struct file_info* info);
 
+static struct resrc_xfer* get_open_file(struct server* ctx,
+                                        const pid_t client_pid,
+                                        const size_t txnid);
+
 static bool register_xfer(struct server* ctx, struct resrc_xfer* xfer);
+static bool deregister_xfer(struct server* ctx, struct resrc_xfer* xfer);
 
-static bool send_file_info(int fd, const struct file_info* info);
-
-static bool send_open_file_info(int cli_fd,
-                                size_t txnid,
-                                const struct file_info* info);
+static bool send_file_info(int fd, size_t txnid, const struct file_info* info);
 
 #define MALFORMED_REQ_MSG "Received malformed request\n"
 #define INVALID_CMD_MSG "Received invalid command ID (%d) in request\n"
@@ -453,7 +510,9 @@ static bool process_request(struct server* ctx,
         return false;
     }
 
-    switch (sfd_get_cmd(buf)) {
+    const enum prot_cmd_req cmd_id = sfd_get_cmd(buf);
+
+    switch (cmd_id) {
     case PROT_CMD_FILE_OPEN: {
         struct prot_request pdu;
         if (!prot_unmarshal_request(&pdu, buf, size)) {
@@ -474,7 +533,7 @@ static bool process_request(struct server* ctx,
             return false;
         }
 
-        send_open_file_info(fds[0], timer->txnid, &finfo);
+        send_file_info(fds[0], timer->txnid, &finfo);
     } break;
 
     case PROT_CMD_SEND_OPEN: {
@@ -484,22 +543,11 @@ static bool process_request(struct server* ctx,
             return false;
         }
 
-        struct resrc_xfer* const xfer = xfer_table_find(ctx->xfers, pdu.txnid);
-        if (!xfer) {
-            /* Timer probably expired; can't send any errors because the status
-               channel would've been closed when the timer expired */
+        struct resrc_xfer* const xfer = get_open_file(ctx,
+                                                      client_pid,
+                                                      pdu.txnid);
+        if (!xfer)
             return false;
-        }
-
-        if (xfer->client_pid != client_pid) {
-            /* Client is asking to send a file it did not itself open */
-            syslog(LOG_ALERT,
-                   "Client with PID %d asked to send open file with"
-                   " mismatching PID %d (txnid %lu)\n",
-                   client_pid, xfer->client_pid, xfer->txnid);
-            undo_add_xfer(ctx, xfer);
-            return false;
-        }
 
         xfer->cmd = PROT_CMD_SEND;
         xfer->dest_fd = fds[0];
@@ -509,6 +557,26 @@ static bool process_request(struct server* ctx,
             undo_add_xfer(ctx, xfer);
             return false;
         }
+
+    } break;
+
+    case PROT_CMD_CANCEL: {
+        struct prot_cancel pdu;
+        if (!prot_unmarshal_cancel(&pdu, buf)) {
+            syslog(LOG_NOTICE, MALFORMED_REQ_MSG);
+            return false;
+        }
+
+        struct resrc_xfer* const xfer = get_open_file(ctx,
+                                                      client_pid,
+                                                      pdu.txnid);
+        if (!xfer)
+            return false;
+
+        assert (ctx->ncancelled_xfers < ctx->xfers->size);
+        assert (ctx->ncancelled_xfers < ctx->xfers->capacity);
+        ctx->cancelled_xfers[ctx->ncancelled_xfers++] = xfer;
+
     } break;
 
     case PROT_CMD_READ:
@@ -538,7 +606,7 @@ static bool process_request(struct server* ctx,
             return false;
         }
 
-        send_file_info(xfer->stat_fd, &finfo);
+        send_file_info(xfer->stat_fd, xfer->txnid, &finfo);
 
     } break;
 
@@ -550,11 +618,40 @@ static bool process_request(struct server* ctx,
     return true;
 }
 
+static struct resrc_xfer* get_open_file(struct server* ctx,
+                                        const pid_t client_pid,
+                                        const size_t txnid)
+{
+    struct resrc_xfer* const xfer = xfer_table_find(ctx->xfers, txnid);
+    if (!xfer) {
+        /* Timer probably expired; can't send any errors because the status
+           channel would've been closed when the timer expired */
+        return NULL;
+    }
+
+    if (xfer->client_pid != client_pid) {
+        /* Client trying to send a file or cancel a transfer it did not open or
+           initiate itself */
+        syslog(LOG_ALERT,
+               "Client with PID %d tried to access transaction with"
+               " mismatching PID %d (txnid %lu)\n",
+               client_pid, xfer->client_pid, xfer->txnid);
+        return NULL;
+    }
+
+    return xfer;
+}
+
 static bool register_xfer(struct server* ctx, struct resrc_xfer* xfer)
 {
     return syspoll_register(ctx->poller,
                             (struct syspoll_resrc*)xfer,
                             SYSPOLL_WRITE);
+}
+
+static bool deregister_xfer(struct server* ctx, struct resrc_xfer* xfer)
+{
+    return syspoll_deregister(ctx->poller, xfer->dest_fd);
 }
 
 static bool has_stat_channel(const struct resrc_xfer* x);
@@ -643,6 +740,7 @@ static bool process_file_op(struct server* ctx, struct resrc_xfer* xfer)
     }
 
     case PROT_CMD_SEND_OPEN:
+    case PROT_CMD_CANCEL:
     case PROT_CMD_FILE_OPEN:
         syslog(LOG_NOTICE, "Invalid state for command ID %d\n", xfer->cmd);
         break;
@@ -698,8 +796,9 @@ static bool send_term_resp(struct server* ctx,
     }
 
     close(x->dest_fd);
-    syspoll_deregister(ctx->poller, x->dest_fd);
+    deregister_xfer(ctx, x);
     xfer_table_erase(ctx->xfers, x->txnid);
+    delete_xfer(x);
 
     return true;
 }
@@ -727,21 +826,34 @@ static size_t get_txnid(void* p)
     return ((struct resrc_xfer*)p)->txnid;
 }
 
+static size_t get_timer_txnid(void* p)
+{
+    return ((struct resrc_timer*)p)->txnid;
+}
+
 static bool srv_construct(struct server* ctx,
                           const long open_file_timeout_ms,
                           const int reqfd,
                           const int maxfds)
 {
+    assert (maxfds > 0);
+
     *ctx = (struct server) {
         .poller = syspoll_new(maxfds),
         .xfers = xfer_table_new(get_txnid, (size_t)maxfds),
+        .xfer_timers = xfer_table_new(get_timer_txnid, (size_t)maxfds),
+        .cancelled_xfers = malloc(sizeof(struct resrc_xfer) * (size_t)maxfds),
+        .ncancelled_xfers = 0,
         .open_file_timeout_ms = (unsigned)open_file_timeout_ms,
         .reqfd = reqfd,
         .next_txnid = 1,
         .uid = geteuid()
     };
 
-    if (!ctx->poller || !ctx->xfers) {
+    if (!ctx->poller ||
+        !ctx->xfers ||
+        !ctx->xfer_timers ||
+        !ctx->cancelled_xfers) {
         PRESERVE_ERRNO(srv_destruct(ctx));
         return false;
     }
@@ -751,7 +863,12 @@ static bool srv_construct(struct server* ctx,
 
 static void delete_xfer_and_close_channel_fds(void* p)
 {
-    close_channel_fds((struct resrc_xfer*)p);
+    struct resrc_xfer* const this = p;
+
+    assert (this->tag == XFER_RESRC_TAG);
+
+    close_channel_fds(this);
+
     delete_xfer(p);
 }
 
@@ -762,6 +879,12 @@ static void srv_destruct(struct server* ctx)
     close(ctx->reqfd);
 
     xfer_table_delete(ctx->xfers, delete_xfer_and_close_channel_fds);
+    xfer_table_delete(ctx->xfer_timers, delete_timer);
+
+    for (size_t i = 0; i < ctx->ncancelled_xfers; i++) {
+        purge_xfer(ctx, ctx->cancelled_xfers[i]);
+    }
+    free(ctx->cancelled_xfers);
 }
 
 static bool errno_is_fatal(const int err)
@@ -867,7 +990,8 @@ static struct resrc_xfer* new_xfer(struct server* ctx,
                         req->len :
                         (file->size - (size_t)req->offset)),
         .cmd = req->cmd,
-        .client_pid = client_pid
+        .client_pid = client_pid,
+        .cancelled = false
     };
 
     if (!fio_ctx_valid(xfer->fio_ctx)) {
@@ -905,33 +1029,29 @@ static struct resrc_timer* add_open_file(struct server* ctx,
     *timer = (struct resrc_timer) {
         .ident = -1,
         .tag = TIMER_RESRC_TAG,
-        .txnid = xfer->txnid
+        .txnid = xfer->txnid,
+        .xfer_addr = xfer
     };
+
+    if (!xfer_table_insert(ctx->xfer_timers, timer))
+        goto fail2;
 
     if (!syspoll_timer(ctx->poller,
                        (struct syspoll_resrc*)timer,
                        ctx->open_file_timeout_ms)) {
-        goto fail2;
+        goto fail3;
     }
 
     return timer;
 
+ fail3:
+    xfer_table_erase(ctx->xfer_timers, timer->txnid);
  fail2:
-    free(timer);
+    delete_timer(timer);
  fail1:
     PRESERVE_ERRNO(undo_add_xfer(ctx, xfer));
 
     return NULL;
-}
-
-static void delete_xfer(void* p)
-{
-    struct resrc_xfer* const x = p;
-
-    close(x->file.fd);
-    fio_ctx_delete(x->fio_ctx);
-
-    free(x);
 }
 
 static void close_channel_fds(struct resrc_xfer* x)
@@ -952,9 +1072,10 @@ static void purge_xfer(struct server* ctx, struct resrc_xfer* xfer)
        next call to syspoll_poll(), *after* the memory associated with it has
        been freed here, unless it is removed explicitly.
     */
-    syspoll_deregister(ctx->poller, xfer->dest_fd);
+    deregister_xfer(ctx, xfer);
 
     close_channel_fds(xfer);
+
     delete_xfer(xfer);
 }
 
@@ -965,23 +1086,15 @@ static bool send_pdu(const int fd, const void* pdu, const size_t size)
     return ((size_t)n == size);
 }
 
-static bool send_file_info(int fd, const struct file_info* info)
+static bool send_file_info(int cli_fd,
+                           const size_t txnid,
+                           const struct file_info* info)
 {
     struct sfd_file_info pdu;
     prot_marshal_file_info(&pdu,
-                           info->size, info->atime, info->mtime, info->ctime);
-    return send_pdu(fd, &pdu, sizeof(pdu));
-}
-
-static bool send_open_file_info(int cli_fd,
-                                const size_t txnid,
-                                const struct file_info* info)
-{
-    struct sfd_open_file_info pdu;
-    prot_marshal_open_file_info(&pdu,
-                                info->size,
-                                info->atime, info->mtime, info->ctime,
-                                txnid);
+                           info->size,
+                           info->atime, info->mtime, info->ctime,
+                           txnid);
     return send_pdu(cli_fd, &pdu, sizeof(pdu));
 }
 

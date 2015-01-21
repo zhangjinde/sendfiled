@@ -45,7 +45,9 @@ enum prot_cmd_req {
     /* Send file contents to destination file descriptor */
     PROT_CMD_SEND = 0x03,
     /* Send a previously-opened file */
-    PROT_CMD_SEND_OPEN = 0x04
+    PROT_CMD_SEND_OPEN = 0x04,
+    /* Close an open file (undoes PROT_CMD_FILE_OPEN) */
+    PROT_CMD_CANCEL = 0x05
 };
 
 #define PROT_IS_REQUEST(cmd) (((cmd) & 0x80) == 0)
@@ -102,9 +104,16 @@ struct prot_request {
 #define PROT_REQ_MAXSIZE (sizeof(struct prot_request) + \
                           PROT_FILENAME_MAX + 1)
 
-/* -------------- 'Send Open File' PDU */
+/* -------------- 'Send Open File' PDU --------------- */
 
 struct prot_send_open {
+    PROT_HDR_FIELDS;
+    size_t txnid;
+};
+
+/* -------------- 'Close Open File' PDU -------------- */
+
+struct prot_cancel {
     PROT_HDR_FIELDS;
     size_t txnid;
 };

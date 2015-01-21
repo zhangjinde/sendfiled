@@ -110,3 +110,12 @@ void prot_marshal_send_open(struct prot_send_open* pdu, const size_t txnid)
     pdu->stat = SFD_STAT_OK;
     pdu->txnid = txnid;
 }
+
+void prot_marshal_cancel(struct prot_cancel* pdu, size_t txnid)
+{
+    memset(pdu, 0, sizeof(*pdu));
+
+    pdu->cmd = PROT_CMD_CANCEL;
+    pdu->stat = SFD_STAT_OK;
+    pdu->txnid = txnid;
+}

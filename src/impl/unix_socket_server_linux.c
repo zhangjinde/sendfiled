@@ -78,12 +78,15 @@ ssize_t us_recv(int srv_fd,
     if (!us_get_fds_and_creds(&msg,
                               recvd_fds, nfds,
                               SCM_CREDENTIALS, &creds, sizeof(creds))) {
+        errno = EBADF;
         return -1;
     }
 
-    set_nonblock(recvd_fds[0], true);
-    if (*nfds == 2)
-        set_nonblock(recvd_fds[1], true);
+    if (*nfds > 0) {
+        set_nonblock(recvd_fds[0], true);
+        if (*nfds == 2)
+            set_nonblock(recvd_fds[1], true);
+    }
 
     *uid = creds.uid;
     *gid = creds.gid;

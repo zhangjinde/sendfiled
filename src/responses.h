@@ -50,10 +50,8 @@
 enum sfd_cmd_id {
     /** File information */
     SFD_FILE_INFO = 0x81,
-    /** Open file information */
-    SFD_OPEN_FILE_INFO = 0x82,
     /** File transfer request/operation status */
-    SFD_XFER_STAT = 0x83
+    SFD_XFER_STAT = 0x82
 };
 
 /**
@@ -82,26 +80,8 @@ struct sfd_file_info {
     time_t atime;               /**< Time of last access */
     time_t mtime;               /**< Time of last modification */
     time_t ctime;               /**< Time of last status change */
-};
 
-/**
-   A response message containing file metadata and a unique open file
-   identifier.
-
-   Sent in response to sfd_open() and used as input to sfd_send_open().
-*/
-struct sfd_open_file_info {
-    /* header */
-    uint8_t cmd;                /**< Command ID */
-    uint8_t stat;               /**< Status Code */
-
-    /* body */
-    size_t size;                /**< File size on disk */
-    time_t atime;               /**< Time of last access */
-    time_t mtime;               /**< Time of last modification */
-    time_t ctime;               /**< Time of last status change */
-
-    /** The open file's unique transaction identifier */
+    /** The file's unique transaction identifier */
     size_t txnid;
 };
 
@@ -164,21 +144,6 @@ extern "C" {
     */
     bool sfd_unmarshal_file_info(struct sfd_file_info* pdu,
                                  const void* buf) SFD_API;
-
-    /**
-       Unmarshals an Open File Information PDU.
-
-       @param[out] pdu The PDU
-
-       @param[in] buf The source buffer
-
-       @retval true Success
-
-       @retval false The buffer contained an unexpected command ID or error
-       response code.
-    */
-    bool sfd_unmarshal_open_file_info(struct sfd_open_file_info* pdu,
-                                      const void* buf) SFD_API;
 
     /**
        Unmarshals a Transfer Status PDU.

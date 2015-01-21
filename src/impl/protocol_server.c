@@ -85,6 +85,18 @@ bool prot_unmarshal_send_open(struct prot_send_open* pdu, const void* buf)
     return true;
 }
 
+bool prot_unmarshal_cancel(struct prot_cancel* pdu, const void* buf)
+{
+    if (sfd_get_cmd(buf) != PROT_CMD_CANCEL ||
+        sfd_get_stat(buf) != SFD_STAT_OK) {
+        return false;
+    }
+
+    memcpy(pdu, buf, sizeof(*pdu));
+
+    return true;
+}
+
 /*
   The marshaling functions below zero the entire PDU structure in order to
   silence Valgrind which complains about the uninitialised alignment padding
@@ -98,28 +110,12 @@ void prot_marshal_file_info(struct sfd_file_info* pdu,
                             const size_t file_size,
                             const time_t atime,
                             const time_t mtime,
-                            const time_t ctime)
+                            const time_t ctime,
+                            const size_t txnid)
 {
     memset(pdu, 0, sizeof(*pdu));
 
     pdu->cmd = SFD_FILE_INFO;
-    pdu->stat = SFD_STAT_OK;
-    pdu->size = file_size;
-    pdu->atime = atime;
-    pdu->mtime = mtime;
-    pdu->ctime = ctime;
-}
-
-void prot_marshal_open_file_info(struct sfd_open_file_info* pdu,
-                                 const size_t file_size,
-                                 const time_t atime,
-                                 const time_t mtime,
-                                 const time_t ctime,
-                                 const size_t txnid)
-{
-    memset(pdu, 0, sizeof(*pdu));
-
-    pdu->cmd = SFD_OPEN_FILE_INFO;
     pdu->stat = SFD_STAT_OK;
     pdu->size = file_size;
     pdu->atime = atime;
