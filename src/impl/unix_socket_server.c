@@ -24,8 +24,6 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#define _POSIX_C_SOURCE 200809L
-
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <syslog.h>
