@@ -80,8 +80,10 @@ void us_attach_fds_and_creds(struct msghdr* msg,
                              const int cred_type,
                              void* creds, size_t creds_size)
 {
+    const size_t rights_size = (sizeof(int) * nfds);
+
     msg->msg_control = cmsg_buf;
-    msg->msg_controllen = (CMSG_SPACE(sizeof(int) * nfds) +
+    msg->msg_controllen = (CMSG_SPACE(rights_size) +
                            CMSG_SPACE(creds_size));
 
     struct cmsghdr* cmsg = CMSG_FIRSTHDR(msg);
@@ -89,9 +91,9 @@ void us_attach_fds_and_creds(struct msghdr* msg,
     *cmsg = (struct cmsghdr) {
         .cmsg_level = SOL_SOCKET,
         .cmsg_type = SCM_RIGHTS,
-        .cmsg_len = CMSG_LEN(sizeof(int) * nfds)
+        .cmsg_len = CMSG_LEN(rights_size)
     };
-    memcpy(CMSG_DATA(cmsg), fds, sizeof(int) * nfds);
+    memcpy(CMSG_DATA(cmsg), fds, rights_size);
 
     cmsg = CMSG_NXTHDR(msg, cmsg);
 
