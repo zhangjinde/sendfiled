@@ -355,7 +355,7 @@ static bool process_events(struct server* ctx,
                        exists */
                     if (xfer == timer->xfer_addr) {
                         /* Transfer has expired */
-                        send_xfer_err(xfer->stat_fd, ETIME);
+                        send_xfer_err(xfer->stat_fd, ETIMEDOUT);
                         purge_xfer(ctx, xfer);
                     } else {
                         /* Transfer has same txnid but different address ->

@@ -749,7 +749,7 @@ TEST_F(SfdThreadSmallFileShortOpenFileTimeoutFix, open_file_timeout)
     nread = read(stat_fd, buf, sizeof(buf));
     EXPECT_EQ(sizeof(struct prot_hdr), nread);
     EXPECT_EQ(SFD_XFER_STAT, sfd_get_cmd(buf));
-    EXPECT_EQ(ETIME, sfd_get_stat(buf));
+    EXPECT_EQ(ETIMEDOUT, sfd_get_stat(buf));
     // ... and then should've closed the status channel.
     EXPECT_EQ(0, read(stat_fd, buf, sizeof(buf)));
 
