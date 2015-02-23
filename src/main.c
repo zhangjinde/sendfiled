@@ -30,7 +30,6 @@
 #include <grp.h>
 #include <pwd.h>
 #include <sys/stat.h>
-#include <syslog.h>
 #include <unistd.h>
 
 #include <limits.h>
@@ -42,6 +41,7 @@
 #include "sendfiled.h"
 
 #include "impl/errors.h"
+#include "impl/log.h"
 #include "impl/process.h"
 #include "impl/server.h"
 #include "impl/unix_socket_server.h"
@@ -62,7 +62,7 @@ static bool do_sync = false;
 #define LOG_(msg)                                         \
     {                                                     \
         if (do_sync) {                                    \
-            syslog(LOG_INFO, "%s: %s\n", __func__, msg);  \
+            sfd_log(LOG_INFO, "%s: %s\n", __func__, msg); \
         } else {                                          \
             const int tmp__ = errno;                      \
             printf("%s: %s\n", __func__, msg);            \
@@ -70,27 +70,27 @@ static bool do_sync = false;
         }                                                 \
     }                                                     \
 
-#define LOGERRNO_(msg)                                      \
-    {                                                       \
-        if (do_sync) {                                      \
-            syslog(LOG_ERR,                                 \
-                   "%s [errno: %d %s] %s\n",                \
-                   __func__, errno, strerror(errno), msg);  \
-        } else {                                            \
-            LOGERRNO(msg);                                  \
-        }                                                   \
-    }                                                       \
+#define LOGERRNO_(msg)                          \
+    {                                           \
+        if (do_sync) {                          \
+            sfd_log(LOG_ERR,                    \
+                    "%s [errno: %d %m] %s\n",   \
+                    __func__, errno, msg);      \
+        } else {                                \
+            LOGERRNO(msg);                      \
+        }                                       \
+    }                                           \
 
-#define LOGERRNOV_(fmt, ...)                                        \
-    {                                                               \
-        if (do_sync) {                                              \
-            syslog(LOG_ERR,                                         \
-                   "%s [errno %d %s] "fmt"\n",                      \
-                   __func__, errno, strerror(errno), __VA_ARGS__);  \
-        } else {                                                    \
-            LOGERRNOV(fmt"\n", __VA_ARGS__);                        \
-        }                                                           \
-    }                                                               \
+#define LOGERRNOV_(fmt, ...)                        \
+    {                                               \
+        if (do_sync) {                              \
+            sfd_log(LOG_ERR,                        \
+                    "%s [errno %d %m] "fmt"\n",     \
+                    __func__, errno, __VA_ARGS__);  \
+        } else {                                    \
+            LOGERRNOV(fmt"\n", __VA_ARGS__);        \
+        }                                           \
+    }                                               \
 
 extern char** environ;
 
@@ -213,7 +213,7 @@ int main(const int argc, char** argv)
         goto fail1;
     }
 
-    openlog(SFD_PROGNAME, LOG_NDELAY | LOG_CONS | LOG_PID, LOG_DAEMON);
+    sfd_log_open(SFD_PROGNAME, LOG_NDELAY | LOG_CONS | LOG_PID, LOG_DAEMON);
 
     if (!chroot_and_drop_privs(root_dir, new_uid, new_gid))
         goto fail1;
@@ -232,21 +232,19 @@ int main(const int argc, char** argv)
         close(PROC_SYNCFD);
     }
 
-    syslog(LOG_INFO,
-           "Starting; name: %s; root_dir: \"%s\";"
-           " uid: %d %s; gid: %d %s;"
-           " maxfiles: %ld; fd_timeout_ms: %ld\n",
-           srvname, root_dir,
-           getuid(), uname, getgid(), gname, maxfiles, fd_timeout_ms);
+    sfd_log(LOG_INFO,
+            "Starting; name: %s; root_dir: \"%s\";"
+            " uid: %d %s; gid: %d %s;"
+            " maxfiles: %ld; fd_timeout_ms: %ld\n",
+            srvname, root_dir,
+            getuid(), uname, getgid(), gname, maxfiles, fd_timeout_ms);
 
     const bool success = srv_run(requestfd, (int)maxfiles, fd_timeout_ms);
 
     if (!success) {
-        syslog(LOG_EMERG,
-               "srv_run() failed [%s]; server shutting down\n",
-               strerror(errno));
+        sfd_log(LOG_EMERG, "srv_run() failed [%m]; server shutting down\n");
     } else {
-        syslog(LOG_INFO, "Shutting down\n");
+        sfd_log(LOG_INFO, "Shutting down\n");
     }
 
     us_stop_serving(sockdir, srvname, requestfd);
@@ -257,8 +255,7 @@ int main(const int argc, char** argv)
     us_stop_serving(sockdir, srvname, requestfd);
  fail1:
     if (do_sync && !sync_parent(errno)) {
-        syslog(LOG_ERR, "Couldn't sync with parent process; errno: %s\n",
-               strerror(errno));
+        sfd_log(LOG_ERR, "Couldn't sync with parent process; errno: %m\n");
     }
 
     return EXIT_FAILURE;
@@ -300,8 +297,8 @@ static bool chroot_and_drop_privs(const char* root_dir,
             return false;
         }
     } else {
-        syslog(LOG_WARNING,
-               "Not chrooting because user-specified root dir is \"/\"\n");
+        sfd_log(LOG_WARNING,
+                "Not chrooting because user-specified root dir is \"/\"\n");
     }
 
     if (new_gid != gid && setgid(new_gid) == -1) {

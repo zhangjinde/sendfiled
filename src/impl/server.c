@@ -24,7 +24,6 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include <syslog.h>
 #include <unistd.h>
 
 #include <assert.h>
@@ -32,6 +31,7 @@
 
 #include "errors.h"
 #include "file_io.h"
+#include "log.h"
 #include "protocol_server.h"
 #include "../responses.h"
 #include "server.h"
@@ -279,8 +279,7 @@ bool srv_run(const int reqfd,
 
         if (nready == -1) {
             if (errno != EINTR && errno_is_fatal(errno)) {
-                syslog(LOG_ERR, "Fatal error in syspoll_poll(): [%s]\n",
-                       strerror(errno));
+                sfd_log(LOG_ERR, "Fatal error in syspoll_poll(): [%m]\n");
                 break;
             }
         } else if (!process_events(&ctx, nready, recvbuf, PROT_REQ_MAXSIZE)) {
@@ -329,8 +328,8 @@ static bool process_events(struct server* ctx,
         if (*(int*)events.udata == ctx->reqfd) {
             if (events.events & SYSPOLL_ERROR ||
                 !handle_reqfd(ctx, events.events, buf, buf_size)) {
-                syslog(LOG_ERR,
-                       "Fatal error on request socket; shutting down\n");
+                sfd_log(LOG_ERR,
+                        "Fatal error on request socket; shutting down\n");
                 return false;
             }
 
@@ -341,8 +340,8 @@ static bool process_events(struct server* ctx,
             const bool error_event = (events.events & SYSPOLL_ERROR);
 
             if (error_event) {
-                syslog(LOG_INFO, "Fatal error on resource fd %d\n",
-                       *(int*)events.udata);
+                sfd_log(LOG_INFO, "Fatal error on resource fd %d\n",
+                        *(int*)events.udata);
             }
 
             if (is_timer(events.udata)) {
@@ -360,7 +359,7 @@ static bool process_events(struct server* ctx,
                     } else {
                         /* Transfer has same txnid but different address ->
                            wrapped transaction ID (!) */
-                        syslog(LOG_EMERG, "Expired timer has invalid txnid\n");
+                        sfd_log(LOG_EMERG, "Expired timer has invalid txnid\n");
                     }
                 }
 
@@ -454,14 +453,14 @@ static bool handle_reqfd(struct server* ctx,
         } else {
             if (sfd_get_cmd(buf) != PROT_CMD_CANCEL &&
                 (nfds == 0 || nfds > PROT_MAXFDS)) {
-                syslog(LOG_ERR,
-                       "Received unexpected number of"
-                       " file descriptors (%d) from client; ignoring request\n",
-                       (int)nfds);
+                sfd_log(LOG_ERR,
+                        "Received unexpected number of"
+                        " file descriptors (%d) from client; ignoring request\n",
+                        (int)nfds);
 
             } else if (uid != ctx->uid) {
-                syslog(LOG_ERR, "Invalid UID: expected %d; got %d\n",
-                       ctx->uid, uid);
+                sfd_log(LOG_ERR, "Invalid UID: expected %d; got %d\n",
+                        ctx->uid, uid);
                 send_xfer_err(recvd_fds[0], EACCES);
                 close_fds(recvd_fds, nfds);
 
@@ -499,14 +498,14 @@ static bool process_request(struct server* ctx,
                             const pid_t client_pid, const int* fds)
 {
     if (sfd_get_stat(buf) != SFD_STAT_OK) {
-        syslog(LOG_NOTICE,
-               "Received error status (%x) in request\n",
-               sfd_get_stat(buf));
+        sfd_log(LOG_NOTICE,
+                "Received error status (%x) in request\n",
+                sfd_get_stat(buf));
         return false;
     }
 
     if (!PROT_IS_REQUEST(sfd_get_cmd(buf))) {
-        syslog(LOG_NOTICE, INVALID_CMD_MSG, sfd_get_cmd(buf));
+        sfd_log(LOG_NOTICE, INVALID_CMD_MSG, sfd_get_cmd(buf));
         return false;
     }
 
@@ -516,7 +515,7 @@ static bool process_request(struct server* ctx,
     case PROT_CMD_FILE_OPEN: {
         struct prot_request pdu;
         if (!prot_unmarshal_request(&pdu, buf, size)) {
-            syslog(LOG_NOTICE, MALFORMED_REQ_MSG);
+            sfd_log(LOG_NOTICE, MALFORMED_REQ_MSG);
             /* TODO: send NACK */
             return false;
         }
@@ -539,7 +538,7 @@ static bool process_request(struct server* ctx,
     case PROT_CMD_SEND_OPEN: {
         struct prot_send_open pdu;
         if (!prot_unmarshal_send_open(&pdu, buf)) {
-            syslog(LOG_NOTICE, MALFORMED_REQ_MSG);
+            sfd_log(LOG_NOTICE, MALFORMED_REQ_MSG);
             return false;
         }
 
@@ -563,7 +562,7 @@ static bool process_request(struct server* ctx,
     case PROT_CMD_CANCEL: {
         struct prot_cancel pdu;
         if (!prot_unmarshal_cancel(&pdu, buf)) {
-            syslog(LOG_NOTICE, MALFORMED_REQ_MSG);
+            sfd_log(LOG_NOTICE, MALFORMED_REQ_MSG);
             return false;
         }
 
@@ -583,7 +582,7 @@ static bool process_request(struct server* ctx,
     case PROT_CMD_SEND: {
         struct prot_request pdu;
         if (!prot_unmarshal_request(&pdu, buf, size)) {
-            syslog(LOG_NOTICE, MALFORMED_REQ_MSG);
+            sfd_log(LOG_NOTICE, MALFORMED_REQ_MSG);
             return false;
         }
 
@@ -611,7 +610,7 @@ static bool process_request(struct server* ctx,
     } break;
 
     default:
-        syslog(LOG_NOTICE, INVALID_CMD_MSG, sfd_get_cmd(buf));
+        sfd_log(LOG_NOTICE, INVALID_CMD_MSG, sfd_get_cmd(buf));
         return false;
     }
 
@@ -632,10 +631,10 @@ static struct resrc_xfer* get_open_file(struct server* ctx,
     if (xfer->client_pid != client_pid) {
         /* Client trying to send a file or cancel a transfer it did not open or
            initiate itself */
-        syslog(LOG_ALERT,
-               "Client with PID %d tried to access transaction with"
-               " mismatching PID %d (txnid %lu)\n",
-               client_pid, xfer->client_pid, xfer->txnid);
+        sfd_log(LOG_ALERT,
+                "Client with PID %d tried to access transaction with"
+                " mismatching PID %d (txnid %lu)\n",
+                client_pid, xfer->client_pid, xfer->txnid);
         return NULL;
     }
 
@@ -742,7 +741,7 @@ static bool process_file_op(struct server* ctx, struct resrc_xfer* xfer)
     case PROT_CMD_SEND_OPEN:
     case PROT_CMD_CANCEL:
     case PROT_CMD_FILE_OPEN:
-        syslog(LOG_NOTICE, "Invalid state for command ID %d\n", xfer->cmd);
+        sfd_log(LOG_NOTICE, "Invalid state for command ID %d\n", xfer->cmd);
         break;
     }
 
@@ -781,16 +780,14 @@ static bool send_term_resp(struct server* ctx,
 
     struct resrc_resp* resp = new_resrc_resp(x->stat_fd, pdu, pdu_size);
     if (!resp) {
-        syslog(LOG_EMERG, "Couldn't allocate memory for response retry [%s]\n",
-               strerror(errno));
+        sfd_log(LOG_EMERG, "Couldn't allocate memory for response retry [%m]\n");
         return false;
     }
 
     if (!syspoll_register(ctx->poller,
                           (struct syspoll_resrc*)resp,
                           SYSPOLL_WRITE)) {
-        syslog(LOG_EMERG, "Unable to register transfer's stat fd [%s]\n",
-               strerror(errno));
+        sfd_log(LOG_EMERG, "Unable to register transfer's stat fd [%m]\n");
         free(resp);
         return false;
     }
@@ -922,8 +919,8 @@ static struct resrc_xfer* add_xfer(struct server* ctx,
             req->cmd == PROT_CMD_FILE_OPEN);
 
     if (ctx->xfers->size == ctx->xfers->capacity) {
-        syslog(LOG_CRIT, "Transfer table is full (%lu/%lu items)\n",
-               ctx->xfers->size, ctx->xfers->capacity);
+        sfd_log(LOG_CRIT, "Transfer table is full (%lu/%lu items)\n",
+                ctx->xfers->size, ctx->xfers->capacity);
         errno = EMFILE;
         return NULL;
     }
@@ -949,10 +946,10 @@ static struct resrc_xfer* add_xfer(struct server* ctx,
     }
 
     if (!xfer_table_insert(ctx->xfers, xfer)) {
-        syslog(LOG_CRIT,
-               "Couldn't insert item into transfer table"
-               " (slot for txnid %lu probably already taken)\n",
-               xfer->txnid);
+        sfd_log(LOG_CRIT,
+                "Couldn't insert item into transfer table"
+                " (slot for txnid %lu probably already taken)\n",
+                xfer->txnid);
         PRESERVE_ERRNO(delete_xfer(xfer));
         return NULL;
     }

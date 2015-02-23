@@ -97,6 +97,7 @@ vpath %.c $(srcdir) $(srcdir)/impl
 vpath %.cpp $(srcdir)/test $(srcdir)/impl
 
 src_common :=\
+log_linux.c\
 process.c \
 responses.c\
 unix_sockets.c\

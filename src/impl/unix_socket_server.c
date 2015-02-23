@@ -26,7 +26,6 @@
 
 #include <sys/socket.h>
 #include <sys/un.h>
-#include <syslog.h>
 #include <unistd.h>
 
 #include <sys/stat.h>
@@ -36,6 +35,7 @@
 #include <stdlib.h>
 
 #include "errors.h"
+#include "log.h"
 #include "unix_socket_server.h"
 #include "unix_sockets.h"
 #include "util.h"
@@ -109,9 +109,8 @@ void us_stop_serving(const char* sockdir,
 
     const char* sockpath = us_make_sockpath(sockdir, srv_name);
     if (!sockpath) {
-        syslog(LOG_ALERT,
-               "Unable to generate UNIX socket pathname [errno: %s]\n",
-               strerror(errno));
+        sfd_log(LOG_ALERT,
+                "Unable to generate UNIX socket pathname [errno: %m]\n");
     } else {
         unlink(sockpath);
         free((void*)sockpath);
