@@ -33,6 +33,7 @@
 #include <unistd.h>
 
 #include <assert.h>
+#include <signal.h>
 #include <stdlib.h>
 
 #include <sfd_config.h>
@@ -235,7 +236,7 @@ int sfd_shutdown(const pid_t pid)
 
 int sfd_read(const int sockfd,
              const char* filename,
-             const loff_t offset,
+             const off_t offset,
              const size_t len,
              const bool dest_fd_nonblock)
 {
@@ -271,7 +272,7 @@ int sfd_read(const int sockfd,
 
 int sfd_open(int srv_sockfd,
              const char* filename,
-             loff_t offset, size_t len,
+             off_t offset, size_t len,
              bool stat_fd_nonblock)
 {
     int fds[2];
@@ -305,7 +306,7 @@ int sfd_open(int srv_sockfd,
 int sfd_send(const int srv_sockfd,
              const char* filename,
              const int dest_fd,
-             const loff_t offset,
+             const off_t offset,
              const size_t len,
              const bool stat_fd_nonblock)
 {

@@ -31,14 +31,30 @@
 
 bool set_nonblock(int fd, const bool enabled)
 {
-    int val = fcntl(fd, F_GETFL, 0);
-    if (val == -1)
+    int fl = fcntl(fd, F_GETFL, 0);
+    if (fl == -1)
         return false;
 
     if (enabled)
-        val |= O_NONBLOCK;
+        fl |= O_NONBLOCK;
     else
-        val &= ~O_NONBLOCK;
+        fl &= ~O_NONBLOCK;
 
-    return (fcntl(fd, F_SETFL, val) == 0);
+    return (fcntl(fd, F_SETFL, fl) == 0);
+}
+
+bool set_cloexec(int fd, const bool enabled)
+{
+    /* NOTE: For FD_CLOEXEC: 'F_GETF*D*' instead of 'F_GETF*L*' */
+
+    int fl = fcntl(fd, F_GETFD, 0);
+    if (fl == -1)
+        return false;
+
+    if (enabled)
+        fl |= FD_CLOEXEC;
+    else
+        fl &= ~FD_CLOEXEC;
+
+    return (fcntl(fd, F_SETFD, fl) == 0);
 }

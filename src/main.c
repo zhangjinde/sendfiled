@@ -24,7 +24,7 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#define _XOPEN_SOURCE 500       /* For chroot, primarily */
+#define _POSIX_C_SOURCE 200809L
 
 #include <fcntl.h>
 #include <grp.h>
@@ -220,7 +220,7 @@ int main(const int argc, char** argv)
 
     const int requestfd = us_serve(sockdir, srvname, new_uid, new_gid);
     if (requestfd == -1) {
-        LOGERRNO_("Failed to write errno to sync fd");
+        LOGERRNO_("Failed to bind and listen");
         goto fail1;
     }
 
@@ -287,7 +287,7 @@ static bool chroot_and_drop_privs(const char* root_dir,
             return false;
         }
 
-        if (chroot(root_dir) == -1) {
+        if (proc_chroot(root_dir) == -1) {
             LOGERRNOV_("Couldn't chroot to %s", root_dir);
             return false;
         }

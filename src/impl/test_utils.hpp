@@ -63,7 +63,7 @@ public:
         return tmp;
     }
 
-    void reset(const int fd_) noexcept {
+    void reset(const int fd_ = -1) noexcept {
         close();
         fd = fd_;
     }
@@ -113,6 +113,44 @@ private:
     std::string name_;
     FILE* fp_;
 };
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpadded"
+
+/**
+ * An RAII FIFO.
+ *
+ * Upon construction, creates a FIFO and opens it. Upon destruction, closes the
+ * FIFO and removes its file.
+ *
+ * A FIFO is a full-duplex file descriptor which is easier to create than a
+ * socket and is therefore useful for testing epoll, kqueue, etc.
+*/
+class tmpfifo final {
+public:
+    tmpfifo();
+    ~tmpfifo();
+
+    // Copying disabled; default move operations
+    tmpfifo(const tmpfifo&) = delete;
+    tmpfifo(tmpfifo&&) = default;
+    tmpfifo& operator=(const tmpfifo&) = delete;
+    tmpfifo& operator=(tmpfifo&&) = default;
+
+    operator int() const noexcept;
+private:
+    std::string fname;
+    test::unique_fd fd;
+};
+
+#pragma GCC diagnostic pop
+
+/**
+ * Creates a pair of connected IPv4 SOCK_STREAM sockets.
+ *
+ * @throw std::system_error
+ */
+std::pair<test::unique_fd, test::unique_fd> make_connection(int port);
 
 /**
  * A thread rendezvous point in the spirit of @a boost::barrier.
@@ -166,6 +204,9 @@ private:
 
 /// Sends a signal to a thread.
 void kill_thread(std::thread& t, int signum);
+
+[[noreturn]]
+void throw_errno();
 
 } // namespace test
 

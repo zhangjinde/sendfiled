@@ -47,28 +47,48 @@ struct syspoll_resrc {
 
 struct syspoll;
 
-struct syspoll* syspoll_new(int maxevents);
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-void syspoll_delete(struct syspoll*);
+    struct syspoll* syspoll_new(int maxevents);
 
-/**
-   @param data User data. The first item at this address must be the file
-   descriptor (i.e., of type 'int').
-*/
-bool syspoll_register(struct syspoll*, struct syspoll_resrc*, unsigned events);
+    void syspoll_delete(struct syspoll*);
 
-bool syspoll_timer(struct syspoll* this, struct syspoll_resrc*, unsigned millis);
+    /**
+       @param data User data. The first item at this address must be the file
+       descriptor (i.e., of type 'int').
+    */
+    bool syspoll_register(struct syspoll*,
+                          struct syspoll_resrc*,
+                          int events);
 
-bool syspoll_deregister(struct syspoll*, int fd);
+    bool syspoll_timer(struct syspoll*, struct syspoll_resrc*, unsigned millis);
 
-int syspoll_poll(struct syspoll*);
+    /**
+        @todo Should also take a struct syspoll_resrc, like
+        syspoll_register().
+    */
+    bool syspoll_deregister(struct syspoll*, int fd);
 
-struct syspoll_events {
-    int events;
-    void* udata;
-};
+    int syspoll_poll(struct syspoll*);
 
-struct syspoll_events syspoll_get(struct syspoll*, int eventnum);
+    struct syspoll_events {
+        int events;
+        void* udata;
+    };
+
+    /**
+       Retrieves the specified event.
+
+       @note The last event can only be retrieved once because its retrieval
+       causes internal data structures to be reset.
+     */
+    struct syspoll_events syspoll_get(struct syspoll*, int eventnum);
+
+#ifdef __cplusplus
+}
+#endif
 
 #pragma GCC diagnostic pop
 

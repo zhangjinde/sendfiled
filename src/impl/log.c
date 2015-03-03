@@ -24,17 +24,30 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef SFD_IMPL_SFD_H
-#define SFD_IMPL_SFD_H
-
-#ifdef __cplusplus
-extern "C" {
+#ifdef __linux__
+#define _BSD_SOURCE
 #endif
 
-    int sfd_pipe(int fds[2], int flags);
+#include <stdarg.h>
 
-#ifdef __cplusplus
+#include "log.h"
+
+void sfd_log_open(const char* ident, int option, int facility)
+{
+    openlog(ident, option, facility);
 }
-#endif
 
-#endif
+void sfd_log(const int priority, const char* format, ...)
+{
+    va_list args;
+    va_start(args, format);
+
+    vsyslog(priority, format, args);
+
+    va_end(args);
+}
+
+void sfd_log_close(void)
+{
+    closelog();
+}

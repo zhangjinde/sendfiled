@@ -24,12 +24,25 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <netinet/in.h>
 
 #include <cstdlib>
+#include <fcntl.h>
 #include <signal.h>
+#include <unistd.h>
 
 #include "test_utils.hpp"
+
+[[noreturn]]
+void test::throw_errno()
+{
+    throw std::system_error{
+        std::make_error_code(static_cast<std::errc>(errno))};
+}
 
 // --------------- test::TmpFile ---------------------
 
@@ -89,6 +102,83 @@ test::TmpFile::operator int()
 test::TmpFile::operator FILE*()
 {
     return fp_;
+}
+
+// ------------ test::tmpfifo ------------
+
+test::tmpfifo::tmpfifo()
+{
+    {
+        TmpFile file;
+        fname = file.name();
+    }
+
+    if (mkfifo(fname.c_str(), S_IRUSR | S_IWUSR) != 0) {
+        throw std::runtime_error{"Couldn't create FIFO; errno: " +
+                std::to_string(errno) + " " + strerror(errno)};
+    }
+
+    fd = open(fname.c_str(), O_RDWR);
+    if (!fd) {
+        unlink(fname.c_str());
+        throw std::runtime_error{"Couldn't open FIFO; errno: " +
+                std::to_string(errno) + " " + strerror(errno)};
+    }
+}
+
+test::tmpfifo::~tmpfifo()
+{
+    close(fd);
+    unlink(fname.c_str());
+}
+
+test::tmpfifo::operator int() const noexcept
+{
+    return fd;
+}
+
+// -------------------- test::make_connection() ---------------------
+
+std::pair<test::unique_fd, test::unique_fd> test::make_connection(int port)
+{
+    test::unique_fd listenfd {::socket(AF_INET, SOCK_STREAM, 0)};
+    if (!listenfd)
+        throw_errno();
+
+    const int on {1};
+    if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) == -1)
+        throw_errno();
+
+    struct sockaddr_in addr {};
+
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(static_cast<std::uint16_t>(port));
+    addr.sin_addr = {INADDR_ANY};
+
+    if (bind(listenfd,
+             reinterpret_cast<const struct sockaddr*>(&addr),
+             sizeof(addr)) == -1) {
+        throw_errno();
+    }
+
+    if (listen(listenfd, 100) == -1)
+        throw_errno();
+
+    test::unique_fd cli {::socket(AF_INET, SOCK_STREAM, 0)};
+    if (!cli)
+        throw_errno();
+
+    if (connect(cli,
+                reinterpret_cast<const struct sockaddr*>(&addr),
+                sizeof(addr)) == -1) {
+        throw_errno();
+    }
+
+    test::unique_fd srv {accept(listenfd, NULL, NULL)};
+    if (!srv)
+        throw_errno();
+
+    return {std::move(cli), std::move(srv)};
 }
 
 // ------------ test::thread_barrier ----------------

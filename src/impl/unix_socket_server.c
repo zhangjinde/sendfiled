@@ -26,19 +26,27 @@
 
 #include <sys/socket.h>
 #include <sys/un.h>
-#include <unistd.h>
 
 #include <sys/stat.h>
 
 #include <assert.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "errors.h"
 #include "log.h"
 #include "unix_socket_server.h"
 #include "unix_sockets.h"
 #include "util.h"
+
+/**
+   The invalid process ID. Negative values are dangerous because I don't want to
+   make assumptions about the signedness of the pid_t type. Some OSes put system
+   processes at PID 0, but that's fine as long as no user process ever gets PID
+   0.
+ */
+const pid_t US_INVALID_PID = 0;
 
 /* Defined in unix_sockets_<platform>.c */
 int us_socket(int, int, int);
@@ -51,13 +59,8 @@ int us_serve(const char* sockdir,
     if (fd == -1)
         return -1;
 
-    /* Turn on the 'pass credentials' socket option */
-    const int on = 1;
-    if (setsockopt(fd,
-                   SOL_SOCKET, us_passcred_option(),
-                   &on, sizeof(on)) < 0) {
+    if (!us_set_passcred_option(fd))
         goto fail1;
-    }
 
     /* FIXME: this could reside in the DATA segment as there are no other
        threads at this time. */
@@ -94,7 +97,7 @@ int us_serve(const char* sockdir,
     return fd;
 
  fail2:
-    free((void*)sockpath);
+    PRESERVE_ERRNO(free((void*)sockpath));
  fail1:
     PRESERVE_ERRNO(close(fd));
 
@@ -120,7 +123,7 @@ void us_stop_serving(const char* sockdir,
 bool us_get_fds_and_creds(struct msghdr* msg,
                           int* fds, size_t* nfds,
                           const int cred_cmsg_type,
-                          void* creds, const size_t creds_size)
+                          void* creds)
 {
     bool got_fds = false;
     bool got_creds = false;
@@ -131,30 +134,25 @@ bool us_get_fds_and_creds(struct msghdr* msg,
 
         assert (cmsg->cmsg_level == SOL_SOCKET);
 
+        const size_t data_off = (size_t)((char*)CMSG_DATA(cmsg) - (char*)cmsg);
+        const size_t payload_size = (cmsg->cmsg_len - data_off);
+
         if (cmsg->cmsg_type == SCM_RIGHTS) {
             /* File descriptors */
+            got_fds = true;
 
             assert (cmsg->cmsg_len >= CMSG_LEN(sizeof(int)));
-
-            const size_t data_off = (size_t)((char*)CMSG_DATA(cmsg) -
-                                             (char*)cmsg);
-            const size_t payload_size = (cmsg->cmsg_len - data_off);
 
             memset(fds, 0, sizeof(*fds) * *nfds);
             memcpy(fds, CMSG_DATA(cmsg), payload_size);
 
             *nfds = (payload_size / sizeof(int));
 
-            got_fds = true;
-
         } else if (cmsg->cmsg_type == cred_cmsg_type) {
             /* Client process credentials */
-
-            assert (cmsg->cmsg_len == CMSG_LEN(creds_size));
-
             got_creds = true;
 
-            memcpy(creds, CMSG_DATA(cmsg), creds_size);
+            memcpy(creds, CMSG_DATA(cmsg), payload_size);
         }
     }
 

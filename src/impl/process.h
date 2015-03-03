@@ -54,4 +54,6 @@ bool proc_init_child(const int* excluded_fds, size_t nfds);
     FreeBSD implementations apparently differ significantly. */
 bool proc_daemonise(const int* noclose_fds, const size_t nfds);
 
+int proc_chroot(const char* path);
+
 #endif

@@ -47,6 +47,23 @@ extern "C" {
 
     bool set_nonblock(int fd, bool enabled);
 
+    bool set_cloexec(int fd, bool enabled);
+
+    /**
+       Creates a pipe.
+
+       @note This function exists because Linux has an overload of @a pipe(2)
+       with a flags parameter (i.e., creates the pipe and sets the flags in one
+       operation), whereas FreeBSD requires two calls to @c fcntl(2) to set
+       flags on the pipe descriptors.
+
+       @param[out] fds The pipe file descriptors
+
+       @param[in] flags The flags to set on the pipe's file descriptors. E.g.,
+       @c O_NONBLOCK, @c O_CLOEXEC (@c FD_CLOEXEC not accepted).
+     */
+    int sfd_pipe(int fds[2], int flags);
+
 #ifdef __cplusplus
 }
 #endif

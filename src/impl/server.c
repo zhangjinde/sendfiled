@@ -318,6 +318,14 @@ static bool is_response(const void*);
 
 static void delete_resrc_resp(struct resrc_resp*);
 
+static void cancel_xfer(struct server* srv, struct resrc_xfer* xfer)
+{
+    assert (srv->ncancelled_xfers < srv->xfers->size);
+
+    srv->cancelled_xfers[srv->ncancelled_xfers++] = xfer;
+    xfer->cancelled = true;
+}
+
 static bool process_events(struct server* ctx,
                            const int nevents,
                            void* buf, const size_t buf_size)
@@ -325,23 +333,23 @@ static bool process_events(struct server* ctx,
     for (int i = 0; i < nevents; i++) {
         struct syspoll_events events = syspoll_get(ctx->poller, i);
 
+        if (events.events & SYSPOLL_TERM)
+            return false;
+
         if (*(int*)events.udata == ctx->reqfd) {
             if (events.events & SYSPOLL_ERROR ||
                 !handle_reqfd(ctx, events.events, buf, buf_size)) {
                 sfd_log(LOG_ERR,
-                        "Fatal error on request socket; shutting down\n");
+                       "Fatal error on request socket (%m); shutting down\n");
                 return false;
             }
 
         } else {
-            if (events.events & SYSPOLL_TERM)
-                return false;
-
             const bool error_event = (events.events & SYSPOLL_ERROR);
 
             if (error_event) {
-                sfd_log(LOG_INFO, "Fatal error on resource fd %d\n",
-                        *(int*)events.udata);
+                sfd_log(LOG_ERR,
+                        "Fatal error on resource (from system poller)");
             }
 
             if (is_timer(events.udata)) {
@@ -353,9 +361,12 @@ static bool process_events(struct server* ctx,
                     /* Timer has elapsed and a transfer with the same txnid
                        exists */
                     if (xfer == timer->xfer_addr) {
-                        /* Transfer has expired */
-                        send_xfer_err(xfer->stat_fd, ETIMEDOUT);
-                        purge_xfer(ctx, xfer);
+                        if (xfer->nbytes_left == xfer->file.size) {
+                            /* Transfer has expired before first byte was
+                               transferred */
+                            send_xfer_err(xfer->stat_fd, ETIMEDOUT);
+                            cancel_xfer(ctx, xfer);
+                        }
                     } else {
                         /* Transfer has same txnid but different address ->
                            wrapped transaction ID (!) */
@@ -418,9 +429,11 @@ static bool process_request(struct server* ctx,
 
 static void close_fds(int* fds, const size_t nfds)
 {
-    close(fds[0]);
-    if (nfds == 2)
-        close(fds[1]);
+    if (nfds > 0) {
+        close(fds[0]);
+        if (nfds == 2)
+            close(fds[1]);
+    }
 }
 
 static bool handle_reqfd(struct server* ctx,
@@ -509,9 +522,9 @@ static bool process_request(struct server* ctx,
         return false;
     }
 
-    const enum prot_cmd_req cmd_id = sfd_get_cmd(buf);
+    const int cmd_id = sfd_get_cmd(buf);
 
-    switch (cmd_id) {
+    switch ((const enum prot_cmd_req)cmd_id) {
     case PROT_CMD_FILE_OPEN: {
         struct prot_request pdu;
         if (!prot_unmarshal_request(&pdu, buf, size)) {
@@ -545,8 +558,10 @@ static bool process_request(struct server* ctx,
         struct resrc_xfer* const xfer = get_open_file(ctx,
                                                       client_pid,
                                                       pdu.txnid);
-        if (!xfer)
+        if (!xfer || xfer->cancelled) {
+            close(fds[0]);
             return false;
+        }
 
         xfer->cmd = PROT_CMD_SEND;
         xfer->dest_fd = fds[0];
@@ -572,9 +587,7 @@ static bool process_request(struct server* ctx,
         if (!xfer)
             return false;
 
-        assert (ctx->ncancelled_xfers < ctx->xfers->size);
-        assert (ctx->ncancelled_xfers < ctx->xfers->capacity);
-        ctx->cancelled_xfers[ctx->ncancelled_xfers++] = xfer;
+        cancel_xfer(ctx, xfer);
 
     } break;
 
@@ -628,7 +641,11 @@ static struct resrc_xfer* get_open_file(struct server* ctx,
         return NULL;
     }
 
-    if (xfer->client_pid != client_pid) {
+    /* If the transfer's client PID is US_INVALID_PID it could not be
+       determined. This would be the case on FreeBSD, on which the recommended
+       way of transferring process credentials (see recvmsg(2) on FreeBSD) does
+       not transfer the PID. */
+    if (xfer->client_pid != US_INVALID_PID && xfer->client_pid != client_pid) {
         /* Client trying to send a file or cancel a transfer it did not open or
            initiate itself */
         sfd_log(LOG_ALERT,
@@ -688,9 +705,7 @@ static bool process_file_op(struct server* ctx, struct resrc_xfer* xfer)
                                                     writemax));
 
             if (nwritten == -1) {
-                const int write_errno = errno;
-
-                if (!errno_is_fatal(write_errno))
+                if (!errno_is_fatal(errno))
                     return true;
 
                 if (!has_stat_channel(xfer))
@@ -698,8 +713,9 @@ static bool process_file_op(struct server* ctx, struct resrc_xfer* xfer)
 
                 struct prot_hdr pdu = {
                     .cmd = SFD_XFER_STAT,
-                    .stat = (uint8_t)write_errno
+                    .stat = (uint8_t)errno
                 };
+
                 return send_term_resp(ctx, xfer, &pdu, sizeof(pdu));
 
             } else if (nwritten == 0) {
@@ -733,8 +749,6 @@ static bool process_file_op(struct server* ctx, struct resrc_xfer* xfer)
                    this is rather counter-intuitive. */
                 return false;
             }
-
-            return true;
         }
     }
 

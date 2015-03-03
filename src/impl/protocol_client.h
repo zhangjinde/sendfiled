@@ -37,11 +37,11 @@ extern "C" {
 
     bool prot_marshal_file_open(struct prot_request* req,
                                 const char* filename,
-                                loff_t offset, size_t len);
+                                off_t offset, size_t len);
 
     bool prot_marshal_send(struct prot_request* req,
                            const char* filename,
-                           loff_t offset, size_t len);
+                           off_t offset, size_t len);
 
     void prot_marshal_send_open(struct prot_send_open*,
                                 size_t txnid);
@@ -51,7 +51,7 @@ extern "C" {
 
     bool prot_marshal_read(struct prot_request* req,
                            const char* filename,
-                           loff_t offset, size_t len);
+                           off_t offset, size_t len);
 
 #ifdef __cplusplus
 }

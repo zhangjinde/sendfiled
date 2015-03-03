@@ -32,6 +32,16 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmissing-prototypes"
 
+size_t us_cmsg_space(size_t s)
+{
+    return CMSG_SPACE(s);
+}
+
+size_t us_cmsg_len(size_t s)
+{
+    return CMSG_LEN(s);
+}
+
 int us_socket(int domain, int type, int protocol)
 {
     return socket(domain, type | SOCK_NONBLOCK | SOCK_CLOEXEC, protocol);

@@ -163,7 +163,7 @@ extern "C" {
     */
     int sfd_read(int srv_sockfd,
                  const char* path,
-                 loff_t offset, size_t len,
+                 off_t offset, size_t len,
                  bool dest_fd_nonblock) SFD_API;
 
     /**
@@ -201,7 +201,7 @@ extern "C" {
     int sfd_send(int srv_sockfd,
                  const char* path,
                  int destination_fd,
-                 loff_t offset, size_t len,
+                 off_t offset, size_t len,
                  bool stat_fd_nonblock) SFD_API;
 
     /**
@@ -238,7 +238,7 @@ extern "C" {
     */
     int sfd_open(int srv_sockfd,
                  const char* path,
-                 loff_t offset, size_t len,
+                 off_t offset, size_t len,
                  bool stat_fd_nonblock) SFD_API;
 
     /**

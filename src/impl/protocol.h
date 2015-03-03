@@ -84,7 +84,7 @@ struct prot_hdr {
 struct prot_request {
     PROT_HDR_FIELDS;
     /* Offset from the beginning of the file to start reading from */
-    loff_t offset;
+    off_t offset;
     /* Number of bytes to transfer */
     size_t len;
 

@@ -33,6 +33,9 @@
 
 struct msghdr;
 
+/** Value denoting an invalid PID */
+extern const pid_t US_INVALID_PID;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -80,12 +83,18 @@ extern "C" {
                     int* recvd_fds, size_t* nfds,
                     uid_t* uid, gid_t* gid, pid_t* pid);
 
-    int us_passcred_option(void);
+    /**
+        Turns on the credential-passing option on a socket.
+
+        @note Platform-specific differences include the option name and option
+        level (socket on Linux, protocol on FreeBSD).
+    */
+    bool us_set_passcred_option(int fd);
 
     bool us_get_fds_and_creds(struct msghdr* msg,
                               int* fds, size_t* nfds,
                               int cred_cmsg_type,
-                              void* creds, const size_t creds_size);
+                              void* creds);
 
 #ifdef __cplusplus
 }

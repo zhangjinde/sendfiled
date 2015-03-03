@@ -34,8 +34,13 @@
    file descriptor.
 */
 
+#include <sys/socket.h>
+
+#include <assert.h>
+#include <limits.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "file_io.h"
 #include "util.h"

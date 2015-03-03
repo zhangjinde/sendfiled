@@ -34,7 +34,7 @@
 
 static bool marshal_req(struct prot_request* pdu,
                         const uint8_t cmd,
-                        const loff_t offset,
+                        const off_t offset,
                         const size_t len,
                         const char* filename)
 {
@@ -69,7 +69,7 @@ static bool marshal_req(struct prot_request* pdu,
 
 bool prot_marshal_read(struct prot_request* req,
                        const char* filename,
-                       const loff_t offset,
+                       const off_t offset,
                        const size_t len)
 {
     return marshal_req(req,
@@ -81,7 +81,7 @@ bool prot_marshal_read(struct prot_request* req,
 
 bool prot_marshal_file_open(struct prot_request* req,
                             const char* filename,
-                            loff_t offset, size_t len)
+                            off_t offset, size_t len)
 {
     return marshal_req(req,
                        PROT_CMD_FILE_OPEN,
@@ -92,7 +92,7 @@ bool prot_marshal_file_open(struct prot_request* req,
 
 bool prot_marshal_send(struct prot_request* req,
                        const char* filename,
-                       const loff_t offset,
+                       const off_t offset,
                        const size_t len)
 {
     return marshal_req(req,

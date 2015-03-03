@@ -1,8 +1,8 @@
-**Note:** A more recent version of the information in this file and the rest of
-  the project's documentation can be found
-  [here](http://francoisk.me/software/sendfiled/index.html).
+# Disclaimer
 
----
+This software has neither been stress-tested nor profiled.
+
+(However, it does serve files for my [website](http://francoisk.me).)
 
 # Synopsis
 
@@ -54,12 +54,13 @@ To provide applications with:
   commencement of the transfer (useful for sending headers containing file
   metadata).
 
+* **Cancel Transfer**: the server aborts a transfer, closing the file and any
+    associated file descriptors. Can be used to cancel any operation.
+
 # Supported platforms
 
-1. Linux
-
-That's it, alas. But at least the platform-specific code is restricted to a few
-source files.
+* Linux
+* FreeBSD
 
 # Building
 
@@ -71,8 +72,13 @@ The build has the following dependencies:
 
 * GNU Make
 
-* A C99 compiler for the client library and daemon (tested with gcc 4.6.3)
+* A C99 compiler for the client library and daemon (tested with `gcc` 4.6.3 and
+  `clang` 3.4.1)
 
-* A C++14 compiler (tests only; tested with clang++ 3.4.2)
+* A C++14 compiler (tests only; tested with `clang++` 3.4.1)
 
 * Google Test (tests only)
+
+# Links
+
+* [API documentation](http://francoisk.me/software/sendfiled/index.html)

@@ -44,6 +44,6 @@ void us_attach_fds_and_creds(struct msghdr* msg,
                              uint8_t* cmsg_buf,
                              const int* fds, size_t nfds,
                              int cred_type,
-                             void* creds, size_t creds_size);
+                             const void* creds, size_t creds_size);
 
 #endif

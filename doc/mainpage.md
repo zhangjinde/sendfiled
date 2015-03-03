@@ -50,10 +50,8 @@ To provide applications with:
 
 # Supported platforms
 
-1. Linux
-
-That's it, alas. But at least the platform-specific code is restricted to a few
-source files.
+* Linux
+* FreeBSD
 
 # Dependencies
 
@@ -63,9 +61,9 @@ The build has the following dependencies:
 
 * GNU Make
 
-* A C99 compiler for the client library and daemon (tested with gcc 4.6.3)
+* A C99 compiler for the client library and daemon (tested with @c gcc 4.6.3)
 
-* A C++14 compiler (tests only; tested with clang++ 3.4.2)
+* A C++14 compiler (tests only; tested with @c clang++ 3.4.1)
 
 * Google Test (tests only)
 
@@ -79,13 +77,21 @@ The build has the following dependencies:
 
 * [Implementation issues](implementation.html)
 
-# TODO
+# TODO / known problems
+
+* The recommended way of transferring process credentials on FreeBSD does not
+  include the process ID, so it's impossible to prevent a process from
+  cancelling a transfer initiated by another process. Transfer IDs are currently
+  generated in a very predictable way so it would be easy to guess existing
+  transfer IDs. (See sfd_cancel().)
+
+* The server currently only accepts requests from client processes with
+  effective UIDs matching its own, which is obviously be sub-optimal for many
+  kinds of deployments.
 
 * Write more tests
 
-* Measure for performance
-
-* Support for more than one OS
+* Profile
 
   [status_channel]: messages.html#status_channel
   [data_channel]: messages.html#data_channel

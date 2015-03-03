@@ -24,10 +24,15 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+#include <sys/types.h>
+#include <sys/wait.h>
+
 #include <unistd.h>
 
 #include <cerrno>
 #include <cstdint>
+#include <csignal>
+#include <future>
 #include <numeric>
 #include <vector>
 
@@ -40,6 +45,7 @@
 #include "../sendfiled.h"
 #include "../impl/protocol_client.h"
 #include "../impl/server.h"
+#include "../impl/syspoll.h"
 #include "../impl/test_interpose.h"
 #include "../impl/unix_socket_server.h"
 #include "../impl/util.h"
@@ -48,12 +54,11 @@
 #pragma GCC diagnostic ignored "-Wglobal-constructors"
 #pragma GCC diagnostic ignored "-Wexit-time-destructors"
 #pragma GCC diagnostic ignored "-Wpadded"
+#pragma GCC diagnostic ignored "-Wold-style-cast"
 
 namespace {
-bool wouldblock(const ssize_t err) noexcept
-{
-    return (err == -1 && (errno == EWOULDBLOCK || errno == EAGAIN));
-}
+
+constexpr int test_port {59999};
 
 template<std::size_t MaxFiles>
 struct SfdProcFixTemplate : public ::testing::Test {
@@ -123,6 +128,7 @@ struct SfdThreadFix : public ::testing::Test {
 
     ~SfdThreadFix() {
         stop_thread();
+        mock_read_reset();
         mock_write_reset();
         mock_sendfile_reset();
         mock_splice_reset();
@@ -287,20 +293,19 @@ using SfdProcFix2Xfers = SfdProcFixTemplate<2>;
  */
 TEST_F(SfdProcFix2Xfers, transfer_table_full)
 {
-    int data_pipes [maxfiles][2];
+    std::pair<test::unique_fd, test::unique_fd> fds [maxfiles];
     test::unique_fd stat_fds [maxfiles];
     test::TmpFile file;
 
     for (std::size_t i = 0; i < maxfiles; i++) {
-        if (pipe(data_pipes[i]) == -1)
-            FAIL() << "Couldn't create a pipe; errno: " << strerror(errno);
+        fds[i] = test::make_connection(test_port + (int)i);
 
         stat_fds[i] = sfd_send(srv_fd,
                                file.name().c_str(),
-                               data_pipes[i][1],
+                               fds[i].first,
                                0, 0, false);
 
-        close(data_pipes[i][1]);
+        fds[i].first.reset();
 
         ASSERT_TRUE(stat_fds[i]);
 
@@ -316,17 +321,13 @@ TEST_F(SfdProcFix2Xfers, transfer_table_full)
 
     // One over the 'open file limit'
 
-    int pfds[2];
-    if (pipe(pfds) == -1)
-        FAIL() << "Couldn't create a pipe; errno: " << strerror(errno);
-
-    test::unique_fd data_fd {pfds[0]};
+    auto sockets = test::make_connection(test_port + maxfiles);
 
     const test::unique_fd stat_fd {sfd_send(srv_fd,
                                             file.name().c_str(),
-                                            pfds[1],
+                                            sockets.first,
                                             0, 0, false)};
-    close(pfds[1]);
+    sockets.first.reset();
 
     ASSERT_TRUE(stat_fd);
 
@@ -338,27 +339,20 @@ TEST_F(SfdProcFix2Xfers, transfer_table_full)
 
     EXPECT_EQ(SFD_FILE_INFO, sfd_get_cmd(buf));
     EXPECT_EQ(EMFILE, sfd_get_stat(buf));
-
-    for (std::size_t i = 0; i < maxfiles; i++)
-        close(data_pipes[i][0]);
 }
 
 TEST_F(SfdProcSmallFileFix, send)
 {
-    // Pipe to which file will be written
-    int data_pipe[2];
-
-    ASSERT_NE(-1, pipe(data_pipe));
+    auto sockets = test::make_connection(test_port);
 
     const test::unique_fd stat_fd {sfd_send(srv_fd,
-                                             file.name().c_str(),
-                                             data_pipe[1],
-                                             0, 0, false)};
-    close(data_pipe[1]);
+                                            file.name().c_str(),
+                                            sockets.first,
+                                            0, 0, false)};
 
     ASSERT_TRUE(stat_fd);
 
-    const test::unique_fd data_fd {data_pipe[0]};
+    sockets.first.reset();
 
     uint8_t buf [PROT_REQ_MAXSIZE];
     ssize_t nread;
@@ -382,7 +376,76 @@ TEST_F(SfdProcSmallFileFix, send)
     EXPECT_EQ(PROT_XFER_COMPLETE, xfer_stat.size);
 
     // File content
+    nread = read(sockets.second, buf, sizeof(buf));
+    ASSERT_EQ(file_contents.size(), nread);
+    const std::string recvd_file(reinterpret_cast<const char*>(buf),
+                                 file_contents.size());
+    EXPECT_EQ(file_contents, recvd_file);
+}
+
+TEST_F(SfdThreadSmallFileFix, read)
+{
+    const test::unique_fd data_fd {sfd_read(srv_fd,
+                                            file.name().c_str(),
+                                            0, 0, false)};
+    ASSERT_TRUE(data_fd);
+
+    uint8_t buf [PROT_REQ_MAXSIZE];
+    ssize_t nread;
+    struct sfd_file_info ack;
+
+    // Request ACK
+    nread = read(data_fd, buf, sizeof(ack));
+    ASSERT_EQ(sizeof(ack), nread);
+    ASSERT_TRUE(sfd_unmarshal_file_info(&ack, buf));
+    EXPECT_EQ(SFD_FILE_INFO, ack.cmd);
+    EXPECT_EQ(SFD_STAT_OK, ack.stat);
+    EXPECT_EQ(file_contents.size(), ack.size);
+
+    // File content
     nread = read(data_fd, buf, sizeof(buf));
+    ASSERT_EQ(file_contents.size(), nread);
+    const std::string recvd_file(reinterpret_cast<const char*>(buf),
+                                 file_contents.size());
+    EXPECT_EQ(file_contents, recvd_file);
+}
+
+TEST_F(SfdThreadSmallFileFix, send)
+{
+    auto sockets = test::make_connection(test_port);
+
+    const test::unique_fd stat_fd {sfd_send(srv_fd,
+                                            file.name().c_str(),
+                                            sockets.first,
+                                            0, 0, false)};
+
+    ASSERT_TRUE(stat_fd);
+
+    sockets.first.reset();
+
+    uint8_t buf [PROT_REQ_MAXSIZE];
+    ssize_t nread;
+    struct sfd_file_info ack;
+    struct sfd_xfer_stat xfer_stat;
+
+    // Request ACK
+    nread = read(stat_fd, buf, sizeof(ack));
+    ASSERT_EQ(sizeof(ack), nread);
+    ASSERT_TRUE(sfd_unmarshal_file_info(&ack, buf));
+    EXPECT_EQ(SFD_FILE_INFO, ack.cmd);
+    EXPECT_EQ(SFD_STAT_OK, ack.stat);
+    EXPECT_EQ(file_contents.size(), ack.size);
+
+    // Transfer status update
+    nread = read(stat_fd, buf, sizeof(xfer_stat));
+    ASSERT_EQ(sizeof(xfer_stat), nread);
+    ASSERT_TRUE(sfd_unmarshal_xfer_stat(&xfer_stat, buf));
+    EXPECT_EQ(SFD_XFER_STAT, xfer_stat.cmd);
+    EXPECT_EQ(SFD_STAT_OK, xfer_stat.stat);
+    EXPECT_EQ(PROT_XFER_COMPLETE, xfer_stat.size);
+
+    // File content
+    nread = read(sockets.second, buf, sizeof(buf));
     ASSERT_EQ(file_contents.size(), nread);
     const std::string recvd_file(reinterpret_cast<const char*>(buf),
                                  file_contents.size());
@@ -394,27 +457,23 @@ TEST_F(SfdProcSmallFileFix, send)
 /// final status.
 TEST_F(SfdThreadSmallFileFix, send_final_xfer_status_fails)
 {
-    // Pipe to which file will be written
-    int data_pipe[2];
-
-    ASSERT_NE(-1, pipe(data_pipe));
+    auto sockets = test::make_connection(test_port);
 
     // Due to edge-trigged mode, more than one EWOULDBLOCK will cause
     // deadlock. The lone one only works because when the final xfer status send
     // fails with EWOULDBLOCK, it de-registers the dest fd and registers the
     // stat fd, causing its events to be re-read.
-    const std::vector<ssize_t> retvals {MOCK_REALRV, -EWOULDBLOCK};
-    mock_write_set_retval_n(retvals.data(), (int)retvals.size());
+    // const std::vector<ssize_t> retvals {MOCK_REALRV, -EWOULDBLOCK};
+    // mock_write_set_retval_n(retvals.data(), (int)retvals.size());
 
     const test::unique_fd stat_fd {sfd_send(srv_fd,
-                                             file.name().c_str(),
-                                             data_pipe[1],
-                                             0, 0, false)};
-    close(data_pipe[1]);
+                                            file.name().c_str(),
+                                            sockets.first,
+                                            0, 0, false)};
 
     ASSERT_TRUE(stat_fd);
 
-    const test::unique_fd data_fd {data_pipe[0]};
+    sockets.first.reset();
 
     uint8_t buf [PROT_REQ_MAXSIZE];
     ssize_t nread;
@@ -438,7 +497,7 @@ TEST_F(SfdThreadSmallFileFix, send_final_xfer_status_fails)
     EXPECT_EQ(PROT_XFER_COMPLETE, xfer_stat.size);
 
     // File content
-    nread = read(data_fd, buf, sizeof(buf));
+    nread = read(sockets.second, buf, sizeof(buf));
     ASSERT_EQ(file_contents.size(), nread);
     const std::string recvd_file(reinterpret_cast<const char*>(buf),
                                  file_contents.size());
@@ -447,10 +506,7 @@ TEST_F(SfdThreadSmallFileFix, send_final_xfer_status_fails)
 
 TEST_F(SfdThreadSmallFileFix, send_error_send_fails)
 {
-    // Pipe to which file will be written
-    int data_pipe[2];
-
-    ASSERT_NE(-1, pipe(data_pipe));
+    auto sockets = test::make_connection(test_port);
 
     // Due to edge-trigged mode, more than one EWOULDBLOCK will cause
     // deadlock. The lone one only works because when the final xfer status send
@@ -459,17 +515,16 @@ TEST_F(SfdThreadSmallFileFix, send_error_send_fails)
     const std::vector<ssize_t> write_retvals {MOCK_REALRV, -EWOULDBLOCK};
     mock_write_set_retval_n(write_retvals.data(), (int)write_retvals.size());
 
-    const test::unique_fd stat_fd {sfd_send(srv_fd,
-                                             file.name().c_str(),
-                                             data_pipe[1],
-                                             0, 0, false)};
-    close(data_pipe[1]);
-
     mock_sendfile_set_retval(-EIO);
+
+    const test::unique_fd stat_fd {sfd_send(srv_fd,
+                                            file.name().c_str(),
+                                            sockets.first,
+                                            0, 0, false)};
 
     ASSERT_TRUE(stat_fd);
 
-    const test::unique_fd data_fd {data_pipe[0]};
+    sockets.first.reset();
 
     uint8_t buf [PROT_REQ_MAXSIZE];
     ssize_t nread;
@@ -525,11 +580,7 @@ TEST_F(SfdProcSmallFileFix, read)
 
 TEST_F(SfdProcSmallFileFix, send_open_file)
 {
-    // Create pipe to which file will ultimately be written
-    int pfd [2];
-    ASSERT_NE(-1, pipe(pfd));
-    const test::unique_fd pipe_read {pfd[0]};
-    test::unique_fd pipe_write {pfd[1]};
+    auto sockets = test::make_connection(test_port);
 
     // Open the file
     const test::unique_fd stat_fd {sfd_open(srv_fd,
@@ -551,11 +602,11 @@ TEST_F(SfdProcSmallFileFix, send_open_file)
     EXPECT_GT(ack.txnid, 0);
 
     // Send 'open file'
-    ASSERT_TRUE(sfd_send_open(srv_fd, ack.txnid, pipe_write));
-    ::close(pipe_write);
+    ASSERT_TRUE(sfd_send_open(srv_fd, ack.txnid, sockets.first));
+    sockets.first.reset();
 
     // Read file data
-    nread = read(pipe_read, buf, sizeof(buf));
+    nread = read(sockets.second, buf, sizeof(buf));
     ASSERT_EQ(file_contents.size(), nread);
     const std::string recvd_file(reinterpret_cast<const char*>(buf),
                                  static_cast<std::size_t>(nread));
@@ -648,20 +699,17 @@ TEST_F(SfdThreadLargeFileFix, cancel_read)
 
 TEST_F(SfdThreadLargeFileFix, cancel_send)
 {
-    int pfd [2];
-    if (pipe(pfd) == -1) {
-        FAIL() << "Couldn't create pipes";
-    }
+    auto sockets = test::make_connection(test_port);
 
     // Initiate the read
     const test::unique_fd stat_fd {sfd_send(srv_fd,
                                             file.name().c_str(),
-                                            pfd[1],
+                                            sockets.first,
                                             0, 0, false)};
-    close(pfd[1]);
-    test::unique_fd dstfd {pfd[0]};
 
     ASSERT_TRUE(stat_fd);
+
+    sockets.first.reset();
 
     ssize_t nread;
     struct sfd_file_info ack;
@@ -679,7 +727,7 @@ TEST_F(SfdThreadLargeFileFix, cancel_send)
     // Read a bit of the file in order to confirm that the server has started
     // sending it.
     int b;
-    ASSERT_EQ(1, read(dstfd, &b, 1));
+    ASSERT_EQ(1, read(sockets.second, &b, 1));
 
     // Cancel the transfer
     EXPECT_TRUE(sfd_cancel(srv_fd, ack.txnid));
@@ -690,7 +738,7 @@ TEST_F(SfdThreadLargeFileFix, cancel_send)
     nread = 0;
     bool got_eof {false};
     for (;;) {
-        const ssize_t n = read(dstfd, buf.data(), buf.size());
+        const ssize_t n = read(sockets.second, buf.data(), buf.size());
 
         if (n == 0) {
             got_eof = true;
@@ -712,12 +760,6 @@ TEST_F(SfdThreadLargeFileFix, cancel_send)
  */
 TEST_F(SfdThreadSmallFileShortOpenFileTimeoutFix, open_file_timeout)
 {
-    // Create pipe to which file will ultimately be written
-    int pfd [2];
-    ASSERT_NE(-1, pipe(pfd));
-    const test::unique_fd pipe_read {pfd[0]};
-    test::unique_fd pipe_write {pfd[1]};
-
     // Open the file
     const test::unique_fd stat_fd {sfd_open(srv_fd,
                                              file.name().c_str(),
@@ -740,28 +782,42 @@ TEST_F(SfdThreadSmallFileShortOpenFileTimeoutFix, open_file_timeout)
     // Sleep for longer than the server's open file timeout
     std::this_thread::sleep_for(std::chrono::milliseconds{open_file_timeout_ms});
 
+    auto sockets = test::make_connection(test_port);
+
     // Send 'open file'
-    ASSERT_TRUE(sfd_send_open(srv_fd, ack.txnid, pipe_write));
-    ::close(pipe_write);
+    ASSERT_TRUE(sfd_send_open(srv_fd, ack.txnid, sockets.first));
+    sockets.first.reset();
 
     // Server should've written the timeout error message to the status
     // channel...
     nread = read(stat_fd, buf, sizeof(buf));
-    EXPECT_EQ(sizeof(struct prot_hdr), nread);
-    EXPECT_EQ(SFD_XFER_STAT, sfd_get_cmd(buf));
-    EXPECT_EQ(ETIMEDOUT, sfd_get_stat(buf));
-    // ... and then should've closed the status channel.
-    EXPECT_EQ(0, read(stat_fd, buf, sizeof(buf)));
 
-    // Data channel should have been closed at timeout, before any data had been
-    // written to it.
-    nread = read(pipe_read, buf, sizeof(buf));
-    EXPECT_EQ(0, nread);
+    if (nread == sizeof(struct prot_hdr)) {
+        EXPECT_EQ(SFD_XFER_STAT, sfd_get_cmd(buf));
+        EXPECT_EQ(ETIMEDOUT, sfd_get_stat(buf));
+        // ... and then should've closed the status channel.
+        EXPECT_EQ(0, read(stat_fd, buf, sizeof(buf)));
+
+        // Data channel should have been closed at timeout, before any data had
+        // been written to it.
+        nread = read(sockets.second, buf, sizeof(buf));
+        EXPECT_EQ(0, nread);
+
+    } else {
+        // Timeout occurred after commencement of the transfer
+        EXPECT_EQ(sizeof(struct sfd_xfer_stat), nread);
+        EXPECT_EQ(SFD_XFER_STAT, sfd_get_cmd(buf));
+        EXPECT_EQ(SFD_STAT_OK, sfd_get_stat(buf));
+        struct sfd_xfer_stat pdu;
+        ASSERT_TRUE(sfd_unmarshal_xfer_stat(&pdu, buf));
+        EXPECT_GT(pdu.size, 0);
+        // No point in carrying on at this point
+    }
 }
 
 TEST_F(SfdProcSmallFileFix, read_range)
 {
-    constexpr loff_t offset {3};
+    constexpr off_t offset {3};
     constexpr size_t len {5};
 
     const test::unique_fd data_fd {sfd_read(srv_fd,
@@ -785,7 +841,6 @@ TEST_F(SfdProcSmallFileFix, read_range)
     nread = read(data_fd, buf, sizeof(buf));
     ASSERT_EQ(len, nread);
     const std::string recvd_file(reinterpret_cast<const char*>(buf), len);
-    std::printf("recvd_file: %s\n", recvd_file.c_str());
     EXPECT_EQ(0, memcmp(buf, file_contents.c_str() + offset, len));
 }
 
@@ -817,6 +872,9 @@ TEST_F(SfdProcLargeFileFix, multiple_reading_clients)
         EXPECT_EQ(SFD_FILE_INFO, ack.cmd);
         EXPECT_EQ(SFD_STAT_OK, ack.stat);
         EXPECT_EQ(CHUNK_SIZE * NCHUNKS, ack.size);
+
+        if (!set_nonblock(cli.data_fd, true))
+            FAIL() << "Couldn't make data fd non-blocking";
     }
 
     // File content
@@ -834,20 +892,25 @@ TEST_F(SfdProcLargeFileFix, multiple_reading_clients)
                              recvbuf.data() + cli.nread_chunk,
                              recvbuf.size() - cli.nread_chunk);
 
-            ASSERT_NE(-1, n);
-            ASSERT_NE(0, n);
+            if (n == -1) {
+                if (errno != EWOULDBLOCK && errno != EAGAIN)
+                    FAIL() << "Fatal read error on data fd";
 
-            cli.nread_chunk += (size_t)n;
+            } else {
+                ASSERT_NE(0, n);
 
-            if (cli.nread_chunk == recvbuf.size()) {
-                for (size_t j = 0; j < recvbuf.size(); j++)
-                    ASSERT_EQ((uint8_t)j, (uint8_t)recvbuf[j]);
-                cli.nread_chunk = 0;
-                cli.nchunks++;
+                cli.nread_chunk += (size_t)n;
+
+                if (cli.nread_chunk == recvbuf.size()) {
+                    for (size_t j = 0; j < recvbuf.size(); j++)
+                        ASSERT_EQ((uint8_t)j, (uint8_t)recvbuf[j]);
+                    cli.nread_chunk = 0;
+                    cli.nchunks++;
+                }
+
+                if (cli.nchunks == NCHUNKS)
+                    ndone++;
             }
-
-            if (cli.nchunks == NCHUNKS)
-                ndone++;
         }
     }
 
@@ -899,6 +962,9 @@ TEST_F(SfdProcFix, multiple_clients_reading_different_large_files)
         EXPECT_EQ(SFD_FILE_INFO, ack.cmd);
         EXPECT_EQ(SFD_STAT_OK, ack.stat);
         EXPECT_EQ(CHUNK_SIZE * NCHUNKS, ack.size);
+
+        if (!set_nonblock(cli.data_fd, true))
+            FAIL() << "Couldn't make data fd non-blocking";
     }
 
     // Read file content
@@ -916,7 +982,14 @@ TEST_F(SfdProcFix, multiple_clients_reading_different_large_files)
                              recvbuf.data() + cli.nread_chunk,
                              recvbuf.size() - cli.nread_chunk);
 
-            ASSERT_NE(-1, n);
+            if (n == -1) {
+                if (errno != EWOULDBLOCK && errno != EAGAIN) {
+                    FAIL() << "Fatal read error on data fd";
+                } else {
+                    continue;
+                }
+            }
+
             ASSERT_NE(0, n);
 
             cli.nread_chunk += (size_t)n;
@@ -962,8 +1035,13 @@ TEST_F(SfdThreadLargeFileFix, read_io_error)
     bool got_eof {false};
 
     for (;;) {
-        if (nchunks > NCHUNKS / 2)
-            mock_splice_set_retval(-EIO);
+        if (nchunks > NCHUNKS / 2) {
+#ifdef __linux__
+            mock_splice_set_retval(-EIO); // Linux
+#else
+            mock_read_set_retval_except_fd(-EIO, data_fd);   // Other
+#endif
+        }
 
         ssize_t n = read(data_fd,
                          recvbuf.data() + nread_chunk,
@@ -972,17 +1050,18 @@ TEST_F(SfdThreadLargeFileFix, read_io_error)
         if (n == 0) {
             got_eof = true;
             break;
+
+        } else if (n > 0) {
+            nread_chunk += (size_t)n;
+
+            if (nread_chunk == CHUNK_SIZE) {
+                nread_chunk = 0;
+                nchunks++;
+            }
+
+            if (nchunks == NCHUNKS)
+                break;
         }
-
-        nread_chunk += (size_t)n;
-
-        if (nread_chunk == CHUNK_SIZE) {
-            nread_chunk = 0;
-            nchunks++;
-        }
-
-        if (nchunks == NCHUNKS)
-            break;
     }
 
     EXPECT_TRUE(got_eof);
@@ -991,94 +1070,98 @@ TEST_F(SfdThreadLargeFileFix, read_io_error)
 
 TEST_F(SfdThreadLargeFileFix, send_io_error)
 {
-    int data_pipe [2];
-    ASSERT_NE(-1, pipe(data_pipe));
-
-    const test::unique_fd data_fd {data_pipe[0]};
+    auto sockets = test::make_connection(test_port);
 
     const test::unique_fd stat_fd {sfd_send(srv_fd,
-                                             file.name().c_str(),
-                                             data_pipe[1],
-                                             0, 0, true)};
-    close(data_pipe[1]);
+                                            file.name().c_str(),
+                                            sockets.first,
+                                            0, 0, false)};
 
     ASSERT_TRUE(stat_fd);
 
-    std::vector<uint8_t> data_buf(CHUNK_SIZE);
-    std::vector<uint8_t> stat_buf(sizeof(struct sfd_file_info));
-    ssize_t nread;
-    struct sfd_file_info ack;
-    struct sfd_xfer_stat xfer_stat;
+    sockets.first.reset();
 
-    // Request ACK
-    while (wouldblock(nread = read(stat_fd, stat_buf.data(), sizeof(ack)))) {}
+    // File info (first response to send request)
+    {
+        std::vector<uint8_t> buf(SFD_MAX_RESP_SIZE);
+        struct sfd_file_info file_info;
 
-    ASSERT_EQ(sizeof(ack), nread);
-    ASSERT_TRUE(sfd_unmarshal_file_info(&ack, stat_buf.data()));
-    EXPECT_EQ(SFD_FILE_INFO, ack.cmd);
-    EXPECT_EQ(SFD_STAT_OK, ack.stat);
-    EXPECT_EQ(CHUNK_SIZE * NCHUNKS, ack.size);
+        const ssize_t nread {read(stat_fd, buf.data(), sizeof(file_info))};
 
-    size_t nchunks {};
-    ssize_t nread_chunk {};
-    bool got_data_eof {false};
+        ASSERT_EQ(sizeof(file_info), nread);
+        ASSERT_TRUE(sfd_unmarshal_file_info(&file_info, buf.data()));
+        EXPECT_EQ(SFD_FILE_INFO, file_info.cmd);
+        EXPECT_EQ(SFD_STAT_OK, file_info.stat);
+        EXPECT_EQ(CHUNK_SIZE * NCHUNKS, file_info.size);
+    }
+
     bool got_stat_eof {false};
     bool got_errno {false};
 
-    for (;;) {
-        if (nchunks > NCHUNKS / 2)
-            mock_sendfile_set_retval(-EIO);
+    auto read_stat_channel = [&stat_fd, &got_stat_eof, &got_errno] {
+        std::vector<uint8_t> buf(SFD_MAX_RESP_SIZE);
+        struct sfd_xfer_stat stat;
 
-        nread = read(data_fd,
-                     data_buf.data() + nread_chunk,
-                     CHUNK_SIZE - (size_t)nread_chunk);
+        for (;;) {
+            const auto nread = read(stat_fd, buf.data(), sizeof(stat));
+
+            if (nread == -1) {
+                if (errno != EWOULDBLOCK && errno != EAGAIN)
+                    return;
+            } else if (nread > 0) {
+                if (static_cast<std::size_t>(nread) < sizeof(struct prot_hdr) ||
+                    sfd_get_cmd(buf.data()) != SFD_XFER_STAT) {
+                    return;
+                }
+                got_errno = (sfd_get_stat(buf.data()) == EIO);
+            } else {
+                got_stat_eof = (nread == 0);
+                return;
+            }
+        }
+    };
+
+    // Read from the status channel in another thread
+    auto stat_future = std::async(std::launch::async, read_stat_channel);
+
+    std::vector<uint8_t> data_buf(CHUNK_SIZE);
+    size_t nchunks {};
+    ssize_t nread_chunk {};
+    bool got_data_eof {false};
+
+    // Read one byte of file data to ensure that the server has sent some data,
+    // then make the next call to sendfile fail.  Needs to be done as early as
+    // possible otherwise the server may have finished sending by the time
+    // sendfile is affected.
+    {
+        int byte {};
+        ASSERT_EQ(1, read(sockets.second, &byte, 1));
+        mock_sendfile_set_retval(-EIO);
+    }
+
+    // Read from the data channel in this thread
+    for (;;) {
+        const ssize_t nread {read(sockets.second,
+                                  data_buf.data() + nread_chunk,
+                                  CHUNK_SIZE - (size_t)nread_chunk)};
+
+        ASSERT_GE(nread, 0);
 
         if (nread == 0) {
             got_data_eof = true;
             break;
-        }
-
-        ASSERT_GT(nread, 0);
-
-        nread_chunk += nread;
-
-        if (nread_chunk >= CHUNK_SIZE) {
-            if (++nchunks == NCHUNKS)
-                break;
-            nread_chunk = 0;
-        }
-
-        // Read transfer status update (don't let pipe fill up)
-        nread = read(stat_fd, stat_buf.data(), sizeof(xfer_stat));
-        if (wouldblock(nread))
-            continue;
-        ASSERT_GE(sizeof(struct prot_hdr), nread);
-        ASSERT_EQ(SFD_XFER_STAT, sfd_get_cmd(stat_buf.data()));
-        got_errno = (sfd_get_stat(stat_buf.data()) == EIO);
-        if (sfd_get_stat(stat_buf.data()) != SFD_STAT_OK)
-            break;
-    }
-
-    ASSERT_TRUE(set_nonblock(stat_fd, false));
-
-    while (!got_stat_eof) {
-        nread = read(stat_fd, stat_buf.data(), sizeof(xfer_stat));
-
-        if (nread == 0) {
-            got_stat_eof = true;
-
-        } else if (nread == -1) {
-            if (wouldblock(nread))
-                continue;
-            else
-                break;
         } else {
-            ASSERT_GE(nread, sizeof(struct prot_hdr));
+            nread_chunk += nread;
 
-            ASSERT_EQ(SFD_XFER_STAT, sfd_get_cmd(stat_buf.data()));
-            got_errno = (sfd_get_stat(stat_buf.data()) == EIO);
+            if (nread_chunk >= CHUNK_SIZE) {
+                if (++nchunks == NCHUNKS)
+                    break;
+                nread_chunk = 0;
+            }
         }
     }
+
+    stat_future.get();
 
     EXPECT_TRUE(got_data_eof);
     EXPECT_TRUE(got_stat_eof);

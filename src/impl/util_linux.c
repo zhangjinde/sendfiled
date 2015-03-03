@@ -24,17 +24,13 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef SFD_IMPL_SFD_H
-#define SFD_IMPL_SFD_H
+#define _GNU_SOURCE 1
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include <unistd.h>
 
-    int sfd_pipe(int fds[2], int flags);
+#include "util.h"
 
-#ifdef __cplusplus
+int sfd_pipe(int fds[2], const int flags)
+{
+    return pipe2(fds, flags);
 }
-#endif
-
-#endif

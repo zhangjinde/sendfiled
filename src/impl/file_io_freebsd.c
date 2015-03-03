@@ -24,17 +24,24 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef SFD_IMPL_SFD_H
-#define SFD_IMPL_SFD_H
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/uio.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include <assert.h>
+#include <limits.h>
+#include <stddef.h>
 
-    int sfd_pipe(int fds[2], int flags);
+#include "file_io.h"
 
-#ifdef __cplusplus
+ssize_t file_sendfile(const int fd_in, const int fd_out,
+                      struct fio_ctx* ctx __attribute__((unused)),
+                      const size_t nbytes)
+{
+    off_t nsent = 0;
+
+    if (sendfile(fd_in, fd_out, 0, nbytes, NULL, &nsent, 0) == -1)
+        return -1;
+
+    return nsent;
 }
-#endif
-
-#endif

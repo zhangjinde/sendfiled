@@ -111,6 +111,11 @@ struct sfd_xfer_stat {
 #define SFD_HDR_SIZE (offsetof(struct sfd_file_info, stat) +        \
                       sizeof(((struct sfd_file_info*)NULL)->stat))
 
+/**
+   Size of the biggest response message that can be received from the server.
+ */
+#define SFD_MAX_RESP_SIZE sizeof(struct sfd_file_info)
+
 #ifdef __cplusplus
 extern "C" {
 #endif

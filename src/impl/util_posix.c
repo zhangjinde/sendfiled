@@ -24,28 +24,32 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#define _BSD_SOURCE
+#include <fcntl.h>
+#include <unistd.h>
 
-#include <stdarg.h>
+#include "util.h"
 
-#include "log.h"
-
-void sfd_log_open(const char* ident, int option, int facility)
+int sfd_pipe(int fds[2], const int flags)
 {
-    openlog(ident, option, facility);
-}
+    if (pipe(fds) == -1)
+        return -1;
 
-void sfd_log(const int priority, const char* format, ...)
-{
-    va_list args;
-    va_start(args, format);
+    if ((flags & O_NONBLOCK) &&
+        (!set_nonblock(fds[0], true) ||
+         !set_nonblock(fds[1], true))) {
+        goto fail;
+    }
 
-    vsyslog(priority, format, args);
+    if ((flags & O_CLOEXEC) &&
+        (!set_cloexec(fds[0], true) ||
+         !set_cloexec(fds[1], true))) {
+        goto fail;
+    }
 
-    va_end(args);
-}
+    return 0;
 
-void sfd_log_close(void)
-{
-    closelog();
+ fail:
+    PRESERVE_ERRNO(close(fds[0]));
+    PRESERVE_ERRNO(close(fds[1]));
+    return -1;
 }

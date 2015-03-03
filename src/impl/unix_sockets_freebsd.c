@@ -24,17 +24,40 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef SFD_IMPL_SFD_H
-#define SFD_IMPL_SFD_H
+#include <sys/socket.h>
+#include <sys/types.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include <unistd.h>
 
-    int sfd_pipe(int fds[2], int flags);
+#include "util.h"
 
-#ifdef __cplusplus
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-prototypes"
+
+size_t us_cmsg_space(size_t s)
+{
+    /* CMSG_SPACE is undefined on OS X if POSIX_C_SOURCE is defined (perhaps not
+       all of its values) */
+    return CMSG_SPACE(s);
 }
-#endif
 
-#endif
+size_t us_cmsg_len(size_t s)
+{
+    return CMSG_LEN(s);
+}
+
+int us_socket(int domain, int type, int protocol)
+{
+    const int fd = socket(domain, type, protocol);
+
+    if (fd != -1 &&
+        (!set_nonblock(fd, true) ||
+         !set_cloexec(fd, true))) {
+        PRESERVE_ERRNO(close(fd));
+        return -1;
+    }
+
+    return fd;
+}
+
+#pragma GCC diagnostic pop

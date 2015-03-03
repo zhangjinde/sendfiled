@@ -24,10 +24,16 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#define _POSIX_C_SOURCE 200809L
+#ifdef __linux__
+#define _XOPEN_SOURCE 500 /* For sigemptyset et al and chroot */
+#endif
+
+#include <sys/resource.h>
+#include <sys/stat.h>
 
 #include <fcntl.h>
-#include <sys/resource.h>
+#include <signal.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 #include "errors.h"
@@ -83,12 +89,80 @@ bool proc_init_child(const int* excluded_fds, size_t nfds)
     return true;
 }
 
-static bool dup_to_open_fd(const int srcfd, const int dstfd)
+static bool dup_to_open_fd(const int oldfd, const int newfd)
 {
-    if (close(dstfd) == -1 && errno == EBADF) {
-        LOGERRNOV("Destination file descriptor %d was not open\n", dstfd);
+    /* As per Linux's dup(2) manpage, closing newfd manually catches errors that
+       leaving it to dup2 would not report */
+    if (close(newfd) == -1) {
+        LOGERRNOV("Couldn't close new file descriptor %d\n", newfd);
         return false;
     }
 
-    return (dup2(srcfd, STDIN_FILENO) == STDIN_FILENO);
+    return (dup2(oldfd, newfd) == newfd);
+}
+
+int proc_chroot(const char* path)
+{
+    return chroot(path);
+}
+
+bool proc_daemonise(const int* noclose_fds, const size_t nfds)
+{
+    /*
+      Clear file creation mask.
+    */
+    umask(0);
+
+    /*
+      Get maximum number of file descriptors.
+    */
+    struct rlimit rl;
+    if (getrlimit(RLIMIT_NOFILE, &rl) < 0)
+        return false;
+
+    /*
+      Become a session leader to lose controlling TTY.
+    */
+    pid_t pid = fork();
+    if (pid < 0)
+        return false;
+    else if (pid != 0) /* parent */
+        exit(EXIT_SUCCESS);
+    setsid();
+
+    /*
+      Ensure future opens won’t allocate controlling TTYs.
+
+      (Not sure what this does, to be honest.)
+    */
+    struct sigaction sa = {
+#ifdef __clang__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdisabled-macro-expansion"
+#endif
+        .sa_handler = SIG_IGN
+#ifdef __clang__
+#pragma GCC diagnostic pop
+#endif
+    };
+    sigemptyset(&sa.sa_mask);
+
+    if (sigaction(SIGHUP, &sa, NULL) < 0)
+        return false;
+    if ((pid = fork()) < 0)
+        return false;
+    else if (pid != 0) /* parent */
+        exit(EXIT_SUCCESS);
+
+    /*
+      Change the current working directory to the root so we won’t prevent file
+      systems from being unmounted.
+    */
+    if (chdir("/") == -1)
+        return false;
+
+    if (!proc_init_child(noclose_fds, nfds))
+        return false;
+
+    return true;
 }

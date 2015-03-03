@@ -24,33 +24,57 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+#include <dlfcn.h>
 #include <fcntl.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/uio.h>
+
+#include <assert.h>
+#include <string.h>
 #include <unistd.h>
 
-#include "sendfiled.h"
+#include "test_interpose_impl.h"
 
-int sfd_pipe(int fds[2], const int flags)
+DEFINE_MOCK_CONSTRUCTS(read)
+DEFINE_MOCK_CONSTRUCTS(write)
+DEFINE_MOCK_CONSTRUCTS(splice)
+DEFINE_MOCK_CONSTRUCTS(sendfile)
+
+ssize_t read(int fd, void* buf, size_t len)
 {
-    if (pipe(fds) == -1)
-        return -1;
+    MOCK_RETURN_SSIZE_T(read, fd);
 
-    /* Set CLOEXEC */
-    if (fcntl(fds[0], F_SETFD, FD_CLOEXEC) == -1)
-        goto fail;
-    if (fcntl(fds[1], F_SETFD, FD_CLOEXEC) == -1)
-        goto fail;
+    typedef ssize_t (*fptr) (int, void*, size_t);
 
-    /* Set NONBLOCK */
-    if (!set_nonblock(fds[0], true) ||
-        !set_nonblock(fds[1], true)) {
-        goto fail;
-    }
+    fptr real_read = (fptr)dlsym(RTLD_NEXT, "read");
+    assert (real_read);
 
-    return 0;
+    return real_read(fd, buf, len);
+}
 
- fail:
-    PRESERVE_ERRNO(close(fds[0]));
-    PRESERVE_ERRNO(close(fds[1]));
+ssize_t write(int fd, const void* buf, size_t len)
+{
+    MOCK_RETURN_SSIZE_T(write, fd);
 
-    return -1;
+    typedef ssize_t (*fptr) (int, const void*, size_t);
+
+    fptr real_write = (fptr)dlsym(RTLD_NEXT, "write");
+    assert (real_write);
+
+    return real_write(fd, buf, len);
+}
+
+int sendfile(int fd, int s, off_t offset, size_t nbytes,
+             struct sf_hdtr *hdtr, off_t *sbytes, int flags)
+{
+    MOCK_RETURN_INT(sendfile, s);
+
+    typedef int (*fptr) (int fd, int s, off_t offset, size_t nbytes,
+                         struct sf_hdtr *hdtr, off_t *sbytes, int flags);
+
+    fptr real_sendfile = (fptr)dlsym(RTLD_NEXT, "sendfile");
+    assert (real_sendfile);
+
+    return real_sendfile(fd, s, offset, nbytes, hdtr, sbytes, flags);
 }

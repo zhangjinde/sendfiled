@@ -78,29 +78,36 @@ void us_attach_fds_and_creds(struct msghdr* msg,
                              uint8_t* cmsg_buf,
                              const int* fds, const size_t nfds,
                              const int cred_type,
-                             void* creds, size_t creds_size)
+                             const void* const creds, const size_t creds_size)
 {
-    const size_t rights_size = (sizeof(int) * nfds);
+    struct cmsghdr* cmsg = NULL;
 
-    msg->msg_control = cmsg_buf;
-    msg->msg_controllen = (CMSG_SPACE(rights_size) +
-                           CMSG_SPACE(creds_size));
+    if (fds && nfds > 0) {
+        msg->msg_control = cmsg_buf;
+        const size_t rightslen = sizeof(int) * nfds;
+        msg->msg_controllen += (socklen_t)us_cmsg_space(rightslen);
 
-    struct cmsghdr* cmsg = CMSG_FIRSTHDR(msg);
+        cmsg = CMSG_FIRSTHDR(msg);
 
-    *cmsg = (struct cmsghdr) {
-        .cmsg_level = SOL_SOCKET,
-        .cmsg_type = SCM_RIGHTS,
-        .cmsg_len = CMSG_LEN(rights_size)
-    };
-    memcpy(CMSG_DATA(cmsg), fds, rights_size);
+        *cmsg = (struct cmsghdr) {
+            .cmsg_level = SOL_SOCKET,
+            .cmsg_type = SCM_RIGHTS,
+            .cmsg_len = (socklen_t)us_cmsg_len(rightslen)
+        };
+        memcpy(CMSG_DATA(cmsg), fds, rightslen);
+    }
 
-    cmsg = CMSG_NXTHDR(msg, cmsg);
+    if (creds && creds_size > 0) {
+        msg->msg_control = cmsg_buf;
+        msg->msg_controllen += (socklen_t)us_cmsg_space(creds_size);
 
-    *cmsg = (struct cmsghdr) {
-        .cmsg_level = SOL_SOCKET,
-        .cmsg_type = cred_type,
-        .cmsg_len = CMSG_LEN(creds_size)
-    };
-    memcpy(CMSG_DATA(cmsg), creds, creds_size);
+        cmsg = (cmsg ? CMSG_NXTHDR(msg, cmsg) : CMSG_FIRSTHDR(msg));
+
+        *cmsg = (struct cmsghdr) {
+            .cmsg_level = SOL_SOCKET,
+            .cmsg_type = cred_type,
+            .cmsg_len = (socklen_t)us_cmsg_len(creds_size)
+        };
+        memcpy(CMSG_DATA(cmsg), creds, creds_size);
+    }
 }

@@ -35,11 +35,14 @@
 #define DECL_MOCK_FUNCS(name)                                           \
     void mock_##name##_set_retval(ssize_t);                             \
     void mock_##name##_set_retval_n(const ssize_t* retvals, int nvals); \
+    void mock_##name##_set_retval_except_fd(ssize_t, int fd);           \
     void mock_##name##_reset(void)
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+    DECL_MOCK_FUNCS(read);
 
     DECL_MOCK_FUNCS(write);
 

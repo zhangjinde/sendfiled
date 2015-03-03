@@ -38,9 +38,6 @@ and `-g` options below).
   sfd_open() but not yet transferred with sfd_send_open() are assumed to have
   been abandoned and therefore closed
 
-  @todo Add a sfd_close() function in order to abort a transfer initiated with
-  sfd_open().
-
 # Example 2: starting a server instance programmatically
 
 @include sfd_spawn.c

@@ -36,6 +36,7 @@
 #define DEFINE_MOCK_DATA(name)                  \
     static struct {                             \
         ssize_t retvals [MOCK_NVALS];           \
+        int fds [MOCK_NVALS];                   \
         int i;                                  \
         int size;                               \
     } mock_data_##name = {                      \
@@ -61,26 +62,48 @@
         memcpy(mock_data_##name.retvals, vals, sizeof(ssize_t) * (size_t)nvals); \
         mock_data_##name.i = 0;                                         \
             mock_data_##name.size = (int)nvals;                         \
-    }
+    }                                                                   \
+                                                                        \
+    void mock_##name##_set_retval_except_fd(ssize_t r, const int fd)    \
+    {                                                                   \
+        mock_data_##name.retvals[0] = r;                                \
+            mock_data_##name.fds[0] = fd;                               \
+                mock_data_##name.i = 0;                                 \
+                    mock_data_##name.size = 1;                          \
+    }                                                                   \
 
 #define DEFINE_MOCK_CONSTRUCTS(name)            \
     DEFINE_MOCK_DATA(name);                     \
     DEFINE_MOCK_FUNCS(name)
 
-#define MOCK_RETURN(name)                                               \
-    if (mock_data_##name.i == mock_data_##name.size || mock_data_##name.i == MOCK_NVALS) \
-        mock_data_##name.i = -1;                                        \
+/* Emacs completely destroys the alignment of this macro :( */
+#define MOCK_RETURN_IMPL(name, return_type, fd_out)                     \
+    {                                                                   \
+        if (mock_data_##name.i == mock_data_##name.size ||              \
+            mock_data_##name.i == MOCK_NVALS) {                         \
+            mock_data_##name.i = -1;                                    \
+        }                                                               \
                                                                         \
         if (mock_data_##name.i != -1) {                                 \
-            const ssize_t rv = mock_data_##name.retvals[mock_data_##name.i++]; \
-                if (rv != MOCK_REALRV) {                                \
-                    if (rv < 0) {                                       \
-                        errno = (int)-rv;                               \
-                        return -1;                                      \
-                    } else {                                            \
-                        return rv;                                      \
-                    }                                                   \
-                }                                                       \
-        }
+            const int except_fd = mock_data_##name.fds[mock_data_##name.i]; \
+            if (except_fd == 0 || except_fd != fd_out) {            \
+                mock_data_##name.fds[mock_data_##name.i] = 0;       \
+                const return_type rv =                                  \
+                    (return_type)mock_data_##name.retvals[mock_data_##name.i++]; \
+                if (rv != MOCK_REALRV) {                    \
+                    if (rv < 0) {                           \
+                        errno = (int)-rv;                   \
+                        return -1;                          \
+                    } else {                                \
+                        return rv;                          \
+                    }                                       \
+                }                                           \
+            }                                                           \
+        }                                                               \
+    }
+
+#define MOCK_RETURN_INT(name, fd_out) MOCK_RETURN_IMPL(name, int, fd_out)
+
+#define MOCK_RETURN_SSIZE_T(name, fd_out) MOCK_RETURN_IMPL(name, ssize_t, fd_out)
 
 #endif

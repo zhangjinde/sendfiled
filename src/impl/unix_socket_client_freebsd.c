@@ -24,13 +24,38 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#define _GNU_SOURCE 1
+#include <sys/socket.h>
+#include <sys/uio.h>
+#include <sys/ucred.h>
 
+#include <stdlib.h>
 #include <unistd.h>
 
-#include "sendfiled.h"
+#include "protocol.h"
+#include "unix_socket_client.h"
+#include "unix_sockets.h"
+#include "util.h"
 
-int sfd_pipe(int fds[2], const int flags)
+ssize_t us_sendv(const int fd,
+                 const struct iovec* iovs, size_t niovs,
+                 const int* fds_to_send, const size_t nfds)
 {
-    return pipe2(fds, flags);
+    struct msghdr msg = {
+        .msg_iov = (struct iovec*)iovs,
+        .msg_iovlen = (int)niovs
+    };
+
+    uint8_t* const cmsg_buf = calloc(us_cmsg_space(sizeof(int) * PROT_MAXFDS),
+                                     1);
+    if (!cmsg_buf)
+        return -1;
+
+    us_attach_fds_and_creds(&msg, cmsg_buf, fds_to_send, nfds,
+                            SCM_CREDS, NULL, 0);
+
+    const ssize_t nsent = sendmsg(fd, &msg, 0);
+
+    PRESERVE_ERRNO(free(cmsg_buf));
+
+    return nsent;
 }

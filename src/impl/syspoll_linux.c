@@ -111,7 +111,7 @@ void syspoll_delete(struct syspoll* this)
 
 bool syspoll_register(struct syspoll* this,
                       struct syspoll_resrc* resrc,
-                      unsigned events)
+                      int events)
 {
     unsigned epoll_events = EPOLLET;
 

@@ -40,13 +40,26 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-pedantic"
 
+DEFINE_MOCK_CONSTRUCTS(read)
 DEFINE_MOCK_CONSTRUCTS(write)
 DEFINE_MOCK_CONSTRUCTS(splice)
 DEFINE_MOCK_CONSTRUCTS(sendfile)
 
+ssize_t read(int fd, void* buf, size_t len)
+{
+    MOCK_RETURN_SSIZE_T(read, fd);
+
+    typedef ssize_t (*fptr) (int, void*, size_t);
+
+    fptr real_read = (fptr)dlsym(RTLD_NEXT, "read");
+    assert (real_read);
+
+    return real_read(fd, buf, len);
+}
+
 ssize_t write(int fd, const void* buf, size_t len)
 {
-    MOCK_RETURN(write);
+    MOCK_RETURN_SSIZE_T(write, fd);
 
     typedef ssize_t (*fptr) (int, const void*, size_t);
 
@@ -59,7 +72,7 @@ ssize_t write(int fd, const void* buf, size_t len)
 ssize_t splice(int fd_in, loff_t *off_in, int fd_out,
                loff_t *off_out, size_t len, unsigned int flags)
 {
-    MOCK_RETURN(splice);
+    MOCK_RETURN_SSIZE_T(splice, fd_out);
 
     typedef ssize_t (*fptr) (int, loff_t*, int, loff_t*, size_t, unsigned int);
 
@@ -69,16 +82,16 @@ ssize_t splice(int fd_in, loff_t *off_in, int fd_out,
     return real_splice(fd_in, off_in, fd_out, off_out, len, flags);
 }
 
-ssize_t sendfile(int out_fd, int in_fd, off_t* offset, size_t count)
+ssize_t sendfile(int s, int fd, off_t* offset, size_t count)
 {
-    MOCK_RETURN(sendfile);
+    MOCK_RETURN_SSIZE_T(sendfile, s);
 
     typedef ssize_t (*fptr) (int, int, off_t*, size_t);
 
     fptr real_sendfile = (fptr)dlsym(RTLD_NEXT, "sendfile");
     assert (real_sendfile);
 
-    return real_sendfile(out_fd, in_fd, offset, count);
+    return real_sendfile(s, fd, offset, count);
 }
 
 #pragma GCC diagnostic pop

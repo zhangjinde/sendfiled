@@ -41,4 +41,7 @@
 const char* us_make_sockpath(const char* dir,
                              const char* srvname);
 
+size_t us_cmsg_space(size_t);
+size_t us_cmsg_len(size_t);
+
 #endif
