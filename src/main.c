@@ -220,13 +220,13 @@ int main(const int argc, char** argv)
 
     const int requestfd = us_serve(sockdir, srvname, new_uid, new_gid);
     if (requestfd == -1) {
-        LOGERRNO_("Failed to bind and listen");
+        sfd_log(LOG_ERR, "Couldn't bind and/or listen [%m]");
         goto fail1;
     }
 
     if (do_sync) {
         if (!sync_parent(0)) {
-            LOGERRNO_("Failed to sync with parent");
+            sfd_log(LOG_ERR, "Failed to sync with parent [%m]");
             goto fail2;
         }
         close(PROC_SYNCFD);
