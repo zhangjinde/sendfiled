@@ -79,6 +79,23 @@ The build has the following dependencies:
 
 * Google Test (tests only)
 
+## Procedure
+
+Create the build directory:
+
+    # mkdir build
+
+Compile the daemon executable, the client library, and the unit test executable:
+
+    # make
+
+Compile and run the tests:
+
+    # make test
+
+**Note:** Replace `make` with `gmake` on FreeBSD.
+
 # Links
 
-* [API documentation](http://francoisk.me/software/sendfiled/index.html)
+* [Complete documentation](http://francoisk.me/software/sendfiled/index.html)
+  (includes the API reference, code examples, and implementation details.)

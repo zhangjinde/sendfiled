@@ -86,8 +86,8 @@ The build has the following dependencies:
   transfer IDs. (See sfd_cancel().)
 
 * The server currently only accepts requests from client processes with
-  effective UIDs matching its own, which is obviously be sub-optimal for many
-  kinds of deployments.
+  effective UIDs matching its own, which is obviously sub-optimal for many kinds
+  of deployments.
 
 * Write more tests
 

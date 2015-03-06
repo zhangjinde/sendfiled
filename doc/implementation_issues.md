@@ -67,7 +67,7 @@ the usual [userspace read/write][userspace_read_write].
 # I/O
 
 The server uses non-blocking file descriptors and edge-triggered I/O event
-notification (only [epoll] is currently implemented).
+notification.
 
 <h1 id="transfer_concurrency">Concurrency of file transfers</h1>
 
