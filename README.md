@@ -62,9 +62,7 @@ To provide applications with:
 * Linux
 * FreeBSD
 
-# Building
-
-## Dependencies
+# Dependencies
 
 There are no runtime dependencies.
 
@@ -77,9 +75,9 @@ The build has the following dependencies:
 
 * A C++14 compiler (tests only; tested with `clang++` 3.4.1)
 
-* Google Test (tests only)
+* [Google Test](https://code.google.com/p/googletest/) (tests only)
 
-## Procedure
+# Building
 
 Create the build directory:
 
@@ -93,7 +91,15 @@ Compile and run the tests:
 
     # make test
 
-**Note:** Replace `make` with `gmake` on FreeBSD.
+Install the binaries to the default directory (`/usr/local`):
+
+    # make install
+
+Install the binaries to a non-default directory:
+
+    # prefix=/path/to/install_dir make install
+
+(**Note:** substitute `gmake` for `make` on FreeBSD.)
 
 # Links
 
