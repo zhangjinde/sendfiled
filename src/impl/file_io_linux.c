@@ -26,9 +26,10 @@
 
 #define _GNU_SOURCE 1
 
-#include <fcntl.h>
 #include <sys/sendfile.h>
 
+#include <assert.h>
+#include <fcntl.h>
 #include <stddef.h>
 
 #include "file_io.h"
@@ -51,6 +52,8 @@ ssize_t file_splice(const int fd_in, const int fd_out,
                     struct fio_ctx* ctx __attribute__((unused)),
                     const size_t nbytes)
 {
+    assert (nbytes > 0);
+
     return splice(fd_in, NULL,
                   fd_out, NULL,
                   nbytes,
@@ -61,5 +64,7 @@ ssize_t file_sendfile(const int fd_in, const int fd_out,
                       struct fio_ctx* ctx __attribute__((unused)),
                       const size_t nbytes)
 {
+    assert (nbytes > 0);
+
     return sendfile(fd_out, fd_in, NULL, nbytes);
 }

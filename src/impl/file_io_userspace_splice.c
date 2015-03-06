@@ -85,6 +85,8 @@ ssize_t file_splice(const int fd_in, const int fd_out,
                     struct fio_ctx* ctx,
                     const size_t nbytes)
 {
+    assert (nbytes > 0);
+
     const size_t nunwritten = (ctx->capacity - (size_t)(ctx->wp - ctx->data));
 
     if (nunwritten > 0) {

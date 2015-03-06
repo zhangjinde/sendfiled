@@ -293,19 +293,13 @@ using SfdProcFix2Xfers = SfdProcFixTemplate<2>;
  */
 TEST_F(SfdProcFix2Xfers, transfer_table_full)
 {
-    std::pair<test::unique_fd, test::unique_fd> fds [maxfiles];
     test::unique_fd stat_fds [maxfiles];
-    test::TmpFile file;
+    test::TmpFile file {"1234567890"};
 
     for (std::size_t i = 0; i < maxfiles; i++) {
-        fds[i] = test::make_connection(test_port + (int)i);
-
-        stat_fds[i] = sfd_send(srv_fd,
+        stat_fds[i] = sfd_open(srv_fd,
                                file.name().c_str(),
-                               fds[i].first,
                                0, 0, false);
-
-        fds[i].first.reset();
 
         ASSERT_TRUE(stat_fds[i]);
 
@@ -323,11 +317,9 @@ TEST_F(SfdProcFix2Xfers, transfer_table_full)
 
     auto sockets = test::make_connection(test_port + maxfiles);
 
-    const test::unique_fd stat_fd {sfd_send(srv_fd,
+    const test::unique_fd stat_fd {sfd_open(srv_fd,
                                             file.name().c_str(),
-                                            sockets.first,
                                             0, 0, false)};
-    sockets.first.reset();
 
     ASSERT_TRUE(stat_fd);
 

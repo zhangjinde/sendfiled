@@ -38,6 +38,8 @@ ssize_t file_sendfile(const int fd_in, const int fd_out,
                       struct fio_ctx* ctx __attribute__((unused)),
                       const size_t nbytes)
 {
+    assert (nbytes > 0);
+
     off_t nsent = 0;
 
     if (sendfile(fd_in, fd_out, 0, nbytes, NULL, &nsent, 0) == -1)

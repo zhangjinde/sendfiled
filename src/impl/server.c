@@ -546,6 +546,7 @@ static bool process_request(struct server* ctx,
         }
 
         send_file_info(fds[0], timer->txnid, &finfo);
+
     } break;
 
     case PROT_CMD_SEND_OPEN: {
@@ -694,6 +695,8 @@ static bool process_file_op(struct server* ctx, struct resrc_xfer* xfer)
         for (;;) {
             const size_t writemax = MIN_(xfer->file.blksize, xfer->nbytes_left);
 
+            assert (writemax > 0);
+
             const ssize_t nwritten = (xfer->cmd == PROT_CMD_READ ?
                                       file_splice(xfer->file.fd,
                                                   xfer->dest_fd,
@@ -705,50 +708,51 @@ static bool process_file_op(struct server* ctx, struct resrc_xfer* xfer)
                                                     writemax));
 
             if (nwritten == -1) {
-                if (!errno_is_fatal(errno))
-                    return true;
+                if (errno_is_fatal(errno)) {
+                    if (!has_stat_channel(xfer))
+                        return false;
 
-                if (!has_stat_channel(xfer))
-                    return false;
+                    struct prot_hdr pdu = {
+                        .cmd = SFD_XFER_STAT,
+                        .stat = (uint8_t)errno
+                    };
 
-                struct prot_hdr pdu = {
-                    .cmd = SFD_XFER_STAT,
-                    .stat = (uint8_t)errno
-                };
-
-                return send_term_resp(ctx, xfer, &pdu, sizeof(pdu));
-
-            } else if (nwritten == 0) {
-                /* FIXME Not sure how to deal with this properly */
-                return true;
+                    return send_term_resp(ctx, xfer, &pdu, sizeof(pdu));
+                }
 
             } else {
+                /* Because writemax > 0 => xfer->nbytes_left > 0 => EOF could
+                   not have been seen by the read */
                 assert (nwritten > 0);
 
                 xfer->nbytes_left -= (size_t)nwritten;
                 ntotal_written += (size_t)nwritten;
             }
 
-            /* Sent as much as possible for the time being */
-            if (has_stat_channel(xfer)) {
-                if (xfer->nbytes_left == 0) {
-                    /* Terminal notification; delivery is critical */
+            assert (nwritten > 0 || (nwritten == -1 && !errno_is_fatal(errno)));
+
+            if (xfer->nbytes_left == 0) {
+                /* Terminal notification; delivery is critical */
+                if (has_stat_channel(xfer)) {
                     struct sfd_xfer_stat pdu;
                     prot_marshal_xfer_stat(&pdu, PROT_XFER_COMPLETE);
                     return send_term_resp(ctx, xfer, &pdu, sizeof(pdu));
+                }
 
-                } else if (nwritten == -1 && ntotal_written > 0) {
-                    /* Nonterminal notification; delivery not critical */
+                return false;
+
+            } else if (nwritten == -1) {
+                /* Nonterminal notification; delivery not critical */
+                if (has_stat_channel(xfer)) {
                     if (!send_xfer_stat(xfer->stat_fd, ntotal_written) &&
                         errno_is_fatal(errno)) {
                         return false;
                     }
                 }
-            } else if (xfer->nbytes_left == 0) {
-                /* Indicate that the caller should purge the transfer. FIXME:
-                   this is rather counter-intuitive. */
-                return false;
             }
+
+            if (nwritten == -1)
+                return true;
         }
     }
 
@@ -942,6 +946,12 @@ static struct resrc_xfer* add_xfer(struct server* ctx,
     const int fd = file_open_read(req->filename, req->offset, req->len, finfo);
     if (fd == -1)
         return NULL;
+
+    if (finfo->size == 0) {
+        close(fd);
+        errno = EINVAL;
+        return NULL;
+    }
 
     struct xfer_file file = {
         .size = finfo->size,
