@@ -81,15 +81,15 @@ The build has the following dependencies:
 
 Create the build directory:
 
-    # mkdir build
+    $ mkdir build
 
 Compile the daemon executable, the client library, and the unit test executable:
 
-    # make
+    $ make
 
 Compile and run the tests:
 
-    # make test
+    $ make test
 
 Install the binaries to the default directory (`/usr/local`):
 
