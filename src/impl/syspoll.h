@@ -71,6 +71,16 @@ extern "C" {
     */
     bool syspoll_deregister(struct syspoll*, int fd);
 
+    /**
+       Waits for events, blocking indefinitely.
+     */
+    int syspoll_wait(struct syspoll*);
+
+    /**
+       Checks for events without blocking.
+
+       Returns immediately, event if there are no ready descriptors.
+     */
     int syspoll_poll(struct syspoll*);
 
     struct syspoll_events {

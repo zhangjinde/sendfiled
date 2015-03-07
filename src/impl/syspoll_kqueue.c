@@ -24,8 +24,6 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-/* #define _POSIX_C_SOURCE 200809L */
-
 #include <sys/types.h>
 #include <sys/event.h>
 #include <sys/time.h>
@@ -182,12 +180,29 @@ bool syspoll_deregister(struct syspoll* this, int fd)
     return true;
 }
 
+static int syspoll_kevent(struct syspoll* this,
+                          const struct timespec* const timeout);
+
+int syspoll_wait(struct syspoll* this)
+{
+    /* NULL timeout -> wait indefinitely */
+    return syspoll_kevent(this, NULL);
+}
+
 int syspoll_poll(struct syspoll* this)
+{
+    struct timespec timeout = {0, 0};
+
+    return syspoll_kevent(this, &timeout);
+}
+
+static int syspoll_kevent(struct syspoll* this,
+                          const struct timespec* const timeout)
 {
     const int nevents = kevent(this->kqfd,
                                this->events, (int)this->size,
                                this->events, (int)this->capacity,
-                               NULL); /* NULL timeout -> wait indefinitely */
+                               timeout);
 
     /* Reset size so that changes made while handling events are inserted from
        the beginning of the event array */

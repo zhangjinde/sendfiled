@@ -59,7 +59,7 @@ TEST(Syspoll, read_write)
     if (write(fd, &byte, 1) != 1)
         FAIL() << "Couldn't write to FIFO";
 
-    const int nevents {syspoll_poll(p)};
+    const int nevents {syspoll_wait(p)};
     ASSERT_NE(-1, nevents);
     EXPECT_GE(nevents, 1);
 
@@ -90,7 +90,7 @@ TEST(Syspoll, read_write)
  * write(1); read(1); EPOLLOUT
  * write(2); read(1); read(1); EPOLLOUT
  *
- * On FreeBSD the writer is worken a few more times that the reader drained the
+ * On FreeBSD the writer is woken a few more times that the reader drained the
  * pipe (e.g., 10,015 wakes for 9,999 draining reads.
  */
 TEST(Syspoll, pipe_writability)
@@ -125,7 +125,7 @@ TEST(Syspoll, pipe_writability)
             goto done;
 
         for (;;) {
-            const int nevents {syspoll_poll(p)};
+            const int nevents {syspoll_wait(p)};
 
             for (int i = 0; i < nevents; i++) {
                 auto ev = syspoll_get(p, i);
@@ -190,7 +190,7 @@ TEST(Syspoll, socket_writability)
             goto done;
 
         for (;;) {
-            const int nevents {syspoll_poll(p)};
+            const int nevents {syspoll_wait(p)};
 
             for (int i = 0; i < nevents; i++) {
                 auto ev = syspoll_get(p, i);

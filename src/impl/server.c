@@ -275,11 +275,11 @@ bool srv_run(const int reqfd,
         goto fail;
 
     for (;;) {
-        const int nready = syspoll_poll(ctx.poller);
+        const int nready = syspoll_wait(ctx.poller);
 
         if (nready == -1) {
             if (errno != EINTR && errno_is_fatal(errno)) {
-                sfd_log(LOG_ERR, "Fatal error in syspoll_poll(): [%m]\n");
+                sfd_log(LOG_ERR, "Fatal error in syspoll_wait(): [%m]\n");
                 break;
             }
         } else if (!process_events(&ctx, nready, recvbuf, PROT_REQ_MAXSIZE)) {
@@ -1090,7 +1090,7 @@ static void purge_xfer(struct server* ctx, struct resrc_xfer* xfer)
        was sent over a UNIX socket), so closing it here will not cause it to be
        automatically removed from the system poller if the client process has
        not yet closed *its* copy, and therefore it may be returned again by the
-       next call to syspoll_poll(), *after* the memory associated with it has
+       next call to syspoll_wait(), *after* the memory associated with it has
        been freed here, unless it is removed explicitly.
     */
     deregister_xfer(ctx, xfer);

@@ -173,9 +173,14 @@ bool syspoll_deregister(struct syspoll* this, int fd)
     return (epoll_ctl(this->epollfd, EPOLL_CTL_DEL, fd, &event) == 0);
 }
 
-int syspoll_poll(struct syspoll* this)
+int syspoll_wait(struct syspoll* this)
 {
     return epoll_wait(this->epollfd, this->events, this->nevents, -1);
+}
+
+int syspoll_poll(struct syspoll* this)
+{
+    return epoll_wait(this->epollfd, this->events, this->nevents, 0);
 }
 
 static bool recvd_term_signal(struct syspoll* this);
