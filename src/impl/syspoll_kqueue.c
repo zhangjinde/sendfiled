@@ -211,8 +211,6 @@ static int syspoll_kevent(struct syspoll* this,
     if (nevents == -1)
         return -1;
 
-    assert (nevents > 0);
-
     return nevents;
 }
 
