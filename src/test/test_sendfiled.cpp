@@ -108,12 +108,12 @@ using SfdProcFix = SfdProcFixTemplate<1000>;
  * system calls such as sendfile(2) and splice(2).
  */
 template<long OpenFileTimeoutMs>
-struct SfdThreadFix : public ::testing::Test {
+struct SfdThreadFixTemplate : public ::testing::Test {
     static constexpr long open_file_timeout_ms {OpenFileTimeoutMs};
     static constexpr int maxfiles {1000};
     static const std::string srvname;
 
-    SfdThreadFix() : srv_barr(2),
+    SfdThreadFixTemplate() : srv_barr(2),
                 thr([this] { run_server(); }) {
 
         srv_barr.wait();
@@ -126,7 +126,7 @@ struct SfdThreadFix : public ::testing::Test {
         }
     }
 
-    ~SfdThreadFix() {
+    ~SfdThreadFixTemplate() {
         stop_thread();
         mock_read_reset();
         mock_write_reset();
@@ -161,13 +161,13 @@ struct SfdThreadFix : public ::testing::Test {
 };
 
 template<long OpenFileTimeoutMs>
-constexpr long SfdThreadFix<OpenFileTimeoutMs>::open_file_timeout_ms;
+constexpr long SfdThreadFixTemplate<OpenFileTimeoutMs>::open_file_timeout_ms;
 
 template<long OpenFileTimeoutMs>
-constexpr int SfdThreadFix<OpenFileTimeoutMs>::maxfiles;
+constexpr int SfdThreadFixTemplate<OpenFileTimeoutMs>::maxfiles;
 
 template<long OpenFileTimeoutMs>
-const std::string SfdThreadFix<OpenFileTimeoutMs>::srvname {"testing123_thread"};
+const std::string SfdThreadFixTemplate<OpenFileTimeoutMs>::srvname {"testing123_thread"};
 
 struct SmallFile {
     static const std::string file_contents;
@@ -208,10 +208,10 @@ std::vector<std::uint8_t> LargeFile::file_chunk(LargeFile::CHUNK_SIZE);
 
 struct SfdProcSmallFileFix : public SfdProcFix, public SmallFile {};
 
-struct SfdThreadSmallFileFix : public SfdThreadFix<1000>, public SmallFile {};
+struct SfdThreadSmallFileFix : public SfdThreadFixTemplate<1000>, public SmallFile {};
 
 struct SfdThreadSmallFileShortOpenFileTimeoutFix :
-        public SfdThreadFix<100>, public SmallFile {};
+        public SfdThreadFixTemplate<100>, public SmallFile {};
 
 struct SfdProcLargeFileFix : public SfdProcFix, public LargeFile {
     static void SetUpTestCase() {
@@ -220,11 +220,13 @@ struct SfdProcLargeFileFix : public SfdProcFix, public LargeFile {
     }
 };
 
-struct SfdThreadLargeFileFix : public SfdThreadFix<1000>, public LargeFile {
+struct SfdThreadLargeFileFix : public SfdThreadFixTemplate<1000>, public LargeFile {
     static void SetUpTestCase() {
         LargeFile::SetUpTestCase();
     }
 };
+
+using SfdThreadFix = SfdThreadFixTemplate<1000>;
 
 } // namespace
 
@@ -910,7 +912,7 @@ TEST_F(SfdProcLargeFileFix, multiple_reading_clients)
         EXPECT_EQ(NCHUNKS, clients[i].nchunks);
 }
 
-TEST_F(SfdProcFix, multiple_clients_reading_different_large_files)
+TEST_F(SfdThreadFix, multiple_clients_reading_different_large_files)
 {
     constexpr int NCLIENTS {10};
     constexpr int NCHUNKS {1024};

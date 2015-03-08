@@ -71,34 +71,14 @@ notification.
 
 <h1 id="transfer_concurrency">Concurrency of file transfers</h1>
 
-[Send File][send_file] and [Send Open File][send_open_file], the out-of-band
-transfers:
-
-    recipient [R] <----- [W] server [R] <----- disk
-
-[Read File][read_file], the only in-band transfer:
-
-    recipient [R] <----- [W] client [R] <-- IPC -- [W] server [R] <----- disk
-
 When a transfer's destination file descriptor becomes writable, the server reads
-from the file and writes to the destination file descriptor, in chunks sized
-according to the `st_blksize` field returned by `fstat(2)`, until the
-destination file descriptor's buffer is filled to capacity (an `errno(3)` value
-of `EAGAIN`/`EWOULDBLOCK`), at which point the next transfer is serviced.
-
-Therefore, the number of blocks transferred consecutively during one such
-'timeslice' depends on the amount of buffer space available in the destination
-file descriptor which is a function of its capacity and the rate at which data
-is consumed by the receiver.
-
-A file recipient could deny service to other clients and file recipients by
-reading faster than the server can write, a rate which is ultimately limited by
-the speed of the disk and therefore easily achievable by recipients on fast
-links to the server (e.g., a local process or one on a very fast network
-connection connected to a server with high load on its disks).
-
-@todo Limit the maximum amount of data that can be transferred from a file to a
-destination file descriptor in one 'time slice'.
+from the file and writes to the destination file descriptor in chunks sized
+according to the `st_blksize` field returned by `fstat(2)` until the destination
+file descriptor's I/O space is filled to capacity (an `errno(3)` value of
+`EAGAIN`/`EWOULDBLOCK`) or a certain maximum total number of bytes (e.g., the
+capacity of a pipe) have been transferred, at which point the next transfer is
+serviced. This prevents transfers to descriptors with large I/O spaces from
+starving other transfers.
 
 @note This description applies equally to the [low copy][low_copy] and the
 [userspace read/write][userspace_read_write] methods.

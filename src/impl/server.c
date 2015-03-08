@@ -83,6 +83,31 @@ enum {
 };
 
 /**
+   Types of transfer deferrals.
+
+   Deferred transfers require processing during a secondary loop executed
+   immediately after the regular (primary) event-processing loop.
+
+   E.g., a timer may delete a transfer before events for that transfer have been
+   processed and therefore, in order to avoid use-after-free errors, the
+   transfer is marked as cancelled and its object only actually deleted during
+   the deferred or secondary processing loop.
+*/
+enum deferral {
+    NONE,
+
+    /* The transfer is to be cancelled */
+    CANCEL,
+
+    /** The transfer's destination descriptor's I/O space could not be filled
+        during primary processing without starving other transfers, so transfer
+        its data during secondary processing until its I/O space has been
+        filled, after which it can return to being processed during the primary
+        loop. */
+    READY
+};
+
+/**
    A file transfer resource.
 
    @note The first few fields must be identical to the other resource structures
@@ -109,14 +134,8 @@ struct resrc_xfer {
     size_t nbytes_left;
     /** The client process ID */
     pid_t client_pid;
-    /** Set if transfer has been cancelled during the current event-processing
-        loop. E.g., a 'cancel' request causes the request fd to become readable
-        before the transfer's destination file descriptor becomes writable.
-
-        (Cancelled transfers are only removed inbetween event-processing loops
-        in order to prevent use-after-frees.)
-    */
-    bool cancelled;
+    /** The deferral type */
+    enum deferral defer;
 };
 
 static void delete_xfer(void* p)
@@ -187,12 +206,12 @@ struct server
     struct xfer_table* xfers;
     /** Table of open file timers */
     struct xfer_table* xfer_timers;
-    /** Transfers that have been cancelled during the current event-processing
-        loop */
-    struct resrc_xfer** cancelled_xfers;
-    /** Number of transfers cancelled during the current event-processing
-        loop */
-    size_t ncancelled_xfers;
+    /** Transfers which are to be processed in the secondary event-processing
+        loop. E.g., ones that have been cancelled or ones with unexhausted I/O
+        spaces. */
+    struct resrc_xfer** deferred_xfers;
+    /** Size of @a deferred_xfers */
+    size_t ndeferred_xfers;
     /** The next transfer ID to be assigned. Starts at 1 and is incremented by 1
         for each new transaction. */
     size_t next_txnid;
@@ -256,6 +275,60 @@ static bool send_xfer_stat(int fd, size_t file_size);
     (including data and status channel file descriptors) */
 static void purge_xfer(struct server* ctx, struct resrc_xfer* xfer);
 
+static bool is_xfer(const void*);
+static bool is_timer(const void*);
+static bool is_response(const void*);
+
+static bool process_file_op(struct server* ctx, struct resrc_xfer* xfer);
+
+static void defer_xfer(struct server* const srv,
+                       struct resrc_xfer* const xfer,
+                       enum deferral how)
+{
+    switch (how) {
+    case CANCEL:
+        assert (xfer->defer == READY || srv->ndeferred_xfers < srv->xfers->size);
+
+        if (xfer->defer == NONE) {    /* Not in the list yet */
+            srv->deferred_xfers[srv->ndeferred_xfers] = xfer;
+            srv->ndeferred_xfers++;
+        }
+
+        xfer->defer = CANCEL;
+        break;
+
+    case READY:
+        assert (xfer->defer != CANCEL);
+        assert (srv->ndeferred_xfers < srv->xfers->size);
+
+        srv->deferred_xfers[srv->ndeferred_xfers] = xfer;
+        srv->ndeferred_xfers++;
+
+        xfer->defer = READY;
+        break;
+
+    default:
+        assert (false);
+        break;
+    }
+}
+
+static size_t undefer_xfer(struct server* const srv, const size_t i)
+{
+    srv->deferred_xfers[i]->defer = NONE;
+
+    if (i < srv->ndeferred_xfers - 1) {
+        srv->deferred_xfers[i] =
+            srv->deferred_xfers[srv->ndeferred_xfers - 1];
+    }
+
+    srv->ndeferred_xfers--;
+
+    return i;
+}
+
+static void process_deferred(struct server* const ctx);
+
 bool srv_run(const int reqfd,
              const int maxfds,
              const long open_file_timeout_ms)
@@ -275,20 +348,22 @@ bool srv_run(const int reqfd,
         goto fail;
 
     for (;;) {
-        const int nready = syspoll_wait(ctx.poller);
+        /* If there are deferred transfers, don't block on waiting for events
+           otherwise deferred transfers will be starved */
+        const int nready = (ctx.ndeferred_xfers == 0 ?
+                            syspoll_wait(ctx.poller) :
+                            syspoll_poll(ctx.poller));
 
         if (nready == -1) {
             if (errno != EINTR && errno_is_fatal(errno)) {
-                sfd_log(LOG_ERR, "Fatal error in syspoll_wait(): [%m]\n");
+                sfd_log(LOG_ERR, "Fatal error in syspoll_wait/poll(): [%m]\n");
                 break;
             }
         } else if (!process_events(&ctx, nready, recvbuf, PROT_REQ_MAXSIZE)) {
             break;
         }
 
-        for (size_t i = 0; i < ctx.ncancelled_xfers; i++)
-            purge_xfer(&ctx, ctx.cancelled_xfers[i]);
-        ctx.ncancelled_xfers = 0;
+        process_deferred(&ctx);
     }
 
     free(recvbuf);
@@ -301,30 +376,51 @@ bool srv_run(const int reqfd,
     return false;
 }
 
+static void process_deferred(struct server* const ctx)
+{
+    for (size_t i = 0; i < ctx->ndeferred_xfers; /* noop */) {
+        struct resrc_xfer* const x = ctx->deferred_xfers[i];
+
+        switch (x->defer) {
+        case CANCEL:
+            i = undefer_xfer(ctx, i);
+            purge_xfer(ctx, x);
+            break;
+
+        case READY:
+            assert (is_xfer(x));
+
+            if (!process_file_op(ctx, x)) {
+                i = undefer_xfer(ctx, i);
+                purge_xfer(ctx, x);
+
+            } else {
+                if (x->defer == NONE) {
+                    /* I/O space was filled during transfer -> back to primary
+                       processing */
+                    i = undefer_xfer(ctx, i);
+                } else {
+                    i++;
+                }
+            }
+
+            break;
+
+        case NONE:
+            assert (false);
+            break;
+        }
+    }
+}
+
 static bool handle_reqfd(struct server* ctx,
                          int events,
                          void* buf,
                          size_t buf_size);
 
-static bool process_file_op(struct server* ctx, struct resrc_xfer* xfer);
-
 static bool send_pdu(const int fd, const void* pdu, const size_t size);
 
-static bool is_xfer(const void*);
-
-static bool is_timer(const void*);
-
-static bool is_response(const void*);
-
 static void delete_resrc_resp(struct resrc_resp*);
-
-static void cancel_xfer(struct server* srv, struct resrc_xfer* xfer)
-{
-    assert (srv->ncancelled_xfers < srv->xfers->size);
-
-    srv->cancelled_xfers[srv->ncancelled_xfers++] = xfer;
-    xfer->cancelled = true;
-}
 
 static bool process_events(struct server* ctx,
                            const int nevents,
@@ -340,7 +436,7 @@ static bool process_events(struct server* ctx,
             if (events.events & SYSPOLL_ERROR ||
                 !handle_reqfd(ctx, events.events, buf, buf_size)) {
                 sfd_log(LOG_ERR,
-                       "Fatal error on request socket (%m); shutting down\n");
+                        "Fatal error on request socket (%m); shutting down\n");
                 return false;
             }
 
@@ -365,7 +461,7 @@ static bool process_events(struct server* ctx,
                             /* Transfer has expired before first byte was
                                transferred */
                             send_xfer_err(xfer->stat_fd, ETIMEDOUT);
-                            cancel_xfer(ctx, xfer);
+                            defer_xfer(ctx, xfer, CANCEL);
                         }
                     } else {
                         /* Transfer has same txnid but different address ->
@@ -386,15 +482,15 @@ static bool process_events(struct server* ctx,
                 }
 
             } else {
-                struct resrc_xfer* const xfer = events.udata;
-
                 assert (is_xfer(events.udata));
 
-                if (xfer->cancelled)
-                    continue;
+                struct resrc_xfer* const xfer = events.udata;
 
-                if (error_event || !process_file_op(ctx, xfer))
+                if (xfer->defer != CANCEL &&
+                    (error_event ||
+                     (xfer->defer != READY && !process_file_op(ctx, xfer)))) {
                     PRESERVE_ERRNO(purge_xfer(ctx, xfer));
+                }
             }
         }
     }
@@ -559,7 +655,7 @@ static bool process_request(struct server* ctx,
         struct resrc_xfer* const xfer = get_open_file(ctx,
                                                       client_pid,
                                                       pdu.txnid);
-        if (!xfer || xfer->cancelled) {
+        if (!xfer || xfer->defer == CANCEL) {
             close(fds[0]);
             return false;
         }
@@ -588,7 +684,7 @@ static bool process_request(struct server* ctx,
         if (!xfer)
             return false;
 
-        cancel_xfer(ctx, xfer);
+        defer_xfer(ctx, xfer, CANCEL);
 
     } break;
 
@@ -681,31 +777,35 @@ static bool has_stat_channel(const struct resrc_xfer* x);
    @retval @a false The response has been sent, or an unrecoverable error has
    occured in the process, so purge the transfer.
 */
-static bool send_term_resp(struct server* ctx,
-                           struct resrc_xfer* x,
-                           const void* pdu, const size_t size);
+static bool send_terminal_resp(struct server* ctx,
+                               struct resrc_xfer* x,
+                               const void* pdu, const size_t size);
 
 static bool process_file_op(struct server* ctx, struct resrc_xfer* xfer)
 {
+    const size_t max_nwritten = pipe_capacity();
+
     switch (xfer->cmd) {
     case PROT_CMD_READ:
     case PROT_CMD_SEND: {
-        size_t ntotal_written = 0;
+        size_t total_nwritten = 0;
 
         for (;;) {
-            const size_t writemax = MIN_(xfer->file.blksize, xfer->nbytes_left);
+            const size_t write_size = MIN_(xfer->file.blksize,
+                                         MIN_(xfer->nbytes_left,
+                                              max_nwritten - total_nwritten));
 
-            assert (writemax > 0);
+            assert (write_size > 0);
 
             const ssize_t nwritten = (xfer->cmd == PROT_CMD_READ ?
                                       file_splice(xfer->file.fd,
                                                   xfer->dest_fd,
                                                   xfer->fio_ctx,
-                                                  writemax) :
+                                                  write_size) :
                                       file_sendfile(xfer->file.fd,
                                                     xfer->dest_fd,
                                                     xfer->fio_ctx,
-                                                    writemax));
+                                                    write_size));
 
             if (nwritten == -1) {
                 if (errno_is_fatal(errno)) {
@@ -717,26 +817,26 @@ static bool process_file_op(struct server* ctx, struct resrc_xfer* xfer)
                         .stat = (uint8_t)errno
                     };
 
-                    return send_term_resp(ctx, xfer, &pdu, sizeof(pdu));
+                    return send_terminal_resp(ctx, xfer, &pdu, sizeof(pdu));
                 }
 
             } else {
-                /* Because writemax > 0 => xfer->nbytes_left > 0 => EOF could
+                /* (write_size > 0) ==> (xfer->nbytes_left > 0) ==> EOF could
                    not have been seen by the read */
                 assert (nwritten > 0);
 
                 xfer->nbytes_left -= (size_t)nwritten;
-                ntotal_written += (size_t)nwritten;
+                total_nwritten += (size_t)nwritten;
             }
 
             assert (nwritten > 0 || (nwritten == -1 && !errno_is_fatal(errno)));
 
             if (xfer->nbytes_left == 0) {
-                /* Terminal notification; delivery is critical */
                 if (has_stat_channel(xfer)) {
+                    /* Terminal notification; delivery is critical */
                     struct sfd_xfer_stat pdu;
                     prot_marshal_xfer_stat(&pdu, PROT_XFER_COMPLETE);
-                    return send_term_resp(ctx, xfer, &pdu, sizeof(pdu));
+                    return send_terminal_resp(ctx, xfer, &pdu, sizeof(pdu));
                 }
 
                 return false;
@@ -744,15 +844,23 @@ static bool process_file_op(struct server* ctx, struct resrc_xfer* xfer)
             } else if (nwritten == -1) {
                 /* Nonterminal notification; delivery not critical */
                 if (has_stat_channel(xfer)) {
-                    if (!send_xfer_stat(xfer->stat_fd, ntotal_written) &&
+                    if (!send_xfer_stat(xfer->stat_fd, total_nwritten) &&
                         errno_is_fatal(errno)) {
                         return false;
                     }
                 }
             }
 
-            if (nwritten == -1)
+            if (nwritten == -1) {
+                xfer->defer = NONE;
                 return true;
+            }
+
+            if (total_nwritten >= max_nwritten) {
+                if (xfer->defer == NONE)
+                    defer_xfer(ctx, xfer, READY);
+                return true;
+            }
         }
     }
 
@@ -776,9 +884,9 @@ static struct resrc_resp* new_resrc_resp(int fd,
                                          const void* pdu,
                                          size_t pdu_size);
 
-static bool send_term_resp(struct server* ctx,
-                           struct resrc_xfer* x,
-                           const void* pdu, const size_t pdu_size)
+static bool send_terminal_resp(struct server* ctx,
+                               struct resrc_xfer* x,
+                               const void* pdu, const size_t pdu_size)
 {
     /*
       return false -> x is purged;
@@ -857,8 +965,8 @@ static bool srv_construct(struct server* ctx,
         .poller = syspoll_new(maxfds),
         .xfers = xfer_table_new(get_txnid, (size_t)maxfds),
         .xfer_timers = xfer_table_new(get_timer_txnid, (size_t)maxfds),
-        .cancelled_xfers = malloc(sizeof(struct resrc_xfer) * (size_t)maxfds),
-        .ncancelled_xfers = 0,
+        .deferred_xfers = malloc(sizeof(struct resrc_xfer) * (size_t)maxfds),
+        .ndeferred_xfers = 0,
         .open_file_timeout_ms = (unsigned)open_file_timeout_ms,
         .reqfd = reqfd,
         .next_txnid = 1,
@@ -868,7 +976,7 @@ static bool srv_construct(struct server* ctx,
     if (!ctx->poller ||
         !ctx->xfers ||
         !ctx->xfer_timers ||
-        !ctx->cancelled_xfers) {
+        !ctx->deferred_xfers) {
         PRESERVE_ERRNO(srv_destruct(ctx));
         return false;
     }
@@ -896,10 +1004,10 @@ static void srv_destruct(struct server* ctx)
     xfer_table_delete(ctx->xfers, delete_xfer_and_close_channel_fds);
     xfer_table_delete(ctx->xfer_timers, delete_timer);
 
-    for (size_t i = 0; i < ctx->ncancelled_xfers; i++) {
-        purge_xfer(ctx, ctx->cancelled_xfers[i]);
+    for (size_t i = 0; i < ctx->ndeferred_xfers; i++) {
+        purge_xfer(ctx, ctx->deferred_xfers[i]);
     }
-    free(ctx->cancelled_xfers);
+    free(ctx->deferred_xfers);
 }
 
 static bool errno_is_fatal(const int err)
@@ -1012,7 +1120,7 @@ static struct resrc_xfer* new_xfer(struct server* ctx,
                         (file->size - (size_t)req->offset)),
         .cmd = req->cmd,
         .client_pid = client_pid,
-        .cancelled = false
+        .defer = NONE
     };
 
     if (!fio_ctx_valid(xfer->fio_ctx)) {

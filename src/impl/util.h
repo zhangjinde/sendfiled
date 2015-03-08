@@ -64,6 +64,11 @@ extern "C" {
      */
     int sfd_pipe(int fds[2], int flags);
 
+    /**
+       Returns the capacity of a pipe, in bytes.
+     */
+    size_t pipe_capacity(void);
+
 #ifdef __cplusplus
 }
 #endif

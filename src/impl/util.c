@@ -24,7 +24,9 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+#include <assert.h>
 #include <fcntl.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 #include "util.h"
@@ -57,4 +59,45 @@ bool set_cloexec(int fd, const bool enabled)
         fl &= ~FD_CLOEXEC;
 
     return (fcntl(fd, F_SETFD, fl) == 0);
+}
+
+size_t pipe_capacity(void)
+{
+    static size_t c;
+
+    if (c == 0) {
+        const long page_size = sysconf(_SC_PAGE_SIZE);
+        if (page_size == -1)
+            return 0;
+        assert (page_size > 0);
+
+        void* const page = calloc((size_t)page_size, 1);
+        if (!page)
+            return 0;
+
+        int fds[2] = {-1, -1};
+
+        if (sfd_pipe(fds, O_NONBLOCK) == -1) {
+            free(page);
+            return 0;
+        }
+
+        ssize_t n;
+        while ((n = write(fds[1], page, (size_t)page_size)) != -1) {
+            assert (n > 0);
+            c += (size_t)n;
+        }
+
+        if (errno != EWOULDBLOCK && errno != EAGAIN) {
+            c = 0;
+        } else {
+            assert (c > 0);
+        }
+
+        free(page);
+        PRESERVE_ERRNO(close(fds[0]));
+        PRESERVE_ERRNO(close(fds[1]));
+    }
+
+    return c;
 }
