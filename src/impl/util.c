@@ -26,7 +26,9 @@
 
 #include <assert.h>
 #include <fcntl.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "util.h"
@@ -88,10 +90,15 @@ size_t pipe_capacity(void)
             c += (size_t)n;
         }
 
-        if (errno != EWOULDBLOCK && errno != EAGAIN) {
-            c = 0;
-        } else {
-            assert (c > 0);
+        if ((errno != EWOULDBLOCK && errno != EAGAIN) || c == 0) {
+            /* FIXME: This happens when the
+               SfdThreadSmallFileFix.send_error_send_fails test is run on its
+               own. The first write to the pipe fails with EWOULDBLOCK. */
+            fprintf(stderr,
+                    "Couldn't write to pipe to determine pipe capacity;"
+                    " errno %d [%s]\n",
+                    errno, strerror(errno));
+            abort();
         }
 
         free(page);

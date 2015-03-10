@@ -24,51 +24,27 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef SFD_UTIL_H
-#define SFD_UTIL_H
+#ifndef SFD_SERVER_RESPONSES_H_INCLUDED
+#define SFD_SERVER_RESPONSES_H_INCLUDED
 
-#include <errno.h>
-#include <stdbool.h>
+#include <stddef.h>
 
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#include "file_io.h"
 
-#define PRESERVE_ERRNO(statement)               \
-    {                                           \
-        const int errno_saved_ = errno;         \
-        statement;                              \
-        errno = errno_saved_;                   \
-    }
+bool send_pdu(const int fd, const void* pdu, size_t size);
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+bool send_file_info(int cli_fd,
+                    size_t txnid,
+                    const struct fio_stat* info);
 
-    bool set_nonblock(int fd, bool enabled);
+bool send_xfer_stat(int fd, size_t file_size);
 
-    bool set_cloexec(int fd, bool enabled);
+/** Sends an error in response to a request to the client (over the status
+    channel) */
+bool send_req_err(int fd, int err);
 
-    /**
-       Creates a pipe.
-
-       @note This function exists because Linux has an overload of @a pipe(2)
-       with a flags parameter (i.e., creates the pipe and sets the flags in one
-       operation), whereas FreeBSD requires two calls to @c fcntl(2) to set
-       flags on the pipe descriptors.
-
-       @param[out] fds The pipe file descriptors
-
-       @param[in] flags The flags to set on the pipe's file descriptors. E.g.,
-       @c O_NONBLOCK, @c O_CLOEXEC (@c FD_CLOEXEC not accepted).
-     */
-    int sfd_pipe(int fds[2], int flags);
-
-    /**
-       Returns the capacity of a pipe, in bytes.
-     */
-    size_t pipe_capacity(void);
-
-#ifdef __cplusplus
-}
-#endif
+/** Sends an error which occurred during a transfer to the client (over the
+    status channel) */
+bool send_xfer_err(int fd, int err);
 
 #endif

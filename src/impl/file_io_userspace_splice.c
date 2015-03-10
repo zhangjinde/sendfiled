@@ -90,7 +90,7 @@ ssize_t file_splice(const int fd_in, const int fd_out,
     const size_t nunwritten = (ctx->capacity - (size_t)(ctx->wp - ctx->data));
 
     if (nunwritten > 0) {
-        const ssize_t nread = read(fd_in, ctx->wp, MIN_(nbytes, nunwritten));
+        const ssize_t nread = read(fd_in, ctx->wp, MIN(nbytes, nunwritten));
 
         if (nread == -1 || nread == 0)
             return nread;

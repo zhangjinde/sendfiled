@@ -44,11 +44,11 @@ static bool lock_file(int fd, off_t offset, off_t len);
 /**
    Sets @a errno to EINVAL if the descriptor does not refer to a regular file.
 */
-static int stat_file(int fd, struct file_info*);
+static int stat_file(int fd, struct fio_stat*);
 
 int file_open_read(const char* name,
                    const off_t offset, const size_t len,
-                   struct file_info* info)
+                   struct fio_stat* info)
 {
     const int fd = open(name, O_RDONLY);
 
@@ -90,7 +90,7 @@ static bool lock_file(const int fd, const off_t offset, const off_t len)
     return (fcntl(fd, F_SETLK, &lock) != -1);
 }
 
-static int stat_file(const int fd, struct file_info* info)
+static int stat_file(const int fd, struct fio_stat* info)
 {
     struct stat st;
 
@@ -102,7 +102,7 @@ static int stat_file(const int fd, struct file_info* info)
         return -1;
     }
 
-    *info = (struct file_info) {
+    *info = (struct fio_stat) {
         .size = (size_t)st.st_size,
         .atime = st.st_atime,
         .mtime = st.st_mtime,

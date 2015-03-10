@@ -34,7 +34,7 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpadded"
 
-struct file_info {
+struct fio_stat {
     /* Size of file on disk, as returned by stat(2); will be >= the total
        number of bytes transferred */
     size_t size;
@@ -60,7 +60,7 @@ bool fio_ctx_valid(const struct fio_ctx*);
 */
 int file_open_read(const char* name,
                    off_t offset, size_t len,
-                   struct file_info*);
+                   struct fio_stat*);
 
 off_t file_offset(int fd);
 

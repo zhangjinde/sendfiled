@@ -208,9 +208,6 @@ static int syspoll_kevent(struct syspoll* this,
        the beginning of the event array */
     this->size = 0;
 
-    if (nevents == -1)
-        return -1;
-
     return nevents;
 }
 

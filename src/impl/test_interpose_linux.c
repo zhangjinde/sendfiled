@@ -27,18 +27,20 @@
 #define _GNU_SOURCE 1
 
 #include <dlfcn.h>
-#include <fcntl.h>
 #include <sys/sendfile.h>
-#include <unistd.h>
 
 #include <assert.h>
+#include <fcntl.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "test_interpose_impl.h"
 
-/* Turning off '-pedantic' for the cast from dlsym() to function pointer. */
 #pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-pedantic"
+#pragma GCC diagnostic ignored "-Wunknown-pragmas" /* Clang doesn't know
+                                                      -pedantic */
+#pragma GCC diagnostic ignored "-pedantic" /* For casting from dlsym() to
+                                              function pointer */
 
 DEFINE_MOCK_CONSTRUCTS(read)
 DEFINE_MOCK_CONSTRUCTS(write)

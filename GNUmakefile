@@ -103,6 +103,8 @@ src_server = $(src_common)\
 file_io.c\
 protocol_server.c\
 server.c\
+server_resources.c\
+server_responses.c\
 server_xfer_table.c\
 unix_socket_server.c\
 
