@@ -574,8 +574,8 @@ static bool transfer_file(struct server* srv, struct resrc_xfer* xfer)
 
         for (;;) {
             const size_t write_size =
-                MIN(xfer->file.blksize,
-                    MIN(xfer->nbytes_left,
+                SFD_MIN(xfer->file.blksize,
+                    SFD_MIN(xfer->nbytes_left,
                         pipe_capacity() - total_nwritten));
 
             assert (write_size > 0);

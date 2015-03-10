@@ -30,7 +30,7 @@
 #include <errno.h>
 #include <stdbool.h>
 
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define SFD_MIN(a, b) ((a) < (b) ? (a) : (b))
 
 #define PRESERVE_ERRNO(statement)               \
     {                                           \
