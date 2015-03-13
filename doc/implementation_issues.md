@@ -1,11 +1,5 @@
 # Implementation: details & issues {#implementation}
 
-<h1 id="opening_files">Server-side opening of files</h1>
-
-On the server, the opening of a file consists of calls to `open(2)` and `fstat(2)`, and
-the taking of a read lock which prevents the file from being modified while it
-is being transferred. The lock is released when the transfer completes or fails.
-
 # The client-to-server link (request channel)
 
 Requests are sent from the client to the server over a UDP [UNIX domain][unix]
@@ -26,7 +20,13 @@ The PDU data structures are copied byte-for-byte between the client and server
 because both are processes on the same machine and therefore compactness and
 portability of data representation are of no concern.
 
-<h1 id="data_copying">Data copying</h1>
+<h1 id="opening_files">Opening files</h1>
+
+On the server, the opening of a file consists of calls to `open(2)` and
+`fstat(2)` and the taking of a read lock which prevents the file from being
+modified while it is being transferred.
+
+<h1 id="data_copying">Copying of file data</h1>
 
 <h2 id="userspace_read_write">Userspace read/write</h2>
 
@@ -54,20 +54,20 @@ file descriptors, but they look like [complicated hacks] [1].) In such cases
 there is no choice but to fall back to [userspace
 read/write][userspace_read_write].
 
-@note These facilities used to be truly zero-copy (or, at least, the possibility
-was supported) on both Linux and FreeBSD, but this has changed at least once in
-the recent past ([Linux commit] [2]; [FreeBSD commit] [3]). There have since
-been discussions about making these system calls zero-copy again but, either
-way, `splice(2)` and `sendfile(2)` should be more efficient than [userspace
-read/write][userspace_read_write] in most cases due to the elimination of the
-switch between kernel and user modes which has the convenient side-effect of
-requiring only a single (kernel-to-kernel) copy instead of the two involved in
-the usual [userspace read/write][userspace_read_write].
+@note These facilities used to be truly zero-copy (the possibility was
+supported, at least) on both Linux and FreeBSD, but this has changed at least
+once in the recent past ([Linux commit] [2]; [FreeBSD commit] [3]). There have
+since been discussions about making these system calls zero-copy again but,
+either way, `splice(2)` and `sendfile(2)` should be more efficient than
+[userspace read/write][userspace_read_write] in most cases due to the
+elimination of the switch between kernel and user modes which has the convenient
+side-effect of requiring only a single (kernel-to-kernel) copy instead of the
+two involved in the usual [userspace read/write][userspace_read_write].
 
-# I/O
+# I/O readiness notification
 
 The server uses non-blocking file descriptors and edge-triggered I/O event
-notification.
+notification by means of `epoll(7)` on Linux and `kqueue(2)` on FreeBSD.
 
 <h1 id="transfer_concurrency">Concurrency of file transfers</h1>
 
@@ -79,41 +79,6 @@ file descriptor's I/O space is filled to capacity (an `errno(3)` value of
 capacity of a pipe) have been transferred, at which point the next transfer is
 serviced. This prevents transfers to descriptors with large I/O spaces from
 starving other transfers.
-
-@note This description applies equally to the [low copy][low_copy] and the
-[userspace read/write][userspace_read_write] methods.
-
-# Why not POSIX Async I/O (AIO)?
-
-There is a lot of information on the Web about the [shortcomings] [4] of [this]
-[5] [API] [6] and its various implementations, but the gist of it seems to be:
-
-  * Inconsistent and non-portable integration with event-notification systems
-    (based on file descriptors). sendfiled was written with event-based
-    clients in mind, hence its file descriptor-based interface. AIO, on the
-    other hand, has two notification mechanisms: callbacks and signals, the
-    former of which cannot be integrated.
-
-    On Linux AIO would have to be integrated indirectly through the use of
-    [signalfd]. [kqueue on FreeBSD][kqueue_freebsd] has built-in support for AIO
-    but [kqueue on OS X][kqueue_osx] 10.9.5 (Mavericks) does not support it at
-    all, and thus one would have to resort to `kqueue(2)`'s `EVFILT_SIGNAL`.
-
-  * The only I/O operations supported by the API are reading, writing, and
-    fsync'ing. Other means need to be employed in order to prevent common
-    operations such as `open(2)`, `close(2)`, and `fstat(2)` from blocking.
-
-  * Implementation quality and consistency varies; some operations may still
-    block, and an operation which *doesn't* block on one implementation *may*
-    block on another.
-
-  * Some implementations merely offload the I/O to a separate thread or thread
-    pool.
-
-
-That said, as in the case of zero-copy I/O, some implementations are still being
-improved (Linux, for one), so some of the claims made above may already be
-outdated.
 
 <h1 id="processes">Processes vs. threads</h1>
 
@@ -145,6 +110,38 @@ client applications, with the following convenient consequences:
 
    Applications that have a dedicated file I/O thread do not have this problem,
    but may still contend for the file I/O stack with *other applications*.
+
+# POSIX Async I/O (AIO)
+
+There is a lot of information on the Web about the [shortcomings] [4] of [this]
+[5] [API] [6] and its various implementations, but the gist of it seems to be:
+
+  * Inconsistent and non-portable integration with event-notification systems
+    (based on file descriptors). sendfiled was written with event-based
+    clients in mind, hence its file descriptor-based interface. AIO, on the
+    other hand, has two notification mechanisms: callbacks and signals, the
+    former of which cannot be integrated.
+
+    On Linux AIO would have to be integrated indirectly through the use of
+    [signalfd]. [kqueue on FreeBSD][kqueue_freebsd] has built-in support for AIO
+    but [kqueue on OS X][kqueue_osx] 10.9.5 (Mavericks) does not support it at
+    all, and thus one would have to resort to `kqueue(2)`'s `EVFILT_SIGNAL`.
+
+  * The only I/O operations supported by the API are reading, writing, and
+    fsync'ing. Other means need to be employed in order to prevent common
+    operations such as `open(2)`, `close(2)`, and `fstat(2)` from blocking.
+
+  * Implementation quality and consistency varies; some operations may still
+    block, and an operation which *doesn't* block on one implementation *may*
+    block on another.
+
+  * Some implementations merely offload the I/O to a separate thread or thread
+    pool.
+
+
+That said, as in the case of zero-copy I/O, some implementations are still being
+improved (Linux, for one), so some of the claims made above may already be
+outdated.
 
   [status_channel]: messages.html#status_channel
   [data_channel]: messages.html#data_channel

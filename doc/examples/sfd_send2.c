@@ -1,22 +1,7 @@
-struct xfer_context {
-    enum {
-        READING_METADATA,
-        TRANSFERRING,
-        COMPLETE
-    } state;
-};
-
-void handle_file_server(struct xfer_context* ctx)
+void on_server_readable(struct xfer_context* ctx)
 {
     if (ctx->state == READING_METADATA) {
-        /* Read file metadata sent from the server */
-
-        struct sfd_file_info file_info;
-
-        read(stat_fd, buf, sizeof(file_info));
-        sfd_unmarshal_file_info(&file_info, buf);
-
-        ctx->state = TRANSFERRING;
+        /* Omitted for the sake of brevity; see earlier example */
     }
 
     if (ctx->state == TRANSFERRING) {

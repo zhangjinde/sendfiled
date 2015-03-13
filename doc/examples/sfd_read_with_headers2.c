@@ -1,31 +1,7 @@
-struct xfer_context {
-    enum {
-        READING_METADATA,
-        SENDING_HEADERS,
-        TRANSFERRING,
-        COMPLETE
-    } state;
-
-    size_t file_size;           /* File size on disk */
-    time_t file_mtime;          /* File's last modification time */
-    size_t total_nsent;         /* Total number of bytes transferred */
-};
-
-void handle_file_server(struct xfer_context* ctx)
+void on_server_readable(struct xfer_context* ctx)
 {
     if (ctx->state == READING_METADATA) {
-        /* Read file metadata sent from the server */
-
-        struct sfd_file_info file_info;
-
-        read(data_fd, buf, sizeof(file_info));
-        sfd_unmarshal_file_info(&file_info, buf);
-
-        /* Store some metadata to be sent with the headers */
-        ctx->file_size = file_info.size;
-        ctx->file_mtime = file_info.mtime;
-
-        ctx->state = SENDING_HEADERS;
+        /* Omitted for the sake of brevity; see earlier example */
     }
 
     if (ctx->state == SENDING_HEADERS) {

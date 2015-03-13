@@ -1,35 +1,7 @@
-struct xfer_context {
-    enum {
-        READING_METADATA,
-        SENDING_HEADERS,
-        TRANSFERRING,
-        COMPLETE
-    } state;
-
-    size_t txnid;               /* Unique open file identifier */
-    size_t file_size;           /* File size on disk */
-    time_t file_mtime;          /* File's last modification time */
-    size_t total_nsent;         /* Total number of bytes transferred */
-};
-
-void handle_file_server(struct xfer_context* ctx)
+void on_server_readable(struct xfer_context* ctx)
 {
     if (ctx->state == READING_METADATA) {
-        /* Read file metadata sent from server */
-
-        struct sfd_open_file_info file_info;
-
-        read(stat_fd, buf, sizeof(file_info));
-        sfd_unmarshal_open_file_info(&file_info, buf);
-
-        /* Store the open file identifier */
-        ctx->txnid = file_info.txnid;
-
-        /* Store metadata to be sent with the headers */
-        ctx->file_size = file_info.size;
-        ctx->file_mtime = file_info.mtime;
-
-        ctx->state = SENDING_HEADERS;
+        /* Omitted for the sake of brevity; see earlier example */
     }
 
     if (ctx->state == SENDING_HEADERS) {
@@ -49,7 +21,7 @@ void handle_file_server(struct xfer_context* ctx)
 
         /* Now that the headers have been written, get the server to start
            sending the file data */
-        sfd_send_open(srv_sockfd, ctx->txnid, destination_fd);
+        sfd_send_open(srv_sockfd, ctx->xfer_id, destination_fd);
 
         ctx->state = TRANSFERRING;
     }

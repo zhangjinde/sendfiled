@@ -1,9 +1,9 @@
 Sendfiled is a local server process which sends or reads files on behalf of
 client applications.
 
-# Goals
+# Purpose
 
-To provide applications with:
+Sendfiled provides applications with:
 
 * **Non-blocking file transfer**. Unlike other types of file descriptors,
    non-blocking semantics cannot be achieved reliably on disk-backed file

@@ -1,27 +1,7 @@
-struct xfer_context {
-    enum {
-        READING_METADATA,
-        TRANSFERRING,
-        COMPLETE
-    } state;
-
-    size_t file_size;           /* File size on disk */
-    size_t total_nread;         /* Total number of bytes read */
-};
-
-void handle_file_server(struct xfer_context* ctx)
+void on_server_readable(struct xfer_context* ctx)
 {
     if (ctx->state == READING_METADATA) {
-        /* Read file metadata sent from server */
-        struct sfd_file_info file_info;
-
-        read(data_fd, buf, sizeof(file_info));
-        sfd_unmarshal_file_info(&file_info, buf);
-
-        /* Store file size in order to recognise transfer completion */
-        ctx->file_size = file_info.size;
-
-        ctx->state = TRANSFERRING;
+        /* Omitted for the sake of brevity; see earlier example */
     }
 
     if (ctx->state == TRANSFERRING) {

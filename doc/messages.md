@@ -185,7 +185,7 @@ successfully written.
 
 [File Information][file_info] and [Transfer Progress][transfer_status] messages
 will not be retried because the former are sent right after the creation of the
-[Status][status_channel] or [data][data_channel] channel pipes and therefore
+[Status][status_channel] or [Data][data_channel] channel pipes and therefore
 should have more than enough capacity to accept the PDU, and the latter are
 merely intermediate, informational notification messages, the terminal [transfer
 completion][transfer_completion] message being the funcionally significant one.
