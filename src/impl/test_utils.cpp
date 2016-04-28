@@ -30,7 +30,9 @@
 #include <sys/types.h>
 #include <netinet/in.h>
 
+#include <condition_variable>
 #include <cstdlib>
+#include <cstring>
 #include <fcntl.h>
 #include <signal.h>
 #include <unistd.h>

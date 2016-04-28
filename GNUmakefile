@@ -54,7 +54,8 @@ CXXFLAGS +=-std=c++1y -I$(builddir)\
 -Weverything\
 -Werror\
 -Wno-c++98-compat\
--Wno-documentation
+-Wno-documentation\
+-Wno-documentation-unknown-command\
 
 ifdef NDEBUG
 	CFLAGS += -O2
