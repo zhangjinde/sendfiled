@@ -55,13 +55,14 @@ static bool chroot_and_drop_privs(const char* root_dir,
                                   uid_t new_uid,
                                   gid_t new_gid);
 
+static bool daemonise = false;
 /* Whether or not to sync with the parent process. This would be the case if
    being spawned by sfd_spawn(), for example. */
 static bool do_sync = false;
 
 #define LOG_(msg)                                         \
     {                                                     \
-        if (do_sync) {                                    \
+        if (daemonise || do_sync) {                       \
             sfd_log(LOG_INFO, "%s: %s\n", __func__, msg); \
         } else {                                          \
             const int tmp__ = errno;                      \
@@ -72,7 +73,7 @@ static bool do_sync = false;
 
 #define LOGERRNO_(msg)                          \
     {                                           \
-        if (do_sync) {                          \
+        if (daemonise || do_sync) {             \
             sfd_log(LOG_ERR,                    \
                     "%s [errno: %d %m] %s\n",   \
                     __func__, errno, msg);      \
@@ -83,7 +84,7 @@ static bool do_sync = false;
 
 #define LOGERRNOV_(fmt, ...)                        \
     {                                               \
-        if (do_sync) {                              \
+        if (daemonise || do_sync) {                 \
             sfd_log(LOG_ERR,                        \
                     "%s [errno %d %m] "fmt"\n",     \
                     __func__, errno, __VA_ARGS__);  \
@@ -105,7 +106,6 @@ int main(const int argc, char** argv)
     const char* gname = NULL;
     long maxfiles = 0;
     long fd_timeout_ms = 30000;
-    bool daemonise = false;
 
     int opt;
     while ((opt = getopt(argc, argv, "+s:S:n:t:r:u:g:pd")) != -1) {
