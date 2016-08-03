@@ -97,7 +97,7 @@ static int stat_file(const int fd, struct fio_stat* info)
     if (fstat(fd, &st) == -1)
         return -1;
 
-    if (!S_ISREG(st.st_mode)) {
+    if (!S_ISREG(st.st_mode) && !S_ISLNK(st.st_mode)) {
         errno = EINVAL;
         return -1;
     }
