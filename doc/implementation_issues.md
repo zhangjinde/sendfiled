@@ -86,30 +86,29 @@ The primary reason Sendfiled is implemented as a process instead of a thread is
 that it makes it possible to share a single server instance between multiple
 client applications, with the following convenient consequences:
 
-1. Fewer system-wide threads of execution compared to a thread-per-application
-   design, reducing contention on system resources such as CPU, disk, cache,
-   etc.
+* Fewer system-wide threads of execution compared to a thread-per-application
+  design, reducing contention on system resources such as CPU, disk, cache, etc.
 
-2. Clients benefit from process environment isolation.
+* Clients benefit from process environment isolation.
 
-3. The degree of file I/O concurrency is decoupled from the degree of other
-   types of concurrency.
+* The degree of file I/O concurrency is decoupled from the degree of other types
+  of concurrency.
 
-   Some very well-known and modern server software performs file I/O directly
-   from within 'worker' threads, with the result that increasing the worker
-   thread count (in order to better utilise all the available CPUs, say) has the
-   undesirable side-effect of simultaneously increasing contention on the file
-   I/O stack (file stystem, volume manager, block device interface, disk driver,
-   etc.) and the physical disk itself.
+  Some very well-known and modern server software performs file I/O directly
+  from within 'worker' threads, with the result that increasing the worker
+  thread count (in order to better utilise all the available CPUs, say) has the
+  undesirable side-effect of simultaneously increasing contention on the file
+  I/O stack (file stystem, volume manager, block device interface, disk driver,
+  etc.) and the physical disk itself.
 
-   Because the sendfiled server is implemented as a processes instead of a
-   thread, it is possible to run the optimal number of server instances (one per
-   disk or disk controller, for example) without having to be concerned about
-   the effect this may have on the levels of contention for (and over- or
-   under-utilisation of) other shared system resources.
+  Because the sendfiled server is implemented as a processes instead of a
+  thread, it is possible to run the optimal number of server instances (one per
+  disk or disk controller, for example) without having to be concerned about the
+  effect this may have on the levels of contention for (and over- or
+  under-utilisation of) other shared system resources.
 
-   Applications that have a dedicated file I/O thread do not have this problem,
-   but may still contend for the file I/O stack with *other applications*.
+  Applications that have a dedicated file I/O thread do not have this problem,
+  but may still contend for the file I/O stack with *other applications*.
 
 # POSIX Async I/O (AIO)
 

@@ -92,7 +92,7 @@ commencement of the transfer of the file data.
 
 1. In response to the first request (*Open File*), the server
    [opens][opening_files] the file and responds with the file metadata and a
-   unique identifying token in message of type sfd_open_file_info on the [Status
+   unique identifying token in message of type sfd_file_info on the [Status
    Channel][status_channel]. *It does not start transferring the file data.*
 
 2. Once the server receives the second request (*Send Open File*), the server
@@ -140,8 +140,8 @@ in order to indicate whether or not the request was accepted.
 Sent in response to a [Send Open File][send_open_file] request in order to
 indicate whether or not the request was accepted.
 
-@sa sfd_open_file_info
-@sa sfd_unmarshal_open_file_info()
+@sa sfd_file_info
+@sa sfd_unmarshal_file_info()
 
 <h2 id="transfer_status">Transfer status notifications</h2>
 
