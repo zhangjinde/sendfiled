@@ -2,8 +2,6 @@
 
 This software has neither been stress-tested nor profiled.
 
-(However, it does serve files for my [website](http://francoisk.me).)
-
 # Synopsis
 
 Sendfiled is a local server process which sends or reads files on behalf of
